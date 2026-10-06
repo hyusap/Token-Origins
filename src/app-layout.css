@@ -29,14 +29,17 @@ body { margin: 0; overflow: hidden; }
 .demo-control:hover { color: var(--bab-white); }
 .demo-control:disabled { opacity: .35; cursor: default; }
 .workbench { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.workbench .observatory { flex: none; position: absolute; inset: 0 0 218px; width: 100%; height: auto; background-size: 28px 28px; }
+.workbench .observatory { flex: none; position: absolute; inset: 0 0 140px; width: 100%; height: auto; background-size: 28px 28px; }
 .workbench .observatory:after { display: none; }
 .workbench .canvas-meta { height: 45px; }
 .workbench .canvas-coordinate { font-size: 9px; }
 .workbench .canvas-coordinate.bottom-left, .workbench .canvas-coordinate.bottom-right, .workbench .canvas-cross { display: none; }
 .workbench .pinned-source { top: 64px; left: 24px; }
 .workbench.proof-open .observatory { right: 290px; width: auto; }
-.workbench .inspector { position: absolute; top: 0; right: 0; bottom: 218px; width: 290px; z-index: 20; height: auto; background: var(--bab-black); }
+.workbench .inspector { position: absolute; top: 0; right: 0; bottom: 140px; width: 290px; z-index: 20; height: auto; background: var(--bab-black); }
+.canvas-signal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 6; pointer-events: none; }
+.mobile-signal { display: none; }
+.workbench .run-position { left: 40px; top: 345px; width: 330px; }
 .command-center {
   position: absolute;
   left: 50%; bottom: 22px;
@@ -45,8 +48,8 @@ body { margin: 0; overflow: hidden; }
   display: flex; flex-direction: column; align-items: center;
   text-align: center;
 }
-.live-signal { display: flex; flex-direction: column; align-items: center; color: var(--bab-white); width: 280px; flex: none; }
-.live-signal canvas { display: block; width: 280px; height: 76px; }
+.live-signal { display: flex; flex-direction: column; align-items: center; color: var(--bab-white); width: 330px; flex: none; }
+.live-signal canvas { display: block; width: 330px; height: 110px; }
 .signal-caption { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--bab-text-mute); margin: 0 0 17px; }
 .signal-caption i { width: 4px; height: 4px; background: var(--bab-text-mute); }
 .signal-working .signal-caption i, .signal-running .signal-caption i, .signal-speaking .signal-caption i { background: var(--bab-gold); }
@@ -73,6 +76,9 @@ body { margin: 0; overflow: hidden; }
 @media (max-width: 1000px) {
   .appbar { padding: 0 20px; height: 54px; gap: 18px; }
   .appbar-actions { gap: 16px; }
+  .canvas-signal { display: none; }
+  .mobile-signal { display: block; }
+  .live-signal, .live-signal canvas { width: 280px; }
   .workbench .observatory { bottom: 202px; }
   .workbench .canvas-meta { height: auto; }
   .workbench .canvas-coordinate { font-size: 8px; }
@@ -106,10 +112,10 @@ body { margin: 0; overflow: hidden; }
   .workbench .empty-caption > p { font-size: 40px; }
 }
 @media (max-height: 680px) and (min-width: 1001px) {
-  .workbench .observatory { bottom: 168px; }
-  .workbench .inspector { bottom: 168px; }
+  .workbench .observatory { bottom: 118px; }
+  .workbench .inspector { bottom: 118px; }
   .command-center { bottom: 12px; }
-  .live-signal canvas { height: 50px; }
+  .live-signal canvas { height: 78px; }
   .signal-caption { margin-bottom: 10px; }
   .command-transcript > p { font-size: 25px; max-height: 54px; overflow-y: auto; }
   .command-response { max-height: 38px; font-size: 12px; }

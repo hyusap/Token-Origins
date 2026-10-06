@@ -646,20 +646,20 @@ function RunEvidence({
 }
 
 const POS = {
-  price: { x: 72, y: 35, w: 340 },
-  vault: { x: 745, y: 35, w: 320 },
-  conditions: { x: 438, y: 135, w: 286 },
-  action: { x: 775, y: 312, w: 290 },
-  source: { x: 73, y: 310, w: 275 },
+  price: { x: 40, y: 35, w: 330 },
+  vault: { x: 770, y: 35, w: 330 },
+  conditions: { x: 770, y: 350, w: 330 },
+  action: { x: 405, y: 485, w: 310 },
+  source: { x: 40, y: 345, w: 330 },
 };
-function Observatory({ state }: { state: CanvasState }) {
+function Observatory({ state, signalMode }: { state: CanvasState; signalMode: SignalMode }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
-  const [height, setHeight] = useState(620);
+  const [height, setHeight] = useState(740);
   useEffect(() => {
     const observer = new ResizeObserver((entries) => {
       const r = entries[0].contentRect;
-      setScale(Math.min((r.width - 32) / 1140, (r.height - 44) / 620));
+      setScale(Math.min((r.width - 32) / 1140, (r.height - 44) / 740));
       setHeight(r.height);
     });
     observer.observe(wrap.current!);
@@ -727,6 +727,7 @@ function Observatory({ state }: { state: CanvasState }) {
           </div>
         )}
       </div>
+      <div className="canvas-signal"><LiveSignal mode={signalMode} sequence={state.seq} /></div>
       <div className="canvas-cross a">+</div>
       <div className="canvas-cross b">+</div>
       <div className="canvas-cross c">+</div>
@@ -744,7 +745,7 @@ function Observatory({ state }: { state: CanvasState }) {
           style={
             {
               width: 1140,
-              height: 620,
+              height: 740,
               "--graph-inverse": Math.min(1.85, 1 / scale),
               transform: `translate(-50%, -50%) scale(${scale})`,
               top: height / 2,
@@ -753,7 +754,7 @@ function Observatory({ state }: { state: CanvasState }) {
         >
           <svg
             className="graph-connections"
-            viewBox="0 0 1140 620"
+            viewBox="0 0 1140 740"
             aria-hidden="true"
           >
             <defs>
@@ -774,37 +775,20 @@ function Observatory({ state }: { state: CanvasState }) {
             </defs>
             {composed ? (
               <>
-                <path d="M412 148H424Q438 148 438 162" className="edge flow" />
-                <path d="M745 148H734Q724 148 724 162" className="edge flow" />
-                <path
-                  d={`M581 ${278 + Number(state.workflow.maxAgeSeconds !== null) * 80 + Number(state.workflow.skipPaused) * 80}V454Q581 466 595 466H735Q750 466 750 452V390Q750 378 762 378H775`}
-                  className="edge flow"
-                  markerEnd="url(#edgeArrow)"
-                />
-                {state.workflow.maxAgeSeconds !== null && (
-                  <path
-                    d="M348 361H410Q425 361 425 346V246Q425 231 438 231"
-                    className="edge"
-                  />
-                )}
-                <text x="418" y="127" className="edge-label">
-                  OBSERVE
-                </text>
-                <text x="686" y="127" className="edge-label">
-                  READ
-                </text>
-                <text x="605" y="451" className="edge-label">
-                  ALL TRUE → REPORT
-                </text>
-                <circle cx="581" cy="466" r="3" fill="var(--bab-white)" />
+                <path d="M370 148H398Q414 148 414 164V270Q414 286 430 286H738Q754 286 754 302V392Q754 408 770 408" className="edge flow" />
+                <path d="M935 292V350" className="edge flow" markerEnd="url(#edgeArrow)" />
+                <path d="M770 540H715" className="edge flow" markerEnd="url(#edgeArrow)" />
+                <text x="432" y="276" className="edge-label">OBSERVE</text>
+                <text x="946" y="328" className="edge-label">READ</text>
+                <text x="717" y="525" className="edge-label">REPORT</text>
               </>
             ) : (
               <>
-                <path d="M412 148H745" className="edge" strokeDasharray="3 5" />
-                <text x="531" y="135" className="edge-label">
+                <path d="M370 148H770" className="edge" strokeDasharray="3 5" />
+                <text x="503" y="135" className="edge-label">
                   TREASURY CONTEXT
                 </text>
-                {source && <path d="M245 310V278" className="edge flow" />}
+                {source && <path d="M205 345V292" className="edge flow" />}
               </>
             )}
           </svg>
@@ -1219,10 +1203,10 @@ function App() {
         </div>
       </header>
       <main className={`workbench ${proofOpen ? "proof-open" : ""}`}>
-        <Observatory state={state} />
+        <Observatory state={state} signalMode={signalMode} />
         {proofOpen && <Inspector state={state} agentStatus={rehearsal} />}
         <section className="command-center" aria-label="Agent activity">
-          <LiveSignal mode={signalMode} sequence={state.seq} />
+          <div className="mobile-signal"><LiveSignal mode={signalMode} sequence={state.seq} /></div>
           <div className="command-transcript" aria-live="polite">
             {current && <p key={current.id}>“{current.text}”</p>}
             <div className="command-response"><InlineSummary text={error || (["working", "running"].includes(signalMode) ? "" : settledReply || response || "")} /></div>
