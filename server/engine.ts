@@ -8,6 +8,22 @@ import type {
 import { StateStore } from "./store";
 import { buildExecutionPrice } from "./execution-price";
 import { fetchPrice, fetchVault, loadDeployment } from "./sources";
+import {
+  fetchFeedPrice,
+  listFeedSymbols,
+  resolveFeedSymbol,
+  feedId,
+  CHAINLINK_FEEDS,
+} from "./chainlink";
+import {
+  legacyGraph,
+  describeGraph,
+  validateGraph,
+  collectSources,
+  describeSource,
+  isLegacyShape,
+  type PolicyGraph,
+} from "../cre/graph";
 const now = () => new Date().toISOString();
 const clone = <T>(v: T): T => structuredClone(v);
 const baseRevision = (): WorkflowRevision => ({
@@ -17,6 +33,7 @@ const baseRevision = (): WorkflowRevision => ({
   skipPaused: false,
   createdAt: now(),
   reason: "Initial policy",
+  graph: legacyGraph(3000),
 });
 export function emptyState(): CanvasState {
   return {
@@ -52,22 +69,27 @@ export function emptyState(): CanvasState {
     },
   };
 }
+export interface EngineSources {
+  fetchPrice: typeof fetchPrice;
+  fetchVault: typeof fetchVault;
+  loadDeployment: typeof loadDeployment;
+  fetchFeedPrice: typeof fetchFeedPrice;
+}
 export class Engine {
   state: CanvasState;
   store: StateStore;
   queue: Promise<unknown> = Promise.resolve();
   listeners = new Set<(state: CanvasState) => void>();
   fixturePaused = false;
-  sources: {
-    fetchPrice: typeof fetchPrice;
-    fetchVault: typeof fetchVault;
-    loadDeployment: typeof loadDeployment;
-  };
-  constructor(
-    store = new StateStore(),
-    sources = { fetchPrice, fetchVault, loadDeployment },
-  ) {
-    this.sources = sources;
+  sources: EngineSources;
+  constructor(store = new StateStore(), sources: Partial<EngineSources> = {}) {
+    this.sources = {
+      fetchPrice,
+      fetchVault,
+      loadDeployment,
+      fetchFeedPrice,
+      ...sources,
+    };
     this.store = store;
     this.state = store.load() || emptyState();
     this.fixturePaused = Boolean(
@@ -141,6 +163,13 @@ export class Engine {
         x.id === aliases[ref],
     );
     if (exact) return exact;
+    const feed = resolveFeedSymbol(ref);
+    if (feed) {
+      const object = this.state.objects.find(
+        (x) => x.id === feedId(feed.symbol),
+      );
+      if (object) return object;
+    }
     const candidates = this.state.objects.filter(
       (x) => x.label.toLowerCase().includes(ref) || x.kind === ref,
     );
@@ -188,6 +217,100 @@ export class Engine {
       kind: "derived" as const,
       label: `Draft revision ${w.revision}`,
     };
+    // A composed graph gets one condition object per node, so individual
+    // branches are focusable and inspectable by name. The fixed scalar trio
+    // below only describes the single-compare shape.
+    if (!isLegacyShape(w.graph)) {
+      const live = new Set<string>();
+      for (const node of w.graph.nodes) {
+        if (
+          node.kind !== "compare" &&
+          node.kind !== "freshness" &&
+          node.kind !== "vault-paused"
+        )
+          continue;
+        const id = `condition:${node.id}`;
+        live.add(id);
+        const source =
+          node.kind === "vault-paused"
+            ? "vault:grant"
+            : describeSource(
+                (
+                  w.graph.nodes.find(
+                    (x) => x.id === (node as { input: string }).input,
+                  ) as Extract<PolicyGraph["nodes"][number], { kind: "price" }>
+                ).source,
+              );
+        this.object({
+          id,
+          kind: "condition",
+          label:
+            node.kind === "compare"
+              ? `${source} ${node.op} $${node.value.toLocaleString("en-US")}`
+              : node.kind === "freshness"
+                ? `${source} within ${node.maxAgeSeconds}s`
+                : `Vault ${node.equals ? "paused" : "active"}`,
+          data: { ...node, source },
+          visible: true,
+          pinned: false,
+          provenance,
+        });
+      }
+      this.state.objects = this.state.objects.filter(
+        (x) => !x.id.startsWith("condition:") || live.has(x.id),
+      );
+      this.object({
+        id: "action:pause",
+        kind: "action",
+        label: "Pause spending",
+        data: { target: "vault:grant" },
+        visible: true,
+        pinned: false,
+        provenance,
+      });
+      w.summary = describeGraph(w.graph);
+      // Edges describe the composed graph rather than the fixed scalar chain,
+      // so none of them point at condition nodes that no longer exist.
+      const edges: CanvasState["edges"] = [
+        {
+          id: "e1",
+          from: "source:coinbase",
+          to: "price:eth-usd",
+          label: "observes",
+        },
+      ];
+      for (const id of live) {
+        const node = w.graph.nodes.find((x) => `condition:${x.id}` === id)!;
+        if (node.kind !== "vault-paused") {
+          const priceNode = w.graph.nodes.find(
+            (x) => x.id === (node as { input: string }).input,
+          ) as Extract<PolicyGraph["nodes"][number], { kind: "price" }>;
+          edges.push({
+            id: `in-${node.id}`,
+            from:
+              priceNode.source.type === "exchange-trade"
+                ? "price:eth-usd"
+                : feedId(priceNode.source.symbol),
+            to: id,
+            label: node.kind === "compare" ? "compares" : "timestamp",
+          });
+        }
+        edges.push({
+          id: `out-${node.id}`,
+          from: id,
+          to: "action:pause",
+          label: "if true",
+        });
+      }
+      edges.push({
+        id: "e-act",
+        from: "action:pause",
+        to: "vault:grant",
+        label: "pauses",
+      });
+      this.state.edges = edges;
+      return;
+    }
     this.object({
       id: "condition:threshold",
       kind: "condition",
@@ -234,7 +357,11 @@ export class Engine {
       this.state.objects = this.state.objects.filter(
         (x) => x.id !== "condition:unpaused",
       );
-    w.summary = `When ETH / USD is below $${w.threshold.toLocaleString("en-US", { maximumFractionDigits: 2 })}${w.maxAgeSeconds !== null ? `, the observation is no more than ${w.maxAgeSeconds} seconds old` : ""}${w.skipPaused ? ", and the grant vault is not already paused" : ""}, pause grant vault spending.`;
+    // A composed graph describes itself; the scalar sentence only fits the
+    // single-compare shape it was written for.
+    w.summary = isLegacyShape(w.graph)
+      ? `When ETH / USD is below $${w.threshold.toLocaleString("en-US", { maximumFractionDigits: 2 })}${w.maxAgeSeconds !== null ? `, the observation is no more than ${w.maxAgeSeconds} seconds old` : ""}${w.skipPaused ? ", and the grant vault is not already paused" : ""}, pause grant vault spending.`
+      : describeGraph(w.graph);
     this.state.edges = [
       {
         id: "e1",
@@ -369,6 +496,36 @@ export class Engine {
             : `ETH price and grant vault are now persistent objects. ${price ? `ETH is $${price.data.price}.` : ""}`;
           break;
         }
+        case "list_price_feeds": {
+          const symbols = listFeedSymbols();
+          summary = `Chainlink mainnet feeds available: ${symbols
+            .map((x) => `${x} (${CHAINLINK_FEEDS[x]!.name})`)
+            .join(", ")}.`;
+          break;
+        }
+        case "read_price_feed": {
+          const requested = String(args.symbol ?? "").trim();
+          const feed = resolveFeedSymbol(requested);
+          if (!feed)
+            throw new Error(
+              `No Chainlink mainnet feed is configured for "${requested}". Available: ${listFeedSymbols().join(", ")}`,
+            );
+          const object = await this.sources.fetchFeedPrice(feed.symbol);
+          this.object(object);
+          this.focus(object.id, object.label);
+          // The aggregator's own write time, not our fetch time. Feeds publish
+          // on deviation or heartbeat, so this is routinely minutes old and the
+          // caption has to carry that rather than imply a spot quote.
+          summary =
+            `${feed.name} is $${Number(object.data.price).toLocaleString(
+              "en-US",
+              {
+                maximumFractionDigits: Number(object.data.price) < 10 ? 6 : 2,
+              },
+            )} per the Chainlink ${object.data.description} feed on Ethereum mainnet, ` +
+            `last written ${object.data.ageLabel}. This is an on-chain oracle read, not the vault's execution price.`;
+          break;
+        }
         case "focus_object": {
           const reference = args.objectId || args.reference || "this";
           const runReference = [
@@ -481,20 +638,26 @@ export class Engine {
           }
           if (
             args.refresh &&
-            (object.kind === "price" || object.kind === "vault")
+            (object.kind === "price" ||
+              object.kind === "vault" ||
+              object.kind === "feed")
           )
             this.object(
               object.kind === "price"
                 ? await this.sources.fetchPrice()
-                : await this.sources.fetchVault(this.fixturePaused),
+                : object.kind === "feed"
+                  ? await this.sources.fetchFeedPrice(object.data.symbol)
+                  : await this.sources.fetchVault(this.fixturePaused),
             );
           const current = this.state.objects.find((x) => x.id === object.id)!;
           summary =
-            current.kind === "price"
-              ? `${current.label}: $${current.data.price}. ${current.provenance.label}. Observed ${current.provenance.observedAt}.`
-              : current.kind === "vault"
-                ? `${current.label}: ${current.data.paused ? "paused" : "spending enabled"}, ${current.data.balance} ETH. ${current.provenance.label}.`
-                : `${current.label}: ${JSON.stringify(current.data)}`;
+            current.kind === "feed"
+              ? `${current.label}: $${current.data.price} from the Chainlink aggregator at ${current.data.feedAddress} on Ethereum mainnet, round ${current.data.roundId} written ${current.data.ageLabel}. On-chain oracle read; not the vault's execution price.`
+              : current.kind === "price"
+                ? `${current.label}: $${current.data.price}. ${current.provenance.label}. Observed ${current.provenance.observedAt}.`
+                : current.kind === "vault"
+                  ? `${current.label}: ${current.data.paused ? "paused" : "spending enabled"}, ${current.data.balance} ETH. ${current.provenance.label}.`
+                  : `${current.label}: ${JSON.stringify(current.data)}`;
           this.focus(current.id, current.label);
           break;
         }
@@ -543,6 +706,14 @@ export class Engine {
             throw new Error(
               "Discover price and vault before composing a policy",
             );
+          // A scalar edit can only express the single-compare shape. Against a
+          // composed graph it refuses, so branches the speaker added are never
+          // discarded by a stray threshold tweak.
+          if (patch.threshold !== undefined || patch.thresholdAboveCurrent)
+            if (!isLegacyShape(current.graph))
+              throw new Error(
+                "This policy is a composed graph; revise it with compose_graph rather than a scalar threshold",
+              );
           const revision: WorkflowRevision = {
             revision: current.revision + 1,
             threshold,
@@ -550,6 +721,9 @@ export class Engine {
             skipPaused: skip,
             createdAt: now(),
             reason: args.reason || "Voice policy revision",
+            graph: isLegacyShape(current.graph)
+              ? legacyGraph(threshold)
+              : clone(current.graph),
           };
           current.revisions.push(revision);
           Object.assign(current, revision, { created: true });
@@ -557,6 +731,58 @@ export class Engine {
           this.updateGraph();
           this.focus(current.id, "Treasury policy");
           summary = `Revision ${current.revision}. ${current.summary}`;
+          break;
+        }
+        case "describe_policy": {
+          const w = this.state.workflow;
+          if (!w.created) {
+            summary = "No policy composed yet.";
+            break;
+          }
+          const sources = collectSources(w.graph).map(describeSource);
+          summary = `Revision ${w.revision}. ${describeGraph(w.graph)} Execution fetches ${sources.join(" and ")}, and always keeps the receiver freshness cap plus the already-paused no-op.`;
+          break;
+        }
+        case "compose_graph": {
+          const w = this.state.workflow;
+          if (args.expectedRevision !== w.revision)
+            throw Object.assign(
+              new Error(
+                `Draft is now revision ${w.revision}; refresh context before composing.`,
+              ),
+              { code: "REVISION_CONFLICT" },
+            );
+          if (
+            !this.state.objects.some((x) => x.kind === "price") ||
+            !this.state.objects.some((x) => x.kind === "vault")
+          )
+            throw new Error(
+              "Discover price and vault before composing a policy",
+            );
+          // validateGraph rejects unknown node kinds, dangling edges, cycles,
+          // mistyped operands and any source outside the allowlist.
+          const { graph } = validateGraph(args.graph);
+          const threshold =
+            graph.nodes.find(
+              (node): node is Extract<PolicyGraph["nodes"][number], { kind: "compare" }> =>
+                node.kind === "compare",
+            )?.value ?? w.threshold;
+          const revision: WorkflowRevision = {
+            revision: w.revision + 1,
+            threshold,
+            maxAgeSeconds: w.maxAgeSeconds,
+            skipPaused: w.skipPaused,
+            createdAt: now(),
+            reason: args.reason || "Composed condition graph",
+            graph,
+          };
+          w.revisions.push(revision);
+          Object.assign(w, revision, { created: true });
+          this.state.mode = "compose";
+          this.updateGraph();
+          this.focus(w.id, "Treasury policy");
+          const sources = collectSources(graph).map(describeSource);
+          summary = `Revision ${w.revision}. ${describeGraph(graph)} Execution fetches ${sources.join(" and ")}.`;
           break;
         }
         case "undo_revision": {
@@ -762,6 +988,7 @@ export class Engine {
             requireFresh: true,
             skipIfPaused: run.snapshot.skipPaused,
             broadcast: true,
+            graph: run.snapshot.graph,
           },
           (event: any) => {
             const message =
@@ -776,6 +1003,13 @@ export class Engine {
                   : "fetching",
               message,
             );
+          },
+          async (symbol: string) => {
+            const object = await this.sources.fetchFeedPrice(symbol);
+            return {
+              usd: Number(object.data.price),
+              observedAt: object.provenance.observedAt,
+            };
           },
         );
         run.executionMode =
@@ -819,6 +1053,7 @@ export class Engine {
           label: x.kind,
           passed: x.passed,
           detail: x.detail,
+          nodeId: x.nodeId,
         }));
         if (result.transaction) {
           const tx = result.transaction;
@@ -844,6 +1079,14 @@ export class Engine {
             throw new Error(
               "Report transaction did not verify receiver execution and paused state",
             );
+          run.status = "confirmed";
+        } else if (result.simulatedOrder) {
+          // A mock sell produces no transaction by design. It is recorded as
+          // evidence and labelled simulated wherever it is shown.
+          run.evidence = {
+            simulatedOrder: result.simulatedOrder,
+            verification: "Simulated order; no transaction and no asset moved",
+          };
           run.status = "confirmed";
         } else {
           if (result.decision === "pause")

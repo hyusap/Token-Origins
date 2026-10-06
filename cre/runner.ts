@@ -3,14 +3,18 @@ import {privateKeyToAccount} from 'viem/accounts';
 import {foundry,sepolia} from 'viem/chains';
 import {resolve} from 'node:path';
 import {specificationSchema,PRICE_URL,parsePrice,evaluate,type ExecutionSpecification,type PriceObservation,type ConditionEvidence} from './spec';
-export type ExecutionEvidence={runId:string;revision:number;mode:'cre-local-simulation'|'local-evm-rehearsal';price:PriceObservation;vault:{address:string;chainId:number;balanceWei:string;paused:boolean};conditions:ConditionEvidence[];decision:'pause'|'noop';transaction?:{hash:string;blockNumber:number;status:string;receiverConfirmed:boolean;pausedAfter:boolean};logs:string[]};
+import {evaluateGraph,collectSources,sourceKey,describeSource,type PolicyGraph,type PriceReading} from './graph';
+/** Supplied by the backend, which owns the feed address registry. */
+export type FeedResolver=(symbol:string)=>Promise<PriceReading>;
+export type SimulatedOrder={simulated:true;venue:string;side:'sell';symbol:string;amount:number;referencePriceUsd:number;notionalUsd:number;referenceSource:string;observedAt:string;placedAt:string};
+export type ExecutionEvidence={runId:string;revision:number;mode:'cre-local-simulation'|'local-evm-rehearsal';price:PriceObservation;vault:{address:string;chainId:number;balanceWei:string;paused:boolean};conditions:ConditionEvidence[];decision:'pause'|'noop';transaction?:{hash:string;blockNumber:number;status:string;receiverConfirmed:boolean;pausedAfter:boolean};simulatedOrder?:SimulatedOrder;logs:string[]};
 const vaultAbi=parseAbi(['function paused() view returns (bool)','function processedRuns(bytes32) view returns (bool)','event SpendingPaused(bytes32 indexed runId,uint256 indexed revision,uint256 priceUsdCents,uint256 thresholdUsdCents,uint256 observedAt)']);
 const forwarderAbi=parseAbi(['function deliver(address receiver,bytes report)']);
 // Public Anvil development key; deliberately accepted only when chain ID is 31337.
 const LOCAL_DEV_KEY='0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
 const active=new Map<string,{spec:string;promise:Promise<ExecutionEvidence>}>();
 const completed=new Map<string,{spec:string;evidence:ExecutionEvidence}>();
-export async function executeCreRun(input:ExecutionSpecification,onProgress?:(message:string)=>void):Promise<ExecutionEvidence> {
+export async function executeCreRun(input:ExecutionSpecification,onProgress?:(message:string)=>void,resolveFeed?:FeedResolver):Promise<ExecutionEvidence> {
   const spec=Object.freeze(specificationSchema.parse(input));
   const serialized=JSON.stringify(spec);
   const existing=completed.get(spec.runId);
@@ -19,13 +23,13 @@ export async function executeCreRun(input:ExecutionSpecification,onProgress?:(me
   if(underway) {if(underway.spec!==serialized) throw new Error('Running version is immutable');return underway.promise;}
   const work=(async()=>{
     const mode=process.env.ORIGINS_EXECUTION_MODE==='cre'?'cre-local-simulation':'local-evm-rehearsal';
-    const result=mode==='cre-local-simulation'?await executeThroughCre(spec,onProgress):await executeLocalRehearsal(spec,onProgress);
+    const result=mode==='cre-local-simulation'?await executeThroughCre(spec,onProgress):await executeLocalRehearsal(spec,onProgress,resolveFeed);
     completed.set(spec.runId,{spec:serialized,evidence:structuredClone(result)});return result;
   })();
   active.set(spec.runId,{spec:serialized,promise:work});
   try{return await work;}finally{active.delete(spec.runId);}
 }
-async function executeLocalRehearsal(spec:ExecutionSpecification,progress?:(message:string)=>void):Promise<ExecutionEvidence> {
+async function executeLocalRehearsal(spec:ExecutionSpecification,progress?:(message:string)=>void,resolveFeed?:FeedResolver):Promise<ExecutionEvidence> {
   const logs:string[]=[];
   const log=(text:string)=>{logs.push(text);progress?.(text);};
   log('Local EVM rehearsal · isolated evaluator · no CRE/DON claim');
@@ -40,10 +44,37 @@ async function executeLocalRehearsal(spec:ExecutionSpecification,progress?:(mess
   const address=deployment.address as Address;
   const [paused,balance]=await Promise.all([client.readContract({address,abi:vaultAbi,functionName:'paused'}),client.getBalance({address})]);
   log('Read vault state and balance directly from local EVM');
-  const conditions=evaluate(spec,price,paused,Date.now());
-  const evidence:ExecutionEvidence={runId:spec.runId,revision:spec.revision,mode:'local-evm-rehearsal',price,vault:{address,chainId:31337,balanceWei:balance.toString(),paused},conditions,decision:conditions.every(c=>c.passed)?'pause':'noop',logs};
+  let conditions:ConditionEvidence[]; let decision:'pause'|'noop';
+  const prices:Record<string,PriceReading>={'exchange-trade:ETH-USD':{usd:price.usd,observedAt:price.observedAt}};
+  if(spec.graph) {
+    for(const source of collectSources(spec.graph)) {
+      if(source.type==='exchange-trade') continue;
+      if(!resolveFeed) throw new Error(`Policy references ${describeSource(source)} but no feed resolver was supplied`);
+      log(`Resolving ${describeSource(source)} for a composed condition`);
+      prices[sourceKey(source)]=await resolveFeed(source.symbol);
+    }
+    // The reported observation stays the exchange trade, so an oracle branch may
+    // decide a policy without widening the receiver's freshness cap.
+    const result=evaluateGraph(spec.graph,{prices,vaultPaused:paused,executionPrice:{usd:price.usd,observedAt:price.observedAt},executionMaxAgeSeconds:spec.maxAgeSeconds,reportedThresholdUsd:spec.thresholdUsd},Date.now());
+    conditions=result.evidence; decision=result.decision;
+  } else {
+    conditions=evaluate(spec,price,paused,Date.now());
+    decision=conditions.every(c=>c.passed)?'pause':'noop';
+  }
+  const evidence:ExecutionEvidence={runId:spec.runId,revision:spec.revision,mode:'local-evm-rehearsal',price,vault:{address,chainId:31337,balanceWei:balance.toString(),paused},conditions,decision,logs};
   for(const c of conditions) log(`${c.passed?'PASS':'STOP'} ${c.kind}: ${c.detail}`);
   if(evidence.decision==='noop'){log('No report sent');return evidence;}
+  // A sell is a simulation: no contract, no counterparty, no asset movement.
+  // It records the order it would have placed and says so in every field.
+  if(spec.graph?.action.type==='sell') {
+    const action=spec.graph.action;
+    const key=sourceKey({type:'chainlink-feed',symbol:action.symbol});
+    const reading=prices[key] ?? (resolveFeed ? await resolveFeed(action.symbol) : undefined);
+    if(!reading) throw new Error(`Simulated sell needs a ${action.symbol} reference price but no feed resolver was supplied`);
+    evidence.simulatedOrder={simulated:true,venue:action.venue,side:'sell',symbol:action.symbol,amount:action.amount,referencePriceUsd:reading.usd,notionalUsd:Math.round(action.amount*reading.usd*100)/100,referenceSource:`Chainlink ${action.symbol}/USD`,observedAt:reading.observedAt,placedAt:new Date().toISOString()};
+    log(`SIMULATED sell ${action.amount} ${action.symbol} at $${reading.usd.toFixed(2)} reference (${action.venue}); no transaction, no asset moved`);
+    return evidence;
+  }
   if(spec.broadcast===false){log('All conditions passed; explicit dry run, no transaction submitted');return evidence;}
   const runId=keccak256(toBytes(spec.runId));
   if(await client.readContract({address,abi:vaultAbi,functionName:'processedRuns',args:[runId]})) {evidence.decision='noop';log('Run already processed on chain; replay suppressed');return evidence;}
