@@ -31,7 +31,7 @@ export function emptyState(): CanvasState {
     workflow: {
       id: "workflow:treasury",
       ...baseRevision(),
-      summary: "Speak a treasury policy into existence.",
+      summary: "No rule yet.",
       revisions: [],
       created: false,
     },
@@ -93,7 +93,12 @@ export class Engine {
     this.store.save(this.state);
   }
   context() {
-    return clone(this.state);
+    const state = clone(this.state);
+    state.canUndoClear = this.isBlank() && !!this.store.latestClearedSession();
+    return state;
+  }
+  isBlank() {
+    return !this.state.objects.length && !this.state.runs.length && !this.state.workflow.created && !this.state.conversation.some(c => c.role === "user");
   }
   commit() {
     this.state.seq++;
@@ -372,9 +377,10 @@ export class Engine {
           this.state.capabilities.vault =
             this.state.objects.find((x) => x.id === "vault:grant")?.provenance
               .label || this.state.capabilities.vault;
+          const observations = discovered.map(x => x.kind === "price" ? `${x.label}: $${x.data.price} (${x.provenance.source}, observed ${x.provenance.observedAt})` : x.label).join("; ");
           summary = errors.length
-            ? `Discovery partly succeeded. ${errors.join("; ")}`
-            : `Discovered ${discovered.map(x => x.kind === "price" ? `${x.label}: $${x.data.price} (${x.provenance.source}, observed ${x.provenance.observedAt})` : x.label).join("; ")}.`;
+            ? `Discovery partly succeeded. Discovered ${observations}. Failed: ${errors.join("; ")}`
+            : `Discovered ${observations}.`;
           break;
         }
         case "focus_object": {
@@ -650,13 +656,7 @@ export class Engine {
           if (typeof args.text !== "string" || !args.text.trim())
             throw new Error("Caption text required");
           this.say(args.text, "user", args.source || "planned prompt");
-          this.state.activity = {
-            status: "thinking",
-            prompt: args.text,
-            summary: "Codex is interpreting the instruction",
-          };
-          summary =
-            "Utterance recorded; semantic tools must perform the requested operation.";
+          summary = "Utterance recorded.";
           break;
         }
         case "set_activity": {
@@ -679,23 +679,44 @@ export class Engine {
           summary = args.summary || "Activity updated";
           break;
         }
+        case "navigate_canvas": {
+          if (!["fit", "zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down"].includes(args.action)) throw new Error("Unknown canvas navigation action.");
+          this.state.canvasView = { action: args.action, sequence: (this.state.canvasView?.sequence || 0) + 1 };
+          summary = args.action === "fit" ? "Framed the whole canvas." : `Canvas ${args.action.replaceAll("_", " ")}.`;
+          break;
+        }
         case "reset_session": {
-          if (
-            this.state.runs.some(
-              (x) => !["confirmed", "no-op", "failed"].includes(x.status),
-            )
-          )
-            throw new Error(
-              "A run is still executing; wait for completion before resetting the visible session",
-            );
+          if (args.expectedSessionId && args.expectedSessionId !== this.state.sessionId)
+            throw new Error("The session changed. Refresh before clearing the canvas.");
+          if (this.state.runs.some(x => !["confirmed", "no-op", "failed"].includes(x.status)))
+            throw new Error("A run is still executing; wait for completion before clearing the canvas.");
+          if (!this.isBlank()) this.store.archiveSession(this.state);
+          const capabilities = clone(this.state.capabilities);
           this.state = emptyState();
+          this.state.capabilities = capabilities;
           this.fixturePaused = false;
-          summary =
-            "Canvas cleared. Contract state is unchanged; fixture state reset.";
+          summary = "Canvas cleared. Contract state is unchanged.";
+          break;
+        }
+        case "restore_session": {
+          if (args.expectedSessionId && args.expectedSessionId !== this.state.sessionId)
+            throw new Error("The session changed. Refresh before undoing clear.");
+          if (!this.isBlank()) throw new Error("Undo clear is available only before starting a new canvas session.");
+          const archived = this.store.latestClearedSession();
+          if (!archived) throw new Error("There is no cleared session to restore.");
+          this.state = clone(archived);
+          this.state.sessionId = crypto.randomUUID();
+          this.state.activity = { status: "idle", prompt: "", summary: "Canvas restored." };
+          this.fixturePaused = Boolean(this.state.objects.find(x => x.id === "vault:grant" && x.data.fixture)?.data.paused);
+          summary = "Canvas restored. Contract state is unchanged.";
           break;
         }
         default:
           throw new Error(`Unknown semantic tool: ${tool}`);
+      }
+      if (["focus_object", "inspect_object", "get_run"].includes(tool)) {
+        const frameRule = ["workflow", "whole rule", "whole workflow", "treasury policy"].includes(String(args.reference || "").toLowerCase());
+        this.state.canvasView = { action: frameRule ? "fit" : "focus", sequence: (this.state.canvasView?.sequence || 0) + 1 };
       }
       if (!["set_activity", "submit_utterance"].includes(tool))
         this.say(summary);

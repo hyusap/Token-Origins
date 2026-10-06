@@ -9,6 +9,7 @@ import type { GraphObject } from "../shared/types";
 const markets = [
   { symbol: "ETH", name: "Ethereum", productId: "ETH-USD" },
   { symbol: "SOL", name: "Solana", productId: "SOL-USD" },
+  { symbol: "BTC", name: "Bitcoin", productId: "BTC-USD" },
 ];
 test("exact token identity, qualified IDs, ambiguous names, and unsupported assets", () => {
   expect(resolveToken("Solana", markets).symbol).toBe("SOL");
@@ -78,10 +79,62 @@ test("partial discovery discloses failure; SOL cannot stand in for the ETH polic
   const result = await e.invoke("discover_objects", { tokens: ["SOL", "unknown"], operationId: "d" });
   expect(result.ok).toBe(true);
   expect(result.summary).toContain("partly succeeded");
+  expect(result.summary).toContain("SOL / USD");
+  expect(result.summary).toContain("Unsupported");
   expect(e.state.objects.some(x => x.id === "price:eth-usd")).toBe(false);
   const policy = await e.invoke("patch_workflow", { expectedRevision: 0, patch: { threshold: 200 }, operationId: "p" });
   expect(policy.ok).toBe(false);
   expect(policy.error).toContain("ETH/USD");
+});
+
+for (const tokens of [["Solana", "Bitcoin"], ["SOL", "BTC"], ["coinbase:SOL-USD", "coinbase:BTC-USD"]]) {
+  test(`schema and engine preserve multiple tokens: ${tokens.join(", ")}`, async () => {
+    const { e, calls } = engine();
+    await e.invoke("discover_objects", { objects: ["price"], operationId: "eth-first" });
+    const eth = structuredClone(e.state.objects.find(x => x.id === "price:eth-usd"));
+    const args = toolDefinitions.discover_objects.schema.parse({ objects: ["price"], tokens, operationId: "tokens" });
+    const result = await e.invoke("discover_objects", args);
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual(["ETH", ...tokens]);
+    expect(e.state.objects.filter(x => x.kind === "price").map(x => x.id)).toEqual(["price:eth-usd", "price:sol-usd", "price:btc-usd"]);
+    expect(e.state.objects.find(x => x.id === "price:eth-usd")).toEqual(eth);
+    expect(result.summary).toContain("SOL / USD");
+    expect(result.summary).toContain("BTC / USD");
+    expect(result.summary).not.toContain("vault");
+    expect(e.state.objects.some(x => x.kind === "vault")).toBe(false);
+    expect(e.state.runs).toHaveLength(0);
+    for (const object of e.state.objects.filter(x => x.kind === "price")) expect(Number.isFinite(Date.parse(object.provenance.observedAt!))).toBe(true);
+  });
+}
+
+test("omitted tokens default to ETH and only requested objects appear in summary", async () => {
+  const { e, calls } = engine();
+  const result = await e.invoke("discover_objects", toolDefinitions.discover_objects.schema.parse({ objects: ["price"], operationId: "default" }));
+  expect(calls).toEqual(["ETH"]);
+  expect(result.summary).toContain("ETH / USD");
+  expect(result.summary).not.toContain("vault");
+  const vault = await e.invoke("discover_objects", { objects: ["vault"], operationId: "vault" });
+  expect(vault.summary).toBe("Discovered Grant vault.");
+});
+
+test("unsupported and ambiguous discoveries fail without substituting ETH", async () => {
+  const { e } = engine();
+  const before = structuredClone(e.state.objects);
+  const unsupported = await e.invoke("discover_objects", { objects: ["price"], tokens: ["unknown"], operationId: "unsupported" });
+  expect(unsupported.ok).toBe(false);
+  expect(unsupported.error).toContain("Unsupported");
+  expect(e.state.objects).toEqual(before);
+  e.sources.fetchPrice = async token => price(resolveToken(token!, [...markets, { symbol: "OTHER", name: "SOL", productId: "OTHER-USD" }]).symbol);
+  const ambiguous = await e.invoke("discover_objects", { objects: ["price"], tokens: ["SOL"], operationId: "ambiguous" });
+  expect(ambiguous.ok).toBe(false);
+  expect(ambiguous.error).toContain("Ambiguous");
+  expect(ambiguous.error).toContain("coinbase:SOL-USD");
+  expect(e.state.objects).toEqual(before);
+});
+
+test("discovery rejects unknown arguments and empty token lists", () => {
+  expect(toolDefinitions.discover_objects.schema.safeParse({ token: "SOL", operationId: "typo" }).success).toBe(false);
+  expect(toolDefinitions.discover_objects.schema.safeParse({ tokens: [], operationId: "empty" }).success).toBe(false);
 });
 
 test("keyboard fallback discovers named tokens instead of silently defaulting to ETH", async () => {

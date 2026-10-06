@@ -16,7 +16,7 @@ const revision = z
 export const toolDefinitions = {
   get_context: {
     description:
-      "Read persistent canvas, conversational focus, current draft revision and immutable runs. Call before editing or resolving ambiguous references.",
+      "Read persistent canvas, focus, current draft revision and immutable runs when no reliable state is available. Reuse state supplied by the transport or returned by prior tools; do not refetch every turn. Refresh after a session change, outside changes, or revision conflict.",
     schema: z.object({}),
   },
   discover_objects: {
@@ -26,7 +26,7 @@ export const toolDefinitions = {
       objects: z.array(z.enum(["price", "vault"])).default(["price", "vault"]),
       tokens: z.array(z.string().trim().min(1).max(120)).min(1).max(12).optional(),
       operationId: op,
-    }),
+    }).strict(),
   },
   focus_object: {
     description:
@@ -78,7 +78,7 @@ export const toolDefinitions = {
   },
   submit_utterance: {
     description:
-      "Record the planned or spoken utterance as a visible caption. This does not interpret text or mutate the workflow; use semantic tools next.",
+      "Record the user's actual utterance as a visible caption only after completing their requested task. This does not interpret text, change activity, or mutate the workflow. Do not call while still working; skip when the transport owns caption publication.",
     schema: z.object({
       text: z.string().min(1).max(2000),
       source: z.string().optional(),
@@ -102,9 +102,17 @@ export const toolDefinitions = {
       operationId: op,
     }),
   },
+  navigate_canvas: {
+    description: "Navigate the React Flow spatial canvas by semantic actions: fit the whole rule, zoom in/out, or pan left/right/up/down. Does not change workflow or contract state.",
+    schema: z.object({ action: z.enum(["fit", "zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down"]), operationId: op }),
+  },
   reset_session: {
     description:
-      "Clear visible canvas and conversation. Does not change actual contract state. Running executions prevent reset.",
-    schema: z.object({ operationId: op }),
+      "Clear visible canvas and conversation, saving a restorable session. Does not change contract state. Running executions prevent reset.",
+    schema: z.object({ operationId: op, expectedSessionId: z.string().optional() }),
+  },
+  restore_session: {
+    description: "Undo clearing the canvas by restoring the most recent saved session. Only available while the new canvas remains empty; does not execute any workflow or change contract state.",
+    schema: z.object({ operationId: op, expectedSessionId: z.string().optional() }),
   },
 } as const;

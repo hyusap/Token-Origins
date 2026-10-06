@@ -1,0 +1,92 @@
+{
+  "verifiedAt": "2026-10-06T05:46:52.253Z",
+  "url": "http://127.0.0.1:4318",
+  "changes": [
+    "Full viewport canvas, no landing-page hero or sidebar",
+    "Centered activity waveform at exact canvas center",
+    "Real activity modes and state-update pulses",
+    "No microphone amplitude claim",
+    "Removed slogans and raw markdown delimiters",
+    "Removed 201 obsolete landing layout CSS rules"
+  ],
+  "desktop": {
+    "width": 1512,
+    "height": 982,
+    "signalCenter": {
+      "x": 756,
+      "y": 412
+    },
+    "canvasCenter": {
+      "x": 756,
+      "y": 412
+    },
+    "pageOverflow": false
+  },
+  "mobile": {
+    "width": 390,
+    "height": 844,
+    "signalBelowScrollingInstruments": true,
+    "keyboardProofPanelVerified": true
+  },
+  "realAgentChecks": [
+    {
+      "prompt": "Show me the whole rule.",
+      "ok": true,
+      "durationMs": 19933,
+      "tools": [
+        {
+          "name": "get_context",
+          "status": "completed"
+        },
+        {
+          "name": "inspect_object",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "prompt": "Focus on the whole workflow.",
+      "ok": true,
+      "durationMs": 28282,
+      "tools": [
+        {
+          "name": "get_context",
+          "status": "completed"
+        },
+        {
+          "name": "focus_object",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "finalState": {
+    "revision": 6,
+    "runCount": 3,
+    "focus": {
+      "objectId": "workflow:treasury",
+      "label": "Treasury policy"
+    }
+  },
+  "checks": {
+    "typecheck": "passed",
+    "productionBuild": "passed",
+    "microphone": "not tested"
+  },
+  "assets": {
+    "javascript": "dist/assets/index-C-r0PqNY.js",
+    "css": "dist/assets/index-BGdGTYQu.css"
+  },
+  "screenshots": [
+    "demo/desktop.jpg",
+    "demo/mobile.jpg",
+    "demo/activity-working.jpg"
+  ],
+  "mcpConfiguration": {
+    "scope": "project",
+    "cliEnabled": true,
+    "globalRegistered": false,
+    "currentChatToolsExposed": false
+  },
+  "viewportReset": true
+}

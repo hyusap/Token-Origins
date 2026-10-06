@@ -3,6 +3,7 @@ import { toolDefinitions } from "./schemas";
 import { command } from "./command";
 import { requestAccess } from "./access";
 import { resolve, sep } from "node:path";
+import { runtime } from "./runtime";
 const engine = new Engine();
 let bridgePromise: Promise<any> | undefined;
 async function bridge() {
@@ -10,6 +11,7 @@ async function bridge() {
     createAgentBridge({
       serverUrl: `http://127.0.0.1:${process.env.PORT || 4318}`,
       rootDir: process.cwd(),
+      getContext: () => engine.context(),
     }),
   );
   return bridgePromise;
@@ -40,6 +42,7 @@ const server = Bun.serve({
         return json({
           ok: true,
           service: "Origins canvas",
+          runtime,
           sessionId: engine.state.sessionId,
           seq: engine.state.seq,
         });
@@ -96,6 +99,16 @@ const server = Bun.serve({
           engine.store.save(engine.state);
         }
         return json({ ok: true });
+      }
+      if (["/api/canvas/clear", "/api/canvas/restore"].includes(url.pathname) && request.method === "POST") {
+        const status = (await bridge()).rehearsalStatus();
+        if (status.busy || status.running)
+          return json({ ok: false, error: "Stop the demo and let the active agent turn finish before clearing or restoring the canvas." }, 409);
+        const name = url.pathname.endsWith("restore") ? "restore_session" : "reset_session";
+        const parsed = toolDefinitions[name].schema.safeParse(await request.json());
+        if (!parsed.success) return json({ ok: false, error: "Invalid canvas operation." }, 400);
+        const result = await engine.invoke(name, parsed.data);
+        return json(result, result.ok ? 200 : 409);
       }
       if (url.pathname === "/api/agent" && request.method === "POST") {
         const body = (await request.json()) as any;

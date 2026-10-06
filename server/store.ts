@@ -11,7 +11,7 @@ export class StateStore {
       });
     this.db = new Database(path, { create: true });
     this.db.exec(
-      "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS states (id INTEGER PRIMARY KEY, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, signature TEXT NOT NULL, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS executions (id TEXT PRIMARY KEY, payload TEXT NOT NULL)",
+      "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS states (id INTEGER PRIMARY KEY, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, signature TEXT NOT NULL, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS executions (id TEXT PRIMARY KEY, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cleared_sessions (id TEXT PRIMARY KEY, payload TEXT NOT NULL, cleared_at INTEGER NOT NULL)",
     );
   }
   load(): CanvasState | null {
@@ -32,6 +32,14 @@ export class StateStore {
           "INSERT INTO executions(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
         )
         .run(run.id, JSON.stringify(run));
+  }
+  archiveSession(state: CanvasState) {
+    this.db.query("INSERT INTO cleared_sessions(id,payload,cleared_at) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING")
+      .run(state.sessionId, JSON.stringify(state), Date.now());
+  }
+  latestClearedSession(): CanvasState | null {
+    const row = this.db.query("SELECT payload FROM cleared_sessions ORDER BY cleared_at DESC, rowid DESC LIMIT 1").get() as { payload: string } | null;
+    return row ? JSON.parse(row.payload) : null;
   }
   operation(id: string): { signature: string; result: ToolResult } | null {
     const row = this.db

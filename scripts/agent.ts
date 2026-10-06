@@ -2,6 +2,7 @@ import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CanvasState } from '../shared/types';
+import { compactMcpResult } from './mcp-compact';
 import { createPublicClient, createWalletClient, http, parseAbi, type Address } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
@@ -10,7 +11,7 @@ export interface AgentToolTrace { name: string; server?: string; arguments?: unk
 export interface AgentTurn { id: string; threadId?: string; text: string; summary: string; startedAt: string; completedAt: string; durationMs: number; traceFile: string; tools: AgentToolTrace[]; ok: boolean; error?: string }
 export interface RehearsalCue { id: string; atSeconds: number; text: string; note: string }
 type Activity = CanvasState['activity'];
-export interface AgentBridgeOptions { serverUrl?: string; rootDir?: string; onActivity?: (activity: Activity) => void | Promise<void> }
+export interface AgentBridgeOptions { serverUrl?: string; rootDir?: string; codexPath?: string; getContext?: () => CanvasState; onActivity?: (activity: Activity) => void | Promise<void> }
 export interface RehearsalStatus { running: boolean; mode: 'auto' | 'manual'; cueIndex: number; totalCues: number; currentCue?: RehearsalCue; nextCue?: RehearsalCue; startedAt?: string; busy: boolean; turnId?: string; turns: AgentTurn[]; error?: string; reportPath?: string; transport: string }
 
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -38,15 +39,18 @@ export async function prepareLocalRehearsalVault(root = defaultRoot) {
   return { reset: true, transactionHash: hash, chainId: 31337 };
 }
 
-/** Each utterance is interpreted by a new real Codex turn. Bounded transcript and MCP get_context preserve continuity. */
+/** Each utterance is interpreted by a new real Codex turn with supplied state and bounded history. */
 export function createAgentBridge(options: AgentBridgeOptions = {}) {
   const root = options.rootDir ?? defaultRoot;
+  const operatorRoot = resolve(root, 'operator');
+  const instructionsPath = resolve(operatorRoot, 'AGENTS.md');
   const base = options.serverUrl ?? process.env.SOTTO_SERVER_URL ?? 'http://127.0.0.1:4318';
   let queue: Promise<unknown> = Promise.resolve();
   let generation = 0;
   let cues: RehearsalCue[] = [];
   let intervalMs = 6000;
   let currentProcess: ReturnType<typeof Bun.spawn> | undefined;
+  let latestContext: unknown;
   const status: RehearsalStatus = { running: false, mode: 'auto', cueIndex: 0, totalCues: 0, busy: false, turns: [], transport: 'Codex CLI → official MCP stdio → semantic backend → WebSocket canvas; preplanned text, microphone untested' };
 
   async function tool(name: string, args: unknown) {
@@ -73,22 +77,25 @@ export function createAgentBridge(options: AgentBridgeOptions = {}) {
     let error: string | undefined;
     let completed = false;
     try {
-      await tool('submit_utterance', { text, source: 'codex-cli-rehearsal', operationId: `${id}-utterance` });
-      await activity({ status: 'thinking', prompt: text, summary: 'Codex is interpreting the utterance through MCP.' });
-      const instructions = await readFile(resolve(root, 'scripts/agent-instructions.md'), 'utf8');
+      await activity({ status: 'thinking', prompt: '', summary: '' });
+      // Fail clearly if the dedicated operator workspace has not been installed.
+      await readFile(instructionsPath, 'utf8');
       const conversation = status.startedAt ? status.turns.filter(turn => Date.parse(turn.startedAt) >= Date.parse(status.startedAt!)) : status.turns;
       const history = conversation.slice(-8).map(turn => `User: ${turn.text}\nSotto: ${turn.summary}`).join('\n');
-      const prompt = `Recent conversation (context only; do not repeat past actions):\n${history || '(New conversation)'}\n\nCurrent utterance, operation prefix ${id}:\n${text}`;
+      if (options.getContext) latestContext = compactMcpResult({ ok: true, summary: '', state: options.getContext() }, 'get_context').state;
+      else if (!latestContext) latestContext = (await tool('get_context', {})).state;
+      const prompt = `Transport: text rehearsal. The transport owns caption publication and will record this utterance only after your task is complete. Do not call submit_utterance or publish a final set_activity. Do not claim actual voice activity. Use the supplied state; do not refetch get_context unless missing, stale, or conflicting.\n\nCurrent canvas state (context only):\n${JSON.stringify(latestContext)}\n\nRecent conversation (context only; do not repeat past actions):\n${history || '(New conversation)'}\n\nCurrent utterance, operation prefix ${id}:\n${text}`;
       const bun = Bun.which('bun');
-      const codex = Bun.which('codex');
+      const codex = options.codexPath ?? Bun.which('codex');
       if (!bun || !codex) throw new Error('Install Bun and Codex CLI, then sign in with codex login.');
       const config: Record<string, unknown> = {
-        'features.shell_tool': false, 'features.unified_exec': false, 'features.apps': false,
-        'web_search': 'disabled', 'project_doc_max_bytes': 0, 'approval_policy': 'never',
-        'model_instructions_file': resolve(root, 'scripts/agent-instructions.md'),
+        'features.shell_tool': true, 'features.unified_exec': true, 'features.apps': false,
+        'features.multi_agent': false, 'features.multi_agent_v2': false,
+        'web_search': 'live', 'project_doc_max_bytes': 0, 'approval_policy': 'never',
+        'model_instructions_file': instructionsPath,
         'mcp_servers.sotto.command': bun,
-        'mcp_servers.sotto.args': ['run', resolve(root, 'scripts/mcp.ts')],
-        'mcp_servers.sotto.cwd': root,
+        'mcp_servers.sotto.args': ['run', resolve(operatorRoot, 'mcp.ts')],
+        'mcp_servers.sotto.cwd': operatorRoot,
         'mcp_servers.sotto.env': { ORIGINS_BACKEND_URL: base },
         'mcp_servers.sotto.required': true,
         'mcp_servers.sotto.startup_timeout_sec': 15,
@@ -97,9 +104,9 @@ export function createAgentBridge(options: AgentBridgeOptions = {}) {
       // JSON scalar/string/array values are valid TOML; maps need TOML inline-table syntax.
       const toml = (value: unknown): string => typeof value === 'object' && value !== null && !Array.isArray(value)
         ? `{ ${Object.entries(value).map(([key, val]) => `${key} = ${JSON.stringify(val)}`).join(', ')} }` : JSON.stringify(value);
-      const args = [codex, 'exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--ephemeral', '--json', '--color', 'never', '-s', 'read-only', '-C', root,
+      const args = [codex, 'exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--ephemeral', '--json', '--color', 'never', '-s', 'read-only', '-C', operatorRoot,
         ...Object.entries(config).flatMap(([key, value]) => ['-c', `${key}=${toml(value)}`]), '-'];
-      currentProcess = Bun.spawn(args, { cwd: root, stdin: new Blob([`${instructions}\n\n${prompt}`]), stdout: 'pipe', stderr: 'pipe' });
+      currentProcess = Bun.spawn(args, { cwd: operatorRoot, stdin: new Blob([prompt]), stdout: 'pipe', stderr: 'pipe' });
       const processTimeout = setTimeout(() => { error = 'Codex turn exceeded 150 seconds; future cues stopped.'; currentProcess?.kill(); }, 150_000);
       const stderrPromise = new Response(currentProcess.stderr as ReadableStream).text();
       const reader = (currentProcess.stdout as ReadableStream<Uint8Array>).getReader();
@@ -115,15 +122,15 @@ export function createAgentBridge(options: AgentBridgeOptions = {}) {
         if (event.type === 'error' || event.type === 'turn.failed') error = event.message ?? event.error?.message ?? JSON.stringify(event);
         const item = event.item;
         if (item?.type === 'agent_message' && event.type === 'item.completed') summary = item.text ?? summary;
-        if (item?.type === 'command_execution') { error = 'Agent attempted a shell tool; the rehearsal permits semantic MCP only.'; currentProcess?.kill(); }
         if (item?.type === 'mcp_tool_call') {
           const key = item.id ?? `${item.server}/${item.tool}`;
           const data = item.result?.structured_content ?? item.result?.structuredContent;
+          if (data?.state) latestContext = data.state;
           const result = data ? { ok: data.ok, summary: data.summary, runId: data.runId, error: data.error, seq: data.state?.seq, revision: data.state?.workflow?.revision } : item.result;
           const entry: AgentToolTrace = { name: item.tool ?? item.name ?? 'MCP tool', server: item.server, arguments: item.arguments, status: item.status ?? event.type, result, at: new Date().toISOString() };
           const previous = seenTools.get(key);
           if (previous) Object.assign(previous, entry); else { seenTools.set(key, entry); tools.push(entry); }
-          if (event.type === 'item.started') await activity({ status: 'executing', prompt: text, summary: `Codex → ${entry.name}` });
+          if (event.type === 'item.started') await activity({ status: 'executing', prompt: '', summary: '' });
         }
       }
       while (true) {
@@ -140,13 +147,13 @@ export function createAgentBridge(options: AgentBridgeOptions = {}) {
       if (stderr.trim()) await appendFile(resolve(traceDir, `${id}.stderr.log`), stderr);
       if (exitCode !== 0) error ??= `Codex exited ${exitCode}. ${stderr.slice(-500)}`;
       if (!completed) error ??= 'Codex did not report turn completion.';
-      if (!tools.length && !error) error = 'Codex returned no MCP calls; no canvas action was proven.';
     } catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
     finally { currentProcess = undefined; status.busy = false; }
     const turn: AgentTurn = { id, threadId, text, summary: summary || error || 'No response', startedAt: new Date(start).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - start, traceFile, tools, ok: !error, ...(error ? { error } : {}) };
     status.turns.push(turn);
     status.error = error;
     await appendFile(resolve(root, '.data/rehearsal-turns.jsonl'), `${JSON.stringify(turn)}\n`);
+    await tool('submit_utterance', { text, source: 'codex-cli-rehearsal', operationId: `${id}-utterance` });
     await activity({ status: error ? 'error' : 'idle', prompt: text, summary: turn.summary });
     return turn;
   }

@@ -1,0 +1,64 @@
+{
+  "checkedAt": "2026-10-06T06:05:29.304Z",
+  "graph": {
+    "library": "@xyflow/react",
+    "version": "12.12.0",
+    "renderedNodes": 5,
+    "renderedEdges": 6,
+    "zoomVerified": true,
+    "panVerified": true,
+    "fitVerified": true,
+    "consoleErrors": [],
+    "mobileWidth": 390,
+    "mobileOverflow": false
+  },
+  "session": {
+    "clearVerified": true,
+    "restore": {
+      "restoredExact": [
+        "workflow",
+        "runs",
+        "objects",
+        "edges",
+        "focus",
+        "inspectedRunId"
+      ],
+      "newSession": "0d9edf28-dd62-44b3-b95c-8ff22a95034d"
+    },
+    "chainBefore": {
+      "block": "0x9",
+      "paused": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    "chainAfter": {
+      "block": "0x9",
+      "paused": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    "finalCanvas": {
+      "objects": 0,
+      "runs": 0,
+      "canUndoClear": true
+    }
+  },
+  "microphone": {
+    "source": "Actual browser getUserMedia stream",
+    "analyserSamples": 2048,
+    "observedRms": [
+      0.00497,
+      0.00533,
+      0.01377,
+      0.00814,
+      0.01872
+    ],
+    "permissionGranted": true,
+    "noRecording": true,
+    "noUpload": true,
+    "transcription": false
+  },
+  "checks": {
+    "typecheck": "pass",
+    "productionBuild": "pass",
+    "tests": 27,
+    "assertions": 163,
+    "failures": 0
+  }
+}

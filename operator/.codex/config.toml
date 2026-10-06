@@ -1,0 +1,23 @@
+# Dedicated Sotto operator. Prompt path is relative to .codex; MCP paths name this checkout.
+model_instructions_file = "../AGENTS.md"
+sandbox_mode = "read-only"
+web_search = "live"
+
+[features]
+shell_tool = true
+unified_exec = true
+apps = false
+multi_agent = false
+multi_agent_v2 = false
+
+[mcp_servers.sotto]
+command = "bun"
+args = ["run", "/Users/ayush/dev/token-origins/operator/mcp.ts"]
+cwd = "/Users/ayush/dev/token-origins/operator"
+required = true
+default_tools_approval_mode = "approve"
+startup_timeout_sec = 15
+tool_timeout_sec = 60
+
+[mcp_servers.sotto.env]
+ORIGINS_BACKEND_URL = "http://127.0.0.1:4318"

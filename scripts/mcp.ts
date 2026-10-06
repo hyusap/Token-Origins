@@ -2,8 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { toolDefinitions } from "../server/schemas";
 import { compactMcpResult } from "./mcp-compact";
+import { forwardTool } from "./mcp-forward";
 const backend = process.env.ORIGINS_BACKEND_URL || "http://127.0.0.1:4318";
-const server = new McpServer({ name: "origins-canvas", version: "1.0.0" });
+const server = new McpServer({ name: "origins-canvas", version: "1.1.0" });
 for (const [name, definition] of Object.entries(toolDefinitions)) {
   server.registerTool(
     name,
@@ -13,13 +14,7 @@ for (const [name, definition] of Object.entries(toolDefinitions)) {
     },
     async (args: Record<string, unknown>) => {
       try {
-        const response = await fetch(`${backend}/api/tools/${name}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(args),
-          signal: AbortSignal.timeout(30000),
-        });
-        const result = compactMcpResult(await response.json(), name, args);
+        const result = compactMcpResult(await forwardTool(backend, name, args), name, args);
         return {
           content: [
             {

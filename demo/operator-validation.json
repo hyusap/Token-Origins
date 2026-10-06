@@ -1,0 +1,16 @@
+{
+  "checkedAt": "2026-10-06T06:21:39.786Z",
+  "directory": "operator",
+  "prompt": "operator/AGENTS.md",
+  "config": "operator/.codex/config.toml",
+  "realAgentContextCalls": [
+    {
+      "tool": "get_context",
+      "status": "completed"
+    }
+  ],
+  "sessionPreserved": true,
+  "typecheck": "passed",
+  "tests": 27,
+  "cliUserModel": "Direct launch rejected globally configured gpt-6.1-sol; isolated default-model validation used no model override."
+}

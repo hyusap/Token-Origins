@@ -6,6 +6,8 @@ The canvas keeps observations, their sources, conversational focus, policy revis
 
 ## Open the demo
 
+For an operator chat, open [`operator/`](operator/README.md) as the primary Codex project folder. Its `AGENTS.md` and `.codex/config.toml` make new chats Sotto operators with the semantic MCP attached. Coding chats belong in the parent project. The rehearsal agents also start in `operator/` with that same prompt.
+
 ```sh
 bun install
 bun run dev
@@ -16,14 +18,19 @@ Open http://127.0.0.1:5173. A production build is also served by the backend at 
 - **Space** starts the complete timed rehearsal from an empty canvas. Each prompt is interpreted by a real Codex CLI agent, which calls semantic MCP tools. A new rehearsal resumes only this project's local vault.
 - **/** opens a text transcript prompt; **Enter** sends it to Codex.
 - **I** shows provenance and the semantic tool trace.
-- **V** narrates planned prompts and final responses with optional browser speech synthesis. Microphone input remains a separate integration.
-- **Escape** stops future rehearsal prompts and narration. Submitted actions and blockchain transactions continue.
+- **M** or **Mic** enables a local microphone waveform after browser permission. Audio is analysed in memory, with no recording or upload; this does not transcribe commands.
+- **V** narrates planned prompts and final responses with optional browser speech synthesis. The waveform responds only to the microphone.
+- **Clear** archives the current canvas; **Undo clear** restores its policy and execution evidence while the canvas is still empty. Neither changes the deployed contract.
+- **+ / −** zoom, arrow keys pan, and **0** fits the graph. Trackpad pan and pinch also work.
+- **Escape** stops microphone capture, future rehearsal prompts, and narration. Submitted actions and blockchain transactions continue.
 
-Canvas objects have no drag, point, or click controls. Discovery, focus, source navigation, pinning, composition, revision, undo, execution, and inspection are semantic operations.
+The canvas uses React Flow custom nodes, port-connected edges, and its real viewport. Discovery, focus, source navigation, pinning, composition, revision, undo, execution, and inspection remain semantic operations; objects are not manually rewired. Semantic focus and navigation also move the viewport.
 
 The 13-cue rehearsal takes around six minutes with the measured CLI/model setup. Prompts have minimum scheduled offsets and defer when a previous turn is still working. To trigger each prompt manually in the terminal, run `bun run rehearse`; for automatic timing, run `bun run demo`.
 
-The app opens directly on the full-screen canvas. A centered animated signal follows real agent activity and state changes; it shows Ready, Typing, Working, Executing, Speaking, or Error. It is an activity display, not a microphone amplitude meter.
+The app opens directly on the full-screen graph. A compact microphone meter sits beside the mic control in the header and appears only while capture is live. The completion caption updates after the user's task finishes; price timestamps and exchange provenance stay in the cards and inspector. Permission denial, cancellation, and device disconnection are handled. Live microphone capture was verified in the Codex in-app browser with 2,048-sample frames and changing measured amplitude; spoken command transcription remains separate.
+
+Price discovery accepts exact Coinbase USD asset names, symbols, and qualified market IDs, and keeps each asset as a separate observation. Omitted tokens defaults to ETH; the grant-vault spending policy always uses ETH/USD. Restart `bun run server` after backend changes: a newly started MCP bridge checks semantic API compatibility before discovery and rejects older backends that would discard token arguments. `/api/health` reports the running process ID, start time, semantic API version, and a startup fingerprint of the semantic sources.
 
 ## What actually works
 
@@ -55,7 +62,7 @@ The CRE implementation is a fixed, allowlisted graph evaluator. The composed gra
 
 - **The default runs actual local EVM transactions through an explicitly named rehearsal forwarder.** It does not invoke CRE or demonstrate DON consensus.
 - **The actual CRE HTTP handler passes SDK capability tests and compiles to WASM.** Authenticated CRE CLI execution and Sepolia broadcast remain untested; they require a fresh CRE account/API key and funded fresh test wallet. Existing user credentials were not inspected for chain execution.
-- **Built-in desktop voice remains untested.** The user requested preplanned voice for this phase. The preferred Codex/MCP architecture is retained; optional browser narration does not replace it. No app-owned microphone system was silently substituted.
+- **Built-in desktop voice remains untested.** Preplanned voice prompts use the real Codex/MCP agent. Browser microphone capture supplies only the requested amplitude display; speech recognition and native Codex voice are separate integrations.
 - The draft revision in the observed take arrived after the fast local run finished. Snapshot immutability was verified; audio interruption during an in-flight transaction was not.
 - Measured CLI agent turn duration was 17.1–35.3 seconds, median 20.6 seconds. These are not voice latency figures. First-render acknowledgement handling was corrected after that take; its original render numbers are not claimed as reliable performance.
 

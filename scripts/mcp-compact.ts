@@ -1,7 +1,7 @@
 import type { CanvasState, ExecutionRun, GraphObject, ToolResult } from '../shared/types';
 
 /** Model transport only. Canonical HTTP/WebSocket state retains every chart point, log, and timing. */
-export function compactMcpResult(result: ToolResult, toolName: string, args: Record<string, unknown> = {}) {
+export function compactMcpResult(result: Omit<ToolResult, "state"> & { state?: CanvasState }, toolName: string, args: Record<string, unknown> = {}) {
   if (!result.state) return { ...result };
   const state: CanvasState = result.state;
   function objectView(object: GraphObject) {
@@ -24,6 +24,7 @@ export function compactMcpResult(result: ToolResult, toolName: string, args: Rec
       sessionId: state.sessionId, seq: state.seq, mode: state.mode, focus: state.focus,
       previousFocus: state.previousFocus.slice(-2), references: state.references.slice(-3),
       clarification: state.clarification, inspectedRunId: state.inspectedRunId,
+      canvasView: state.canvasView, canUndoClear: state.canUndoClear,
       objects: state.objects.map(objectView), edges: state.edges,
       workflow: { ...state.workflow, revisions: state.workflow.revisions.slice(-2) },
       runs: state.runs.map(run => toolName === 'get_run' && run.id === selectedRunId

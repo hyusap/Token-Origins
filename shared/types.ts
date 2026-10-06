@@ -91,6 +91,8 @@ export interface ConversationEntry {
 }
 export interface CanvasState {
   sessionId: string;
+  canUndoClear?: boolean;
+  canvasView?: { action: "fit" | "zoom_in" | "zoom_out" | "pan_left" | "pan_right" | "pan_up" | "pan_down" | "focus"; sequence: number };
   seq: number;
   mode: Mode;
   focus: { objectId: string | null; label: string };

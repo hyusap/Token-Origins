@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowUpRight,
@@ -11,11 +11,24 @@ import {
   ShieldCheck,
   X,
   CornerDownLeft,
+  Mic,
+  MicOff,
+  RotateCcw,
+  Eraser,
+  Plus,
+  Minus,
+  Maximize2,
 } from "lucide-react";
 import type { CanvasState, GraphObject, ExecutionRun } from "../shared/types";
+import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, Handle, Position, useReactFlow, useNodesInitialized, useNodesState, type NodeProps, type Viewport } from "@xyflow/react";
+import { canvasFlow, type InstrumentFlowNode } from "./flow-model";
+import "@xyflow/react/dist/style.css";
 import "./brand.css";
 import "./style.css";
 import "./app-layout.css";
+import { microphoneLevels, type MicrophoneSnapshot } from "./microphone";
+import { useMicrophone } from "./use-microphone";
+import { displayReply } from "./display-reply";
 
 const money = (n: number | undefined) =>
   typeof n === "number" && Number.isFinite(n)
@@ -145,53 +158,56 @@ function BrandMark() {
 }
 
 type SignalMode = "ready" | "working" | "running" | "speaking" | "typing" | "offline" | "blocked";
-function LiveSignal({ mode, sequence }: { mode: SignalMode; sequence: number }) {
+function LiveSignal({ mode, microphone }: { mode: SignalMode; microphone: MicrophoneSnapshot }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const signal = useRef({ mode, sequence, changedAt: performance.now() });
-  useEffect(() => {
-    signal.current = { mode, sequence, changedAt: performance.now() };
-  }, [mode, sequence]);
+  const input = useRef(microphone);
+  useEffect(() => { input.current = microphone; }, [microphone]);
   useEffect(() => {
     const el = canvas.current!;
     const ctx = el.getContext("2d")!;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
     let disposed = false;
+    let samples = new Float32Array(2048);
+    let measuredAt = 0;
     const draw = (now: number) => {
       if (disposed) return;
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const width = el.clientWidth, height = el.clientHeight;
+      if (!width || !height) { frame = requestAnimationFrame(draw); return; }
       if (el.width !== width * ratio || el.height !== height * ratio) {
         el.width = width * ratio; el.height = height * ratio;
       }
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      const current = signal.current;
-      const busy = ["working", "running", "speaking"].includes(current.mode);
-      const offline = current.mode === "offline";
-      const time = reduced.matches ? 0 : now / 1000;
-      const pulse = reduced.matches ? 0 : Math.exp(-(now - current.changedAt) / 750);
-      const amplitude = offline ? 0.03 : busy ? 0.78 : current.mode === "typing" ? 0.4 : 0.28;
-      const bars = 65;
-      const gap = width / (bars + 3);
+      const analyser = input.current.analyser;
+      if (analyser) {
+        if (samples.length !== analyser.fftSize) samples = new Float32Array(analyser.fftSize);
+        analyser.getFloatTimeDomainData(samples);
+      } else samples.fill(0);
+      const { rms, levels } = microphoneLevels(samples, 21);
+      const gap = width / (levels.length + 3);
       ctx.fillStyle = getComputedStyle(el).color;
-      for (let i = 0; i < bars; i++) {
-        const x = (i + 2) * gap;
-        const envelope = Math.sin(Math.PI * (i + 1) / (bars + 1)) ** 1.6;
-        const movement = 0.32 + Math.abs(Math.sin(i * .67 + time * (busy ? 4.8 : 1.1)) * Math.cos(i * .23 - time * 1.7)) * .68;
-        const h = 2 + envelope * (amplitude * movement + pulse * .16) * (height - 8);
-        ctx.globalAlpha = offline ? .25 : .35 + envelope * .65;
-        ctx.fillRect(x, (height - h) / 2, 2, h);
+      for (let i = 0; i < levels.length; i++) {
+        const h = 2 + levels[i] * (height - 8);
+        ctx.globalAlpha = .3 + levels[i] * .7;
+        ctx.fillRect((i + 2) * gap, (height - h) / 2, 2, h);
       }
       ctx.globalAlpha = 1;
+      if (now - measuredAt > 100) {
+        el.dataset.audioSource = analyser ? "microphone" : "none";
+        el.dataset.audioRms = rms.toFixed(5);
+        el.dataset.audioSamples = String(analyser ? samples.length : 0);
+        measuredAt = now;
+      }
       frame = requestAnimationFrame(draw);
     };
     frame = requestAnimationFrame(draw);
     return () => { disposed = true; cancelAnimationFrame(frame); };
   }, []);
-  return <div className={`live-signal signal-${mode}`} role="status" aria-label={`Agent ${mode}`}>
+  const label = mode === "working" ? "Working" : mode === "running" ? "Executing" : mode === "blocked" ? "Error" : mode.charAt(0).toUpperCase() + mode.slice(1);
+  return <div className={`live-signal signal-${mode} ${microphone.status === "live" ? "mic-live" : ""}`} role="status" aria-label={`${microphone.status === "live" ? "Microphone live" : "Microphone off"}; agent ${label.toLowerCase()}`}>
     <canvas ref={canvas} aria-hidden="true" />
-    <span className="signal-caption mono"><i />{mode === "working" ? "Working" : mode === "running" ? "Executing" : mode === "blocked" ? "Error" : mode.charAt(0).toUpperCase() + mode.slice(1)}</span>
+    <span className="signal-caption mono" data-state={label}><i />{microphone.status === "live" ? "Mic live" : microphone.status === "requesting" ? "Mic permission…" : "Mic off"}<span className="signal-agent-state">{label}</span></span>
   </div>;
 }
 function NodeHeader({
@@ -645,255 +661,105 @@ function RunEvidence({
   );
 }
 
-const POS = {
-  price: { x: 40, y: 35, w: 330 },
-  vault: { x: 770, y: 35, w: 330 },
-  conditions: { x: 770, y: 350, w: 330 },
-  action: { x: 405, y: 485, w: 310 },
-  source: { x: 40, y: 345, w: 330 },
-};
-function Observatory({ state, signalMode }: { state: CanvasState; signalMode: SignalMode }) {
+function Instrument({ data }: NodeProps<InstrumentFlowNode>) {
+  const { kind, state, focused, object, run } = data;
+  return <div className={`flow-instrument ${focused ? "in-focus" : ""}`}>
+    {kind === "price" && object && <PriceNode object={object} focused={focused} />}
+    {kind === "vault" && object && <VaultNode object={object} focused={focused} />}
+    {kind === "source" && object && <SourceNode object={object} />}
+    {kind === "conditions" && <Conditions state={state} focused={state.focus.objectId} />}
+    {kind === "action" && <ActionNode focused={focused} />}
+    {kind === "run" && run && <RunEvidence run={run} previousPause={state.runs.find(r => r.status === "confirmed" && r.evidence?.transactionHash)} />}
+    {kind === "conditions" ? <>
+      <Handle type="target" position={Position.Left} id="threshold" style={{ top: 80 }} isConnectable={false} />
+      {state.workflow.maxAgeSeconds !== null && <Handle type="target" position={Position.Left} id="freshness" style={{ top: 150 }} isConnectable={false} />}
+      {state.workflow.skipPaused && <Handle type="target" position={Position.Top} id="unpaused" isConnectable={false} />}
+      <Handle type="source" position={Position.Left} id="out" style={{ top: "85%" }} isConnectable={false} />
+    </> : kind === "action" ? <>
+      <Handle type="target" position={Position.Right} id="in" isConnectable={false} />
+      <Handle type="source" position={Position.Top} id="report" isConnectable={false} />
+      <Handle type="source" position={Position.Left} id="evidence" isConnectable={false} />
+    </> : kind === "vault" ? <>
+      <Handle type="target" position={Position.Left} id="in" isConnectable={false} />
+      <Handle type="target" position={Position.Bottom} id="report-in" style={{ left: "20%" }} isConnectable={false} />
+      <Handle type="source" position={Position.Bottom} id="out" style={{ left: "70%" }} isConnectable={false} />
+    </> : <>
+      <Handle type="target" position={kind === "run" ? Position.Right : Position.Left} id="in" isConnectable={false} />
+      <Handle type="source" position={Position.Right} id="out" isConnectable={false} />
+    </>}
+  </div>;
+}
+const NODE_TYPES = { instrument: Instrument };
+const FLOW_FIT = { padding: .1, maxZoom: 1, duration: 450 };
+function FlowCanvas({ state, signalMode, microphone }: { state: CanvasState; signalMode: SignalMode; microphone: MicrophoneSnapshot }) {
+  const graph = useMemo(() => canvasFlow(state), [state]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<InstrumentFlowNode>(graph.nodes);
+  const flow = useReactFlow<InstrumentFlowNode>();
+  const initialized = useNodesInitialized();
   const wrap = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [height, setHeight] = useState(740);
+  const [zoom, setZoom] = useState(1);
+  const lastView = useRef("");
+  const lastSession = useRef(state.sessionId);
+  const currentState = useRef(state);
+  currentState.current = state;
   useEffect(() => {
-    const observer = new ResizeObserver((entries) => {
-      const r = entries[0].contentRect;
-      setScale(Math.min((r.width - 32) / 1140, (r.height - 44) / 740));
-      setHeight(r.height);
-    });
-    observer.observe(wrap.current!);
-    return () => observer.disconnect();
-  }, []);
-  const objects = state.objects.filter((o) => o.visible);
-  const prices = objects.filter((o) => o.kind === "price").sort((a, b) =>
-    Number(b.id === "price:eth-usd") - Number(a.id === "price:eth-usd"));
-  const price = prices.find(o => o.id === "price:eth-usd") || prices[0];
-  const vault = objects.find((o) => o.kind === "vault");
-  const source = objects.find(o => o.kind === "source" &&
-    (o.id === state.focus.objectId || o.data.priceObjectId === state.focus.objectId))
-    || objects.filter(o => o.kind === "source" && o.pinned).at(-1)
-    || objects.find(o => o.kind === "source");
-  const focus = state.focus.objectId;
-  const composed = state.workflow.created;
-  const run =
-    state.runs.find(
-      (r) =>
-        r.id ===
-        (state as CanvasState & { inspectedRunId?: string }).inspectedRunId,
-    ) || state.runs[0];
-  const empty = !price && !vault;
-  useEffect(() => {
-    if (window.innerWidth <= 1000 && focus && wrap.current) {
-      const el = wrap.current.querySelector<HTMLElement>(
-        `[data-object-id="${focus}"]`,
-      );
-      if (el)
-        wrap.current.scrollTo({
-          top:
-            wrap.current.scrollTop +
-            el.getBoundingClientRect().top -
-            wrap.current.getBoundingClientRect().top -
-            (wrap.current.querySelector<HTMLElement>(".canvas-meta")
-              ?.offsetHeight || 0) -
-            16,
-          behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
-            .matches
-            ? "instant"
-            : "smooth",
-        });
+    if (lastSession.current !== state.sessionId) {
+      lastSession.current = state.sessionId; lastView.current = "";
+      flow.setViewport({ x: 0, y: 0, zoom: 1 });
     }
-  }, [focus]);
-  return (
-    <div
-      className={`observatory ${empty ? "is-empty" : ""} mode-${state.mode}`}
-      ref={wrap}
-      aria-label="Voice controlled workflow canvas"
-    >
-      <div className="canvas-meta">
-        <div className="canvas-coordinate top-left mono">
-          {empty ? "New session" : "Treasury"}
-        </div>
-        <div className="canvas-coordinate top-right mono">
-          {state.focus.label === "None" || !focus
-            ? "No object in focus"
-            : `Focused: ${state.focus.label}`}
-        </div>
-        {!empty && (
-          <div className="mobile-continuation mono">
-            Scroll for more ↓
-          </div>
-        )}
-        {source?.pinned && (
-          <div className="pinned-source">
-            <span className="mono">Pinned source</span>
-            <strong>{source.label}</strong>
-            <span className="mono">{source.data.token || "ETH / USD feed"}</span>
-          </div>
-        )}
-      </div>
-      <div className="canvas-signal"><LiveSignal mode={signalMode} sequence={state.seq} /></div>
-      <div className="canvas-cross a">+</div>
-      <div className="canvas-cross b">+</div>
-      <div className="canvas-cross c">+</div>
-      <div className="canvas-cross d">+</div>
-      {empty ? (
-        <div className="empty-scene">
-          <div className="empty-caption">
-            <p>Show me ETH’s price<br />and our grant vault.</p>
-            <span className="mono">/ Type a prompt · Space Run the demo</span>
-          </div>
-        </div>
-      ) : (
-        <div
-          className={`graph-stage ${focus && !focus.startsWith("workflow") && !focus.startsWith("run:") && focus !== "run" ? "has-focus" : ""}`}
-          style={
-            {
-              width: 1140,
-              height: 740,
-              "--graph-inverse": Math.min(1.85, 1 / scale),
-              transform: `translate(-50%, -50%) scale(${scale})`,
-              top: height / 2,
-            } as React.CSSProperties
-          }
-        >
-          <svg
-            className="graph-connections"
-            viewBox="0 0 1140 740"
-            aria-hidden="true"
-          >
-            <defs>
-              <marker
-                id="edgeArrow"
-                markerWidth="6"
-                markerHeight="6"
-                refX="5"
-                refY="3"
-                orient="auto"
-              >
-                <path
-                  d="M0 0 5 3 0 6"
-                  fill="none"
-                  stroke="var(--bab-line-lit)"
-                />
-              </marker>
-            </defs>
-            {composed ? (
-              <>
-                <path d="M370 148H398Q414 148 414 164V270Q414 286 430 286H738Q754 286 754 302V392Q754 408 770 408" className="edge flow" />
-                <path d="M935 292V350" className="edge flow" markerEnd="url(#edgeArrow)" />
-                <path d="M770 540H715" className="edge flow" markerEnd="url(#edgeArrow)" />
-                <text x="432" y="276" className="edge-label">OBSERVE</text>
-                <text x="946" y="328" className="edge-label">READ</text>
-                <text x="717" y="525" className="edge-label">REPORT</text>
-              </>
-            ) : (
-              <>
-                <path d="M370 148H770" className="edge" strokeDasharray="3 5" />
-                <text x="503" y="135" className="edge-label">
-                  TREASURY CONTEXT
-                </text>
-                {source && <path d="M205 345V292" className="edge flow" />}
-              </>
-            )}
-          </svg>
-          {prices.length > 0 && (
-            <div className={`market-observations ${prices.length > 1 ? "multiple-markets" : ""}`}
-              style={{ left: POS.price.x, top: POS.price.y, width: prices.length > 1 ? 700 : POS.price.w,
-                maxHeight: prices.length > 1 ? (composed || source ? 300 : 660) : undefined }}>
-              {prices.map(object => (
-                <div key={object.id} className={`node-position price-position ${focus === object.id ? "in-focus" : ""}`}>
-                  <PriceNode object={object} focused={focus === object.id} />
-                </div>
-              ))}
-            </div>
-          )}
-          {vault && (
-            <div
-              className={`node-position vault-position ${focus === vault.id ? "in-focus" : ""}`}
-              style={{
-                left: POS.vault.x,
-                top: POS.vault.y,
-                width: POS.vault.w,
-              }}
-            >
-              <VaultNode object={vault} focused={focus === vault.id} />
-            </div>
-          )}
-          {composed && (
-            <>
-              <div
-                className={`node-position condition-position ${focus?.startsWith("condition:") ? "in-focus" : ""}`}
-                style={{
-                  left: POS.conditions.x,
-                  top: POS.conditions.y,
-                  width: POS.conditions.w,
-                }}
-              >
-                <Conditions state={state} focused={focus} />
-              </div>
-              <div
-                className={`node-position action-position ${focus === "action:pause" ? "in-focus" : ""}`}
-                style={{
-                  left: POS.action.x,
-                  top: POS.action.y,
-                  width: POS.action.w,
-                }}
-              >
-                <ActionNode focused={focus === "action:pause"} />
-              </div>
-            </>
-          )}
-          {source && (
-            <div
-              className={`node-position source-position ${focus === source.id ? "in-focus" : ""}`}
-              style={{
-                left: POS.source.x,
-                top: POS.source.y,
-                width: POS.source.w,
-              }}
-            >
-              <SourceNode object={source} />
-            </div>
-          )}
-          {run && (
-            <div className="run-position">
-              <RunEvidence
-                run={run}
-                previousPause={state.runs.find(
-                  (r) =>
-                    r.status === "confirmed" && r.evidence?.transactionHash,
-                )}
-              />
-            </div>
-          )}
-        </div>
-      )}
-      <div className="canvas-coordinate bottom-left mono">
-        {objects.length.toString().padStart(2, "0")} objects <span>·</span>{" "}
-        {state.edges.length.toString().padStart(2, "0")} connections
-      </div>
-      <div className="canvas-coordinate bottom-right mono">
-        {composed
-          ? `Draft v${state.workflow.revision.toString().padStart(2, "0")}`
-          : "No rule yet"}{" "}
-        <span className="coordinate-mark">⌜</span>
-      </div>
-      {state.clarification && (
-        <div className="clarification">
-          <span className="mono">One clarification</span>
-          <h3>{state.clarification.question}</h3>
-          <div>
-            {state.clarification.candidates.map((c) => (
-              <span key={c}>
-                {state.objects.find((o) => o.id === c)?.label || c}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    setNodes(previous => graph.nodes.map(node => ({ ...node, position: previous.find(p => p.id === node.id)?.position || node.position })));
+  }, [graph, setNodes, flow, state.sessionId]);
+  const fit = () => flow.fitView(FLOW_FIT);
+  const navigate = (action: string) => {
+    if (action === "fit") { void fit(); return; }
+    if (action === "zoom_in") { void flow.zoomIn({ duration: 250 }); return; }
+    if (action === "zoom_out") { void flow.zoomOut({ duration: 250 }); return; }
+    const viewport = flow.getViewport();
+    const delta = 160;
+    void flow.setViewport({ ...viewport, x: viewport.x + (action === "pan_left" ? delta : action === "pan_right" ? -delta : 0), y: viewport.y + (action === "pan_up" ? delta : action === "pan_down" ? -delta : 0) }, { duration: 250 });
+  };
+  useEffect(() => {
+    if (!initialized || !nodes.length) return;
+    const key = `${state.sessionId}:${state.canvasView?.sequence || 0}:${state.focus.objectId}:${nodes.map(node => node.id).join(",")}`;
+    if (lastView.current === key) return;
+    lastView.current = key;
+    const action = state.canvasView?.action || "fit";
+    if (action !== "focus") { navigate(action); return; }
+    const id = state.focus.objectId?.startsWith("condition:") ? "conditions:and" : state.focus.objectId;
+    const node = id ? flow.getNode(id) : null;
+    if (!node || state.focus.objectId?.startsWith("workflow")) { void fit(); return; }
+    const w = wrap.current?.clientWidth || 1000;
+    const scale = Math.min(1.1, Math.max(.65, w / 1100));
+    const width = node.measured?.width || Number(node.style?.width) || 330;
+    const height = node.measured?.height || 240;
+    void flow.setCenter(node.position.x + width / 2, node.position.y + height / 2, { zoom: scale, duration: 500 });
+  }, [initialized, state.canvasView?.sequence, state.sessionId, state.focus.objectId, nodes.length]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.target as HTMLElement)?.closest("input, textarea, .inspector") || event.metaKey || event.ctrlKey) return;
+      const action: Record<string, string> = { "+": "zoom_in", "=": "zoom_in", "-": "zoom_out", "0": "fit", ArrowLeft: "pan_left", ArrowRight: "pan_right", ArrowUp: "pan_up", ArrowDown: "pan_down" };
+      if (action[event.key]) { event.preventDefault(); navigate(action[event.key]); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [flow]);
+  const empty = !graph.nodes.length;
+  return <div className="observatory flow-canvas" ref={wrap} aria-label="Spatial workflow canvas" data-zoom={zoom.toFixed(3)}>
+    <ReactFlow nodes={nodes} edges={graph.edges} nodeTypes={NODE_TYPES} onNodesChange={onNodesChange} fitView fitViewOptions={FLOW_FIT}
+      minZoom={.2} maxZoom={2} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} nodesFocusable={false} edgesFocusable={false}
+      deleteKeyCode={null} panOnDrag panOnScroll zoomOnPinch zoomOnScroll={false} colorMode="dark" onMove={(_, viewport) => setZoom(viewport.zoom)}
+      defaultEdgeOptions={{ type: "smoothstep" }}>
+      <Background variant={BackgroundVariant.Dots} gap={28} size={1} color="var(--bab-line)" />
+      <Controls showInteractive={false} position="bottom-left" fitViewOptions={FLOW_FIT} />
+    </ReactFlow>
+    <div className="flow-metadata mono"><span>Treasury</span><span>{state.focus.objectId ? `Focused: ${state.focus.label}` : "No focus"}</span></div>
+    <span className="flow-zoom mono">{Math.round(zoom * 100)}% · + − zoom · 0 fit</span>
+    {empty && <div className="empty-caption"><p>Show me ETH’s price<br />and our grant vault.</p><span className="mono">/ Prompt · Space Demo</span></div>}
+    {state.clarification && <div className="clarification"><span className="mono">Clarify</span><h3>{state.clarification.question}</h3><div>{state.clarification.candidates.map(id => <span key={id}>{state.objects.find(o => o.id === id)?.label || id}</span>)}</div></div>}
+  </div>;
+}
+function Observatory(props: { state: CanvasState; signalMode: SignalMode; microphone: MicrophoneSnapshot }) {
+  return <ReactFlowProvider><FlowCanvas {...props} /></ReactFlowProvider>;
 }
 function PolicyStrip({ state }: { state: CanvasState }) {
   const w = state.workflow;
@@ -1056,6 +922,8 @@ function App() {
   const [error, setError] = useState("");
   const [rehearsal, setRehearsal] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const microphone = useMicrophone();
   const [speak, setSpeak] = useState(false);
   const [narrating, setNarrating] = useState(false);
   const narratedPrompt = useRef("");
@@ -1077,6 +945,18 @@ function App() {
     } finally {
       setBusy(false);
     }
+  };
+  const clearCanvas = async (restore = false) => {
+    if (!state || clearing) return;
+    setClearing(true); setError("");
+    try {
+      await api(restore ? "/api/canvas/restore" : "/api/canvas/clear", {
+        operationId: crypto.randomUUID(), expectedSessionId: state.sessionId,
+      });
+      setText(""); setConsoleOpen(false); setProofOpen(false);
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    } catch (e) { setError((e as Error).message); }
+    finally { setClearing(false); }
   };
   const start = async () => {
     setError("");
@@ -1115,8 +995,11 @@ function App() {
         setConsoleOpen(false);
         if ("speechSynthesis" in window) window.speechSynthesis.cancel();
         stop();
+        microphone.stop();
       }
       if (typing) return;
+      if (e.key.toLowerCase() === "m" && !e.ctrlKey && !e.metaKey) microphone.toggle();
+      if (e.key === "Backspace" && e.shiftKey && (e.metaKey || e.ctrlKey)) { e.preventDefault(); clearCanvas(); }
       if (e.code === "Space") {
         e.preventDefault();
         rehearsal?.running ? stop() : start();
@@ -1131,7 +1014,7 @@ function App() {
     };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, [rehearsal]);
+  }, [rehearsal, state?.sessionId, clearing, microphone.status]);
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
     if (!speak) {
@@ -1155,7 +1038,7 @@ function App() {
     ) {
       const narrationSummary =
         settledExecutionReply(state, state.activity.summary) ||
-        state.activity.summary;
+        displayReply(state.activity.summary);
       const responseKey = `${prompt?.id}:${narrationSummary}`;
       if (narratedResponse.current !== responseKey) {
         narratedResponse.current = responseKey;
@@ -1202,18 +1085,23 @@ function App() {
         <div className="app-brand"><BrandMark /><span>Sotto.</span></div>
         <div className="app-mode mono">{state.mode} <span>/</span> v{state.workflow.revision.toString().padStart(2, "0")}</div>
         <div className="appbar-actions">
+          <div className="header-signal"><LiveSignal mode={signalMode} microphone={microphone} /></div>
+          <button className={`mic-control ${microphone.status === "live" ? "on" : ""}`} onClick={microphone.toggle} aria-pressed={microphone.status === "live"} title="Microphone waveform · local audio only · M">
+            {microphone.status === "live" ? <Mic size={15} /> : <MicOff size={15} />}
+            <span>{microphone.status === "live" ? "Mic on" : microphone.status === "requesting" ? "Cancel mic" : "Mic"}</span>
+          </button>
+          {state.canUndoClear ? <button className="clear-control" onClick={() => clearCanvas(true)} disabled={clearing || busy || running} title="Restore the last cleared canvas"><RotateCcw size={14} /><span>Undo clear</span></button> : <button className="clear-control" onClick={() => clearCanvas()} disabled={clearing || busy || running || executingRun || !state.objects.length && !state.conversation.some(c => c.role === "user")} title="Clear canvas · contract state is unchanged"><Eraser size={14} /><span>Clear</span></button>}
           <span className="app-connection mono"><i className={connected ? "on" : ""} />{connected ? "Connected" : "Reconnecting"}</span>
           <button className="demo-control" onClick={running ? stop : start} disabled={!connected}>{running ? "Stop demo" : "Run demo"}<ArrowRight size={14} /></button>
         </div>
       </header>
       <main className={`workbench ${proofOpen ? "proof-open" : ""}`}>
-        <Observatory state={state} signalMode={signalMode} />
+        <Observatory state={state} signalMode={signalMode} microphone={microphone} />
         {proofOpen && <Inspector state={state} agentStatus={rehearsal} />}
         <section className="command-center" aria-label="Agent activity">
-          <div className="mobile-signal"><LiveSignal mode={signalMode} sequence={state.seq} /></div>
           <div className="command-transcript" aria-live="polite">
-            {current && <p key={current.id}>“{current.text}”</p>}
-            <div className="command-response"><InlineSummary text={error || (["working", "running"].includes(signalMode) ? "" : settledReply || response || "")} /></div>
+            {current && <p key={current.id}>{current.text}</p>}
+            <div className="command-response"><InlineSummary text={displayReply(error || microphone.error || (["working", "running"].includes(signalMode) ? "" : settledReply || response || ""))} /></div>
           </div>
           {running && <span className="cue-progress mono">Demo · prompt {rehearsal?.cueIndex ?? "—"}</span>}
         </section>
@@ -1224,6 +1112,7 @@ function App() {
         <div className="app-shortcuts">
           <span><kbd>/</kbd> Prompt</span>
           <span><kbd>SPACE</kbd> Demo</span>
+          <span><kbd>M</kbd> Mic</span>
           <span><kbd>I</kbd> Proof</span>
           <span><kbd>V</kbd> {speak ? "Audio on" : "Audio"}</span>
           <span><kbd>ESC</kbd> Stop</span>

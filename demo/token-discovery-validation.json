@@ -1,0 +1,829 @@
+{
+  "date": "2026-10-06",
+  "cause": "New MCP schema forwarded tokens to a stale ETH-only backend. Its old Zod schema stripped tokens; its engine defaulted to ETH and hardcoded a grant-vault summary.",
+  "before": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"ok\":true,\"summary\":\"ETH price and grant vault are now persistent objects. ETH is $2693.2.\"}"
+      }
+    ],
+    "structuredContent": {
+      "ok": true,
+      "summary": "ETH price and grant vault are now persistent objects. ETH is $2693.2.",
+      "state": {
+        "sessionId": "99e00c76-1f1c-40f8-809d-13c4225635f6",
+        "seq": 8,
+        "mode": "explore",
+        "focus": {
+          "objectId": null,
+          "label": "Nothing yet"
+        },
+        "previousFocus": [],
+        "references": [],
+        "canUndoClear": false,
+        "objects": [
+          {
+            "id": "price:eth-usd",
+            "kind": "price",
+            "label": "ETH / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 2693.2,
+              "unit": "USD",
+              "symbol": "ETH",
+              "tradeId": 847044272
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          },
+          {
+            "id": "source:coinbase",
+            "kind": "source",
+            "label": "Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": true,
+            "pinned": false
+          }
+        ],
+        "edges": [],
+        "workflow": {
+          "id": "workflow:treasury",
+          "revision": 0,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-06T06:22:53.181Z",
+          "reason": "Initial policy",
+          "summary": "No rule yet.",
+          "revisions": [],
+          "created": false
+        },
+        "runs": [],
+        "activity": {
+          "status": "idle"
+        },
+        "capabilities": {
+          "price": "Live Coinbase / Kraken exchange trades",
+          "vault": "Actual local contract · Anvil",
+          "execution": "Local EVM rehearsal · no CRE consensus",
+          "voice": "Planned utterances · actual desktop voice unverified",
+          "mcp": "Semantic tools · official MCP stdio transport"
+        }
+      }
+    },
+    "isError": false
+  },
+  "names": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"ok\":true,\"summary\":\"Discovered SOL / USD: $119.48 (Coinbase Exchange, observed 2026-10-06T06:28:32.723625Z); BTC / USD: $85249.95 (Coinbase Exchange, observed 2026-10-06T06:28:34.511232Z).\"}"
+      }
+    ],
+    "structuredContent": {
+      "ok": true,
+      "summary": "Discovered SOL / USD: $119.48 (Coinbase Exchange, observed 2026-10-06T06:28:32.723625Z); BTC / USD: $85249.95 (Coinbase Exchange, observed 2026-10-06T06:28:34.511232Z).",
+      "state": {
+        "sessionId": "99e00c76-1f1c-40f8-809d-13c4225635f6",
+        "seq": 9,
+        "mode": "explore",
+        "focus": {
+          "objectId": null,
+          "label": "Nothing yet"
+        },
+        "previousFocus": [],
+        "references": [],
+        "canUndoClear": false,
+        "objects": [
+          {
+            "id": "price:eth-usd",
+            "kind": "price",
+            "label": "ETH / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 2693.2,
+              "unit": "USD",
+              "symbol": "ETH",
+              "tradeId": 847044272
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          },
+          {
+            "id": "source:coinbase",
+            "kind": "source",
+            "label": "Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": true,
+            "pinned": false
+          },
+          {
+            "id": "source:price:sol-usd",
+            "kind": "source",
+            "label": "SOL · Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "token": "coinbase:SOL-USD",
+              "priceObjectId": "price:sol-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:28:32.723625Z",
+              "fetchedAt": "2026-10-06T06:28:37.667Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": false,
+            "pinned": false
+          },
+          {
+            "id": "price:sol-usd",
+            "kind": "price",
+            "label": "SOL / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 119.48,
+              "unit": "USD",
+              "symbol": "SOL",
+              "name": "Solana",
+              "token": "coinbase:SOL-USD",
+              "productId": "SOL-USD",
+              "tradeId": 356812073,
+              "sourceObjectId": "source:price:sol-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:28:32.723625Z",
+              "fetchedAt": "2026-10-06T06:28:37.667Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          },
+          {
+            "id": "source:price:btc-usd",
+            "kind": "source",
+            "label": "BTC · Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "token": "coinbase:BTC-USD",
+              "priceObjectId": "price:btc-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:28:34.511232Z",
+              "fetchedAt": "2026-10-06T06:28:37.667Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": false,
+            "pinned": false
+          },
+          {
+            "id": "price:btc-usd",
+            "kind": "price",
+            "label": "BTC / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 85249.95,
+              "unit": "USD",
+              "symbol": "BTC",
+              "name": "Bitcoin",
+              "token": "coinbase:BTC-USD",
+              "productId": "BTC-USD",
+              "tradeId": 1102869357,
+              "sourceObjectId": "source:price:btc-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:28:34.511232Z",
+              "fetchedAt": "2026-10-06T06:28:37.667Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          }
+        ],
+        "edges": [],
+        "workflow": {
+          "id": "workflow:treasury",
+          "revision": 0,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-06T06:22:53.181Z",
+          "reason": "Initial policy",
+          "summary": "No rule yet.",
+          "revisions": [],
+          "created": false
+        },
+        "runs": [],
+        "activity": {
+          "status": "idle"
+        },
+        "capabilities": {
+          "price": "Live Coinbase / Kraken exchange trades",
+          "vault": "Actual local contract · Anvil",
+          "execution": "Local EVM rehearsal · no CRE consensus",
+          "voice": "Planned utterances · actual desktop voice unverified",
+          "mcp": "Semantic tools · official MCP stdio transport"
+        }
+      }
+    },
+    "isError": false
+  },
+  "symbols": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"ok\":true,\"summary\":\"Discovered SOL / USD: $119.43 (Coinbase Exchange, observed 2026-10-06T06:29:46.425555Z); BTC / USD: $85218.78 (Coinbase Exchange, observed 2026-10-06T06:29:46.419123Z).\"}"
+      }
+    ],
+    "structuredContent": {
+      "ok": true,
+      "summary": "Discovered SOL / USD: $119.43 (Coinbase Exchange, observed 2026-10-06T06:29:46.425555Z); BTC / USD: $85218.78 (Coinbase Exchange, observed 2026-10-06T06:29:46.419123Z).",
+      "state": {
+        "sessionId": "99e00c76-1f1c-40f8-809d-13c4225635f6",
+        "seq": 10,
+        "mode": "explore",
+        "focus": {
+          "objectId": null,
+          "label": "Nothing yet"
+        },
+        "previousFocus": [],
+        "references": [],
+        "canUndoClear": false,
+        "objects": [
+          {
+            "id": "price:eth-usd",
+            "kind": "price",
+            "label": "ETH / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 2693.2,
+              "unit": "USD",
+              "symbol": "ETH",
+              "tradeId": 847044272
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          },
+          {
+            "id": "source:coinbase",
+            "kind": "source",
+            "label": "Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": true,
+            "pinned": false
+          },
+          {
+            "id": "source:price:sol-usd",
+            "kind": "source",
+            "label": "SOL · Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "token": "coinbase:SOL-USD",
+              "priceObjectId": "price:sol-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.425555Z",
+              "fetchedAt": "2026-10-06T06:29:46.897Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": false,
+            "pinned": false
+          },
+          {
+            "id": "price:sol-usd",
+            "kind": "price",
+            "label": "SOL / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 119.43,
+              "unit": "USD",
+              "symbol": "SOL",
+              "name": "Solana",
+              "token": "coinbase:SOL-USD",
+              "productId": "SOL-USD",
+              "tradeId": 356812098,
+              "sourceObjectId": "source:price:sol-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.425555Z",
+              "fetchedAt": "2026-10-06T06:29:46.897Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          },
+          {
+            "id": "source:price:btc-usd",
+            "kind": "source",
+            "label": "BTC · Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "token": "coinbase:BTC-USD",
+              "priceObjectId": "price:btc-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.419123Z",
+              "fetchedAt": "2026-10-06T06:29:46.888Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": false,
+            "pinned": false
+          },
+          {
+            "id": "price:btc-usd",
+            "kind": "price",
+            "label": "BTC / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 85218.78,
+              "unit": "USD",
+              "symbol": "BTC",
+              "name": "Bitcoin",
+              "token": "coinbase:BTC-USD",
+              "productId": "BTC-USD",
+              "tradeId": 1102869535,
+              "sourceObjectId": "source:price:btc-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.419123Z",
+              "fetchedAt": "2026-10-06T06:29:46.888Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          }
+        ],
+        "edges": [],
+        "workflow": {
+          "id": "workflow:treasury",
+          "revision": 0,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-06T06:22:53.181Z",
+          "reason": "Initial policy",
+          "summary": "No rule yet.",
+          "revisions": [],
+          "created": false
+        },
+        "runs": [],
+        "activity": {
+          "status": "idle"
+        },
+        "capabilities": {
+          "price": "Live Coinbase / Kraken exchange trades",
+          "vault": "Actual local contract · Anvil",
+          "execution": "Local EVM rehearsal · no CRE consensus",
+          "voice": "Planned utterances · actual desktop voice unverified",
+          "mcp": "Semantic tools · official MCP stdio transport"
+        }
+      }
+    },
+    "isError": false
+  },
+  "qualifiedIds": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"ok\":true,\"summary\":\"Discovered SOL / USD: $119.43 (Coinbase Exchange, observed 2026-10-06T06:29:46.425555Z); BTC / USD: $85218.78 (Coinbase Exchange, observed 2026-10-06T06:29:46.419123Z).\"}"
+      }
+    ],
+    "structuredContent": {
+      "ok": true,
+      "summary": "Discovered SOL / USD: $119.43 (Coinbase Exchange, observed 2026-10-06T06:29:46.425555Z); BTC / USD: $85218.78 (Coinbase Exchange, observed 2026-10-06T06:29:46.419123Z).",
+      "state": {
+        "sessionId": "99e00c76-1f1c-40f8-809d-13c4225635f6",
+        "seq": 11,
+        "mode": "explore",
+        "focus": {
+          "objectId": null,
+          "label": "Nothing yet"
+        },
+        "previousFocus": [],
+        "references": [],
+        "canUndoClear": false,
+        "objects": [
+          {
+            "id": "price:eth-usd",
+            "kind": "price",
+            "label": "ETH / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 2693.2,
+              "unit": "USD",
+              "symbol": "ETH",
+              "tradeId": 847044272
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          },
+          {
+            "id": "source:coinbase",
+            "kind": "source",
+            "label": "Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": true,
+            "pinned": false
+          },
+          {
+            "id": "source:price:sol-usd",
+            "kind": "source",
+            "label": "SOL · Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "token": "coinbase:SOL-USD",
+              "priceObjectId": "price:sol-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.425555Z",
+              "fetchedAt": "2026-10-06T06:29:46.941Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": false,
+            "pinned": false
+          },
+          {
+            "id": "price:sol-usd",
+            "kind": "price",
+            "label": "SOL / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 119.43,
+              "unit": "USD",
+              "symbol": "SOL",
+              "name": "Solana",
+              "token": "coinbase:SOL-USD",
+              "productId": "SOL-USD",
+              "tradeId": 356812098,
+              "sourceObjectId": "source:price:sol-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.425555Z",
+              "fetchedAt": "2026-10-06T06:29:46.941Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          },
+          {
+            "id": "source:price:btc-usd",
+            "kind": "source",
+            "label": "BTC · Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "token": "coinbase:BTC-USD",
+              "priceObjectId": "price:btc-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.419123Z",
+              "fetchedAt": "2026-10-06T06:29:46.943Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": false,
+            "pinned": false
+          },
+          {
+            "id": "price:btc-usd",
+            "kind": "price",
+            "label": "BTC / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 85218.78,
+              "unit": "USD",
+              "symbol": "BTC",
+              "name": "Bitcoin",
+              "token": "coinbase:BTC-USD",
+              "productId": "BTC-USD",
+              "tradeId": 1102869535,
+              "sourceObjectId": "source:price:btc-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.419123Z",
+              "fetchedAt": "2026-10-06T06:29:46.943Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          }
+        ],
+        "edges": [],
+        "workflow": {
+          "id": "workflow:treasury",
+          "revision": 0,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-06T06:22:53.181Z",
+          "reason": "Initial policy",
+          "summary": "No rule yet.",
+          "revisions": [],
+          "created": false
+        },
+        "runs": [],
+        "activity": {
+          "status": "idle"
+        },
+        "capabilities": {
+          "price": "Live Coinbase / Kraken exchange trades",
+          "vault": "Actual local contract · Anvil",
+          "execution": "Local EVM rehearsal · no CRE consensus",
+          "voice": "Planned utterances · actual desktop voice unverified",
+          "mcp": "Semantic tools · official MCP stdio transport"
+        }
+      }
+    },
+    "isError": false
+  },
+  "unsupported": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"ok\":false,\"summary\":\"Error: Unsupported token \\\"definitely-not-a-token\\\": no exact Coinbase USD market. Use the full asset name, symbol, or coinbase:SYMBOL-USD; contract addresses are not supported.\",\"error\":\"Error: Unsupported token \\\"definitely-not-a-token\\\": no exact Coinbase USD market. Use the full asset name, symbol, or coinbase:SYMBOL-USD; contract addresses are not supported.\",\"code\":\"TOOL_ERROR\"}"
+      }
+    ],
+    "structuredContent": {
+      "ok": false,
+      "summary": "Error: Unsupported token \"definitely-not-a-token\": no exact Coinbase USD market. Use the full asset name, symbol, or coinbase:SYMBOL-USD; contract addresses are not supported.",
+      "error": "Error: Unsupported token \"definitely-not-a-token\": no exact Coinbase USD market. Use the full asset name, symbol, or coinbase:SYMBOL-USD; contract addresses are not supported.",
+      "code": "TOOL_ERROR",
+      "state": {
+        "sessionId": "99e00c76-1f1c-40f8-809d-13c4225635f6",
+        "seq": 12,
+        "mode": "explore",
+        "focus": {
+          "objectId": null,
+          "label": "Nothing yet"
+        },
+        "previousFocus": [],
+        "references": [],
+        "canUndoClear": false,
+        "objects": [
+          {
+            "id": "price:eth-usd",
+            "kind": "price",
+            "label": "ETH / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 2693.2,
+              "unit": "USD",
+              "symbol": "ETH",
+              "tradeId": 847044272
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          },
+          {
+            "id": "source:coinbase",
+            "kind": "source",
+            "label": "Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:27:11.864954Z",
+              "fetchedAt": "2026-10-06T06:27:15.590Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": true,
+            "pinned": false
+          },
+          {
+            "id": "source:price:sol-usd",
+            "kind": "source",
+            "label": "SOL · Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "token": "coinbase:SOL-USD",
+              "priceObjectId": "price:sol-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.425555Z",
+              "fetchedAt": "2026-10-06T06:29:46.941Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": false,
+            "pinned": false
+          },
+          {
+            "id": "price:sol-usd",
+            "kind": "price",
+            "label": "SOL / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 119.43,
+              "unit": "USD",
+              "symbol": "SOL",
+              "name": "Solana",
+              "token": "coinbase:SOL-USD",
+              "productId": "SOL-USD",
+              "tradeId": 356812098,
+              "sourceObjectId": "source:price:sol-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.425555Z",
+              "fetchedAt": "2026-10-06T06:29:46.941Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          },
+          {
+            "id": "source:price:btc-usd",
+            "kind": "source",
+            "label": "BTC · Coinbase Exchange",
+            "data": {
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "token": "coinbase:BTC-USD",
+              "priceObjectId": "price:btc-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.419123Z",
+              "fetchedAt": "2026-10-06T06:29:46.943Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            },
+            "visible": false,
+            "pinned": false
+          },
+          {
+            "id": "price:btc-usd",
+            "kind": "price",
+            "label": "BTC / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 85218.78,
+              "unit": "USD",
+              "symbol": "BTC",
+              "name": "Bitcoin",
+              "token": "coinbase:BTC-USD",
+              "productId": "BTC-USD",
+              "tradeId": 1102869535,
+              "sourceObjectId": "source:price:btc-usd"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+              "observedAt": "2026-10-06T06:29:46.419123Z",
+              "fetchedAt": "2026-10-06T06:29:46.943Z",
+              "kind": "live",
+              "label": "Live exchange trade · source timestamp"
+            }
+          }
+        ],
+        "edges": [],
+        "workflow": {
+          "id": "workflow:treasury",
+          "revision": 0,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-06T06:22:53.181Z",
+          "reason": "Initial policy",
+          "summary": "No rule yet.",
+          "revisions": [],
+          "created": false
+        },
+        "runs": [],
+        "activity": {
+          "status": "error"
+        },
+        "capabilities": {
+          "price": "Live Coinbase / Kraken exchange trades",
+          "vault": "Actual local contract · Anvil",
+          "execution": "Local EVM rehearsal · no CRE consensus",
+          "voice": "Planned utterances · actual desktop voice unverified",
+          "mcp": "Semantic tools · official MCP stdio transport"
+        }
+      }
+    },
+    "isError": true
+  },
+  "validation": {
+    "tests": 50,
+    "failed": 0,
+    "typescript": "passed",
+    "productionBuild": "passed",
+    "ethPreserved": true,
+    "sessionPreserved": true,
+    "workflowPreserved": true,
+    "treasuryActionsExecuted": 0,
+    "canvasReset": false,
+    "policyAsset": "ETH/USD",
+    "mic": "Moved from center overlay to bottom conversation area; waveform hidden while off; desktop and mobile checked via headless Playwriter."
+  }
+}

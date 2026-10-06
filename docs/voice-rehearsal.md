@@ -10,7 +10,7 @@ Start `bun run dev`, then open `http://127.0.0.1:5173`. In a second terminal run
 bun run rehearse --auto --reset
 ```
 
-Each cue from `demo/script.json` goes through `codex exec --json`, the official MCP SDK's stdio transport, and semantic tools. No natural-language parser selects the action in this path. The CLI account must already be signed in (`codex login`); the bridge uses standard CLI authentication without reading or copying account files. Existing user configuration is ignored. It does not select a new model. Shell execution, app connectors, and search are disabled for rehearsal agents. The model receives a bounded conversation transcript plus fresh authoritative MCP context each turn.
+Each cue from `demo/script.json` goes through `codex exec --json`, the official MCP SDK's stdio transport, and semantic tools. No natural-language parser selects the action in this path. The CLI account must already be signed in (`codex login`); the bridge uses standard CLI authentication without reading or copying account files. Existing user configuration is ignored. It does not select a new model. Shell diagnostics and live web search are allowed; app connectors are disabled, and the operator instructions prohibit application edits, delegation, and other integrations. The model receives a bounded conversation transcript plus fresh authoritative MCP context each turn.
 
 The script's `atSeconds` values are minimum offsets from rehearsal start. Turns are serialized, with six seconds between completed turns by default; late turns defer subsequent cues instead of dropping them. Execution runs can continue asynchronously. The special draft revision cue follows the run-return turn without the six-second gap. Depending on actual tool/model timing, the chain transaction may already have completed before that next turn. This is a draft revision test, not proof of audio barge-in during a transaction.
 
@@ -53,7 +53,9 @@ Inspect `GET /api/rehearsal/status` for progress and completed turns. `POST /api
 
 ## Prepare an actual desktop voice test
 
-`.codex/config.toml` registers only this project's `sotto` MCP server. Open this project in the desktop app and verify `sotto` is connected in MCP settings. If project configuration is not loaded, the equivalent local connection is:
+Open `operator/` as the primary folder of a Codex project and start a new chat there. `operator/AGENTS.md` defines the Sotto operator role; `operator/.codex/config.toml` loads it as the model instructions, permits shell diagnostics and live web search, disables app connectors, and attaches the Sotto MCP through `operator/mcp.ts`. The rehearsal starts its agents in the same folder and uses the same instructions. The parent project remains the development workspace. Existing chats do not switch roles automatically.
+
+Verify `sotto` is connected in MCP settings or `/mcp`. The backend and canvas must already be running. If project configuration is not loaded, the equivalent local connection is:
 
 ```sh
 codex mcp add sotto --env ORIGINS_BACKEND_URL=http://127.0.0.1:4318 -- bun run /Users/ayush/dev/token-origins/scripts/mcp.ts
