@@ -21,9 +21,10 @@ export const toolDefinitions = {
   },
   discover_objects: {
     description:
-      "Fetch real timestamped ETH/USD trades and grant vault state. Objects persist as workflow inputs. Vault provenance states actual chain or fixture.",
+      "Fetch real timestamped USD trades for specified tokens and grant vault state. tokens accepts exact asset names (Solana), symbols (SOL), or exchange-qualified IDs (coinbase:SOL-USD). Coverage is online Coinbase USD markets; ambiguous or unsupported assets fail honestly. Omitted tokens defaults to ETH. Multiple tokens create separate objects. The grant-vault policy remains explicitly ETH/USD. Objects persist as workflow inputs. Vault provenance states actual chain or fixture.",
     schema: z.object({
       objects: z.array(z.enum(["price", "vault"])).default(["price", "vault"]),
+      tokens: z.array(z.string().trim().min(1).max(120)).min(1).max(12).optional(),
       operationId: op,
     }),
   },
@@ -47,7 +48,7 @@ export const toolDefinitions = {
   },
   patch_workflow: {
     description:
-      "Compose or revise bounded policy using persistent price and vault inputs. thresholdAboveCurrent fetches real price then sets threshold 5% above it. Never edits running versions. Execution always retains a freshness cap and an already-paused no-op guard, even after removing their optional graph nodes; disclose this when relevant.",
+      "Compose or revise the ETH/USD grant-vault policy using persistent ETH price and vault inputs. Other discovered token prices are independent observations, not this policy’s trigger. thresholdAboveCurrent fetches real price then sets threshold 5% above it. Never edits running versions. Execution always retains a freshness cap and an already-paused no-op guard, even after removing their optional graph nodes; disclose this when relevant.",
     schema: z.object({
       expectedRevision: revision,
       patch: z.object({

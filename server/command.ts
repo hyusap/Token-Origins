@@ -3,7 +3,7 @@ import { Engine } from "./engine";
 export async function command(
   engine: Engine,
   text: string,
-  operationId = crypto.randomUUID(),
+  operationId: string = crypto.randomUUID(),
 ) {
   const caption = await engine.invoke("submit_utterance", {
     text,
@@ -16,11 +16,16 @@ export async function command(
   const expectedRevision = engine.state.workflow.revision;
   if (/reset|start over|clear canvas/.test(t))
     return engine.invoke("reset_session", args);
-  if (/show.*(eth|price).*(vault|treasury)|discover/.test(t))
+  if (/^(?:show|discover|fetch|get)\b/.test(t) && /price|discover/.test(t)) {
+    const named = t.match(/price(?:s)?\s+(?:of|for)\s+(.+?)(?:\s+and\s+(?:our |the )?(?:grant )?(?:vault|treasury)|[?.!]|$)/)
+      || t.match(/^(?:show|discover|fetch|get)\s+(?:me\s+)?(.+?)['’]?s?\s+price/);
+    const tokens = named?.[1]?.replace(/['’]s$/, "").split(/\s+and\s+|,/).map(x => x.trim()).filter(Boolean);
     return engine.invoke("discover_objects", {
-      objects: ["price", "vault"],
+      objects: /vault|treasury/.test(t) || !tokens?.length ? ["price", "vault"] : ["price"],
+      ...(tokens?.length ? { tokens } : {}),
       ...args,
     });
+  }
   if (/focus|back to|keep.*visible|follow/.test(t)) {
     let reference = /source/.test(t)
       ? "source"

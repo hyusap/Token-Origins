@@ -22,7 +22,7 @@ const money = (n: number | undefined) =>
     ? new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD",
-        maximumFractionDigits: 2,
+        maximumFractionDigits: n > 0 && n < 0.01 ? Math.min(20, Math.max(6, Math.ceil(-Math.log10(n)) + 2)) : 2,
       }).format(n)
     : "—";
 const short = (s?: string, size = 6) =>
@@ -256,10 +256,10 @@ function PriceChart({ object }: { object: GraphObject }) {
         viewBox="0 0 290 88"
         preserveAspectRatio="none"
         role="img"
-        aria-label="ETH price observations"
+        aria-label={`${object.label} price observations`}
       >
         <defs>
-          <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`priceFill-${object.id.replaceAll(":", "-")}`} x1="0" y1="0" x2="0" y2="1">
             <stop stopColor="white" stopOpacity=".12" />
             <stop offset="1" stopColor="white" stopOpacity="0" />
           </linearGradient>
@@ -270,7 +270,7 @@ function PriceChart({ object }: { object: GraphObject }) {
           strokeDasharray="2 5"
         />
         {points.length > 1 && (
-          <path d={`${path} L290 88 L0 88Z`} fill="url(#priceFill)" />
+          <path d={`${path} L290 88 L0 88Z`} fill={`url(#priceFill-${object.id.replaceAll(":", "-")})`} />
         )}
         <path
           d={path}
@@ -291,7 +291,7 @@ function PriceChart({ object }: { object: GraphObject }) {
         <span>
           {raw[0]?.observedAt && raw.at(-1)?.observedAt
             ? `${clock(raw[0].observedAt)}—${clock(raw.at(-1).observedAt)}`
-            : "ETH / USD"}
+            : object.label}
         </span>
       </div>
     </div>
@@ -316,7 +316,7 @@ function PriceNode({
       />
       <div className="node-body">
         <div className="asset-row">
-          <svg
+          {object.data.symbol === "ETH" || object.id === "price:eth-usd" ? <svg
             className="eth-icon"
             width="26"
             height="38"
@@ -332,10 +332,10 @@ function PriceNode({
               stroke="currentColor"
               opacity=".4"
             />
-          </svg>
+          </svg> : <span className="token-symbol mono">{object.data.symbol}</span>}
           <div>
-            <h3>Ethereum</h3>
-            <span className="mono sublabel">ETH / USD</span>
+            <h3>{object.data.name || (object.id === "price:eth-usd" ? "Ethereum" : object.data.symbol)}</h3>
+            <span className="mono sublabel">{object.label}</span>
           </div>
         </div>
         <div className="price-value">
@@ -541,7 +541,7 @@ function SourceNode({ object }: { object: GraphObject }) {
       <div className="node-body">
         <h3>{object.label}</h3>
         <p>
-          Timestamped ETH/USD observations.
+          Timestamped {object.data.token || "ETH/USD"} observations.
         </p>
         <span className="mono">{object.provenance.source}</span>
       </div>
@@ -666,9 +666,14 @@ function Observatory({ state, signalMode }: { state: CanvasState; signalMode: Si
     return () => observer.disconnect();
   }, []);
   const objects = state.objects.filter((o) => o.visible);
-  const price = objects.find((o) => o.kind === "price");
+  const prices = objects.filter((o) => o.kind === "price").sort((a, b) =>
+    Number(b.id === "price:eth-usd") - Number(a.id === "price:eth-usd"));
+  const price = prices.find(o => o.id === "price:eth-usd") || prices[0];
   const vault = objects.find((o) => o.kind === "vault");
-  const source = objects.find((o) => o.kind === "source");
+  const source = objects.find(o => o.kind === "source" &&
+    (o.id === state.focus.objectId || o.data.priceObjectId === state.focus.objectId))
+    || objects.filter(o => o.kind === "source" && o.pinned).at(-1)
+    || objects.find(o => o.kind === "source");
   const focus = state.focus.objectId;
   const composed = state.workflow.created;
   const run =
@@ -723,7 +728,7 @@ function Observatory({ state, signalMode }: { state: CanvasState; signalMode: Si
           <div className="pinned-source">
             <span className="mono">Pinned source</span>
             <strong>{source.label}</strong>
-            <span className="mono">ETH / USD feed</span>
+            <span className="mono">{source.data.token || "ETH / USD feed"}</span>
           </div>
         )}
       </div>
@@ -792,16 +797,15 @@ function Observatory({ state, signalMode }: { state: CanvasState; signalMode: Si
               </>
             )}
           </svg>
-          {price && (
-            <div
-              className={`node-position price-position ${focus === price.id ? "in-focus" : ""}`}
-              style={{
-                left: POS.price.x,
-                top: POS.price.y,
-                width: POS.price.w,
-              }}
-            >
-              <PriceNode object={price} focused={focus === price.id} />
+          {prices.length > 0 && (
+            <div className={`market-observations ${prices.length > 1 ? "multiple-markets" : ""}`}
+              style={{ left: POS.price.x, top: POS.price.y, width: prices.length > 1 ? 700 : POS.price.w,
+                maxHeight: prices.length > 1 ? (composed || source ? 300 : 660) : undefined }}>
+              {prices.map(object => (
+                <div key={object.id} className={`node-position price-position ${focus === object.id ? "in-focus" : ""}`}>
+                  <PriceNode object={object} focused={focus === object.id} />
+                </div>
+              ))}
             </div>
           )}
           {vault && (

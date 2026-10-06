@@ -93,3 +93,21 @@ The public frontend and backend bind only to localhost. Live broadcasts use an e
 Local chain persistence: new nodes started by `bun run dev` load/save `.data/anvil-state.json`, checkpoint every five seconds, and preserve block/transaction/history data. Stop the supervisor gracefully to allow its owned node to finish saving. An already-running node is reused; to checkpoint it without stopping or changing it, run `bun run scripts/snapshot-local.ts` after the rehearsal finishes. Keep `.data/` and `contracts/deployment.local.json` together when preserving a demo.
 
 `bun run scripts/verify-local-persistence.ts` selects a confirmed local pause transaction from the current API or saved rehearsal evidence, verifies restoration on a temporary node at port 8546, and stops only that node. An optional `ORIGINS_VERIFY_TX_HASH` accepts a public transaction hash. The check validates the correlated vault event, successful receipt, matching logs, transaction lookup, current balance/state, and paused state at the selected receipt block. Run a true policy version first on a fresh local chain. Dynamic evidence is saved in `demo/dynamic-persistence-verification.json`; the original process replacement proof remains in `demo/chain-persistence-report.json`. The live chain at 8545 is unchanged. See [Foundry state management](https://www.getfoundry.sh/anvil/state-management) for the snapshot mechanism.
+
+## Token price discovery
+
+`discover_objects` accepts `tokens`, for example:
+
+```json
+{"objects":["price","vault"],"tokens":["Ethereum","Solana","BTC"],"operationId":"discover-markets-1"}
+```
+
+Omitting `tokens` preserves ETH discovery. Exact names, symbols, and identifiers such as `coinbase:SOL-USD` resolve against Coinbase Exchange’s online USD market catalog (cached for five minutes). Each token retains its own canvas card, exchange product identity, source object, trade history, and source/fetch timestamps. Refreshing a token refreshes that market. Ambiguous names require a qualified identifier; unknown names, unsupported contract addresses, missing USD markets, and source failures produce errors rather than substitute prices. Market coverage is bounded by Coinbase listings, not every token on every chain. ETH retains its Kraken fallback. Small token prices retain meaningful decimal precision.
+
+The grant-vault policy and CRE runner remain explicitly **ETH/USD**. Additional discovered markets are observations; SOL cannot silently replace the ETH trigger. Discover ETH and the vault before composing that rule.
+
+The keyboard fallback recognizes “Show me Solana’s price” and “Show prices for ETH and SOL and our grant vault.” Voice/agent clients should use the structured `tokens` argument.
+
+To activate this change on an existing demo: integrate these changes into the checkout used by its backend and MCP launcher, rebuild with `bun run build`, restart only the backend with its existing `STATE_DB`, deployment, and execution environment, then reload/reconnect the Sotto MCP so its tool schema exposes `tokens` (and reconnect voice if that session caches the old tools). Keep Anvil running and preserve the existing canvas database. Code/schema changes cannot update a backend already running the old code; a safe restart window is required. Do not run the demo/rehearsal reset commands to activate pricing.
+
+For a separate preview, use `PORT=4319 STATE_DB=.data/token-preview.sqlite bun run server` in this worktree and point a separate MCP launcher at it with `ORIGINS_BACKEND_URL=http://127.0.0.1:4319 bun run mcp`. This creates a separate canvas; its vault defaults to an explicit fixture unless a deployment is configured. It does not replace the active demo.

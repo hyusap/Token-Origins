@@ -44,7 +44,7 @@ export function emptyState(): CanvasState {
     },
     latency: [],
     capabilities: {
-      price: "Live Coinbase / Kraken exchange trades",
+      price: "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
       vault: "Fixture until local contract is deployed",
       execution: "Local policy rehearsal · no blockchain evidence yet",
       voice: "Planned utterances · actual desktop voice unverified",
@@ -123,26 +123,31 @@ export class Engine {
         null
       );
     const aliases: Record<string, string> = {
-      price: "price:eth-usd",
       eth: "price:eth-usd",
       "eth price": "price:eth-usd",
       vault: "vault:grant",
       treasury: "vault:grant",
       "grant vault": "vault:grant",
-      source: "source:coinbase",
       threshold: "condition:threshold",
       freshness: "condition:freshness",
       action: "action:pause",
     };
+    if (ref === "source") {
+      const focused = this.state.objects.find(x => x.id === this.state.focus.objectId);
+      const source = focused?.kind === "price" ? this.state.objects.find(x => x.id === (focused.data.sourceObjectId || (focused.id === "price:eth-usd" ? "source:coinbase" : `source:${focused.id}`))) : null;
+      if (source) return source;
+    }
     const exact = this.state.objects.find(
       (x) =>
         x.id === reference ||
         x.label.toLowerCase() === ref ||
-        x.id === aliases[ref],
+        x.id === aliases[ref] ||
+        (x.kind === "price" && [x.data.symbol, x.data.name, x.data.token, `${x.data.symbol} price`].some(v => typeof v === "string" && v.toLowerCase() === ref)),
     );
     if (exact) return exact;
     const candidates = this.state.objects.filter(
-      (x) => x.label.toLowerCase().includes(ref) || x.kind === ref,
+      (x) => ["price", "source", "vault", "condition", "action"].includes(ref) ? x.kind === ref : x.label.toLowerCase().includes(ref) || x.kind === ref ||
+        (x.kind === "price" && [x.data.symbol, x.data.name, x.data.token, `${x.data.symbol} price`].some(v => typeof v === "string" && v.toLowerCase() === ref)),
     );
     if (candidates.length === 1) return candidates[0]!;
     if (candidates.length > 1)
@@ -161,6 +166,22 @@ export class Engine {
         pinned: this.state.objects[i]!.pinned,
         visible: true,
       };
+  }
+  observePrice(price: GraphObject) {
+    const sourceId = price.id === "price:eth-usd" ? "source:coinbase" : `source:${price.id}`;
+    price.data.sourceObjectId = sourceId;
+    const previousSource = this.state.objects.find(x => x.id === sourceId);
+    const wasVisible = previousSource?.visible || false;
+    this.object({
+      id: sourceId, kind: "source",
+      label: price.id === "price:eth-usd" ? price.provenance.source : `${price.data.symbol} · ${price.provenance.source}`,
+      data: { url: price.provenance.url, token: price.data.token, priceObjectId: price.id },
+      provenance: price.provenance, visible: false, pinned: false,
+    });
+    // Keep source visibility stable across observation refreshes.
+    const source = this.state.objects.find(x => x.id === sourceId)!;
+    source.visible = wasVisible || source.pinned || this.state.focus.objectId === sourceId;
+    this.object(price);
   }
   focus(objectId: string, label: string) {
     if (this.state.focus.objectId && this.state.focus.objectId !== objectId)
@@ -331,42 +352,29 @@ export class Engine {
           };
         case "discover_objects": {
           const requested = (args.objects || ["price", "vault"]) as string[];
+          const tokens: string[] = args.tokens || ["ETH"];
           const settled = await Promise.allSettled([
-            requested.includes("price")
-              ? this.sources.fetchPrice()
-              : Promise.resolve(null),
-            requested.includes("vault")
-              ? this.sources.fetchVault(this.fixturePaused)
-              : Promise.resolve(null),
+            ...(requested.includes("price") ? tokens.map(token => this.sources.fetchPrice(token)) : []),
+            ...(requested.includes("vault") ? [this.sources.fetchVault(this.fixturePaused)] : []),
           ]);
           const errors: string[] = [];
-          for (const r of settled)
-            if (r.status === "fulfilled" && r.value) this.object(r.value);
-            else if (r.status === "rejected") errors.push(String(r.reason));
-          if (
-            settled.every((r) => r.status !== "fulfilled" || r.value === null)
-          )
-            throw new Error(errors.join("; "));
-          const price = this.state.objects.find(
-            (x) => x.id === "price:eth-usd",
-          );
-          if (price)
-            this.object({
-              id: "source:coinbase",
-              kind: "source",
-              label: price.provenance.source,
-              data: { url: price.provenance.url },
-              provenance: price.provenance,
-              visible: false,
-              pinned: false,
-            });
+          const discovered: GraphObject[] = [];
+          for (const r of settled) {
+            if (r.status === "fulfilled") {
+              const object = r.value;
+              if (object.kind === "price") this.observePrice(object);
+              else this.object(object);
+              discovered.push(object);
+            } else errors.push(String(r.reason));
+          }
+          if (!discovered.length) throw new Error(errors.join("; ") || "No objects requested");
           this.state.mode = "explore";
           this.state.capabilities.vault =
             this.state.objects.find((x) => x.id === "vault:grant")?.provenance
               .label || this.state.capabilities.vault;
           summary = errors.length
             ? `Discovery partly succeeded. ${errors.join("; ")}`
-            : `ETH price and grant vault are now persistent objects. ${price ? `ETH is $${price.data.price}.` : ""}`;
+            : `Discovered ${discovered.map(x => x.kind === "price" ? `${x.label}: $${x.data.price} (${x.provenance.source}, observed ${x.provenance.observedAt})` : x.label).join("; ")}.`;
           break;
         }
         case "focus_object": {
@@ -483,11 +491,10 @@ export class Engine {
             args.refresh &&
             (object.kind === "price" || object.kind === "vault")
           )
-            this.object(
-              object.kind === "price"
-                ? await this.sources.fetchPrice()
-                : await this.sources.fetchVault(this.fixturePaused),
-            );
+            if (object.kind === "price") {
+              this.observePrice(await this.sources.fetchPrice(object.data.token || object.data.symbol ||
+                (object.id === "price:eth-usd" ? "ETH" : object.label.split(" / ")[0])));
+            } else this.object(await this.sources.fetchVault(this.fixturePaused));
           const current = this.state.objects.find((x) => x.id === object.id)!;
           summary =
             current.kind === "price"
@@ -537,11 +544,11 @@ export class Engine {
           if (typeof skip !== "boolean")
             throw new Error("skipPaused must be boolean");
           if (
-            !this.state.objects.some((x) => x.kind === "price") ||
+            !this.state.objects.some((x) => x.id === "price:eth-usd") ||
             !this.state.objects.some((x) => x.kind === "vault")
           )
             throw new Error(
-              "Discover price and vault before composing a policy",
+              "Discover ETH/USD price and vault before composing the ETH policy",
             );
           const revision: WorkflowRevision = {
             revision: current.revision + 1,

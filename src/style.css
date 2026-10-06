@@ -1580,3 +1580,13 @@ button {
   margin-top: 7px;
   color: var(--bab-text-mute);
 }
+
+/* Independent market cards retain their token identities and scroll when the canvas fills. */
+.market-observations { position: absolute; z-index: 2; }
+.market-observations > .node-position { position: relative; }
+.multiple-markets { display: grid; grid-template-columns: repeat(2, 330px); gap: 24px; overflow-y: auto; padding-bottom: 12px; }
+.token-symbol { font-size: 18px; min-width: 38px; }
+@media (max-width: 1000px) {
+  .market-observations { position: static !important; width: auto !important; max-height: none !important; }
+  .multiple-markets { display: grid; grid-template-columns: 1fr; overflow: visible; }
+}

@@ -3,11 +3,49 @@ import type { GraphObject } from "../shared/types";
 
 const iso = () => new Date().toISOString();
 const timeout = () => AbortSignal.timeout(8000);
-export async function fetchPrice(): Promise<GraphObject> {
+export interface TokenMarket { symbol: string; name: string; productId: string }
+// Exact matches only: never guess from fuzzy search or substitute another asset.
+export function resolveToken(token: string, markets: TokenMarket[]): TokenMarket {
+  const query = token.trim().toLowerCase();
+  const qualified = query.startsWith("coinbase:");
+  const key = qualified ? query.slice(9) : query;
+  const matches = markets.filter((m) =>
+    m.productId.toLowerCase() === key || m.symbol.toLowerCase() === key ||
+    (!qualified && m.name.toLowerCase() === key));
+  if (matches.length > 1)
+    throw new Error(`Ambiguous token "${token}". Specify ${matches.map(m => `coinbase:${m.productId}`).join(" or ")}`);
+  if (!matches.length)
+    throw new Error(`Unsupported token "${token}": no exact Coinbase USD market. Use the full asset name, symbol, or coinbase:SYMBOL-USD; contract addresses are not supported.`);
+  return matches[0]!;
+}
+let marketCache: { at: number; value: Promise<TokenMarket[]> } | undefined;
+async function tokenMarkets(): Promise<TokenMarket[]> {
+  if (marketCache && Date.now() - marketCache.at < 300_000) return marketCache.value;
+  const value = (async () => {
+    const responses = await Promise.all(["currencies", "products"].map(path =>
+      fetch(`https://api.exchange.coinbase.com/${path}`, { signal: timeout() })));
+    for (const response of responses) if (!response.ok)
+      throw new Error(`Coinbase market catalog returned ${response.status}`);
+    const [currencies, products] = await Promise.all(responses.map(r => r.json()));
+    if (!Array.isArray(currencies) || !Array.isArray(products)) throw new Error("Invalid Coinbase market catalog");
+    return products.filter(p => p.quote_currency === "USD" && p.status === "online" && !p.trading_disabled)
+      .map(p => ({ symbol: p.base_currency, productId: p.id,
+        name: currencies.find(c => c.id === p.base_currency)?.name || p.base_currency }));
+  })();
+  const entry = { at: Date.now(), value };
+  marketCache = entry;
+  try { return await value; } catch (error) { if (marketCache === entry) marketCache = undefined; throw error; }
+}
+export async function fetchPrice(token = "ETH"): Promise<GraphObject> {
+  const isEth = ["eth", "ethereum", "eth-usd", "coinbase:eth-usd", "coinbase:eth"].includes(token.trim().toLowerCase());
+  const market = isEth ? { symbol: "ETH", name: "Ethereum", productId: "ETH-USD" }
+    : resolveToken(token, await tokenMarkets());
+  const { symbol, name, productId } = market;
+
   let lastError: unknown;
   try {
     const url =
-      "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100";
+      `https://api.exchange.coinbase.com/products/${encodeURIComponent(productId)}/trades?limit=100`;
     const response = await fetch(url, {
       signal: timeout(),
       headers: { "User-Agent": "OriginsLedger/1.0" },
@@ -29,15 +67,18 @@ export async function fetchPrice(): Promise<GraphObject> {
     valid.sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
     const trade = valid[0]!;
     return {
-      id: "price:eth-usd",
+      id: `price:${productId.toLowerCase()}`,
       kind: "price",
-      label: "ETH / USD",
+      label: `${symbol} / USD`,
       visible: true,
       pinned: false,
       data: {
         price: Number(trade.price),
         unit: "USD",
-        symbol: "ETH",
+        symbol,
+        name,
+        token: `coinbase:${productId}`,
+        productId,
         tradeId: trade.trade_id,
         history: valid
           .reverse()
@@ -56,6 +97,7 @@ export async function fetchPrice(): Promise<GraphObject> {
   } catch (error) {
     lastError = error;
   }
+  if (!isEth) throw new Error(`Price unavailable for ${name} (${symbol}): ${String(lastError)}`);
   try {
     const url = "https://api.kraken.com/0/public/Trades?pair=ETHUSD&count=100";
     const response = await fetch(url, { signal: timeout() });
@@ -88,6 +130,9 @@ export async function fetchPrice(): Promise<GraphObject> {
         price: Number(latest[0]),
         unit: "USD",
         symbol: "ETH",
+        name: "Ethereum",
+        token: "coinbase:ETH-USD",
+        productId: "ETH-USD",
         history: valid.map((x) => ({
           price: Number(x[0]),
           observedAt: new Date(Number(x[2]) * 1000).toISOString(),
