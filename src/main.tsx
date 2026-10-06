@@ -12,7 +12,12 @@ import {
   X,
   CornerDownLeft,
 } from "lucide-react";
-import type { CanvasState, GraphObject, ExecutionRun } from "../shared/types";
+import type {
+  CanvasState,
+  GraphObject,
+  ExecutionRun,
+  PolicyGraph,
+} from "../shared/types";
 import "./brand.css";
 import "./style.css";
 import "./app-layout.css";
@@ -51,6 +56,10 @@ function settledExecutionReply(state: CanvasState, summary: string) {
     !/queued|preparing|no result yet/i.test(summary)
   )
     return null;
+  if (run.status === "confirmed" && run.evidence?.simulatedOrder) {
+    const order = run.evidence.simulatedOrder;
+    return `Execution v${run.revision.toString().padStart(2, "0")} placed a SIMULATED sell of ${order.amount} ${order.symbol} at a ${order.referenceSource} reference price. No transaction was sent and no asset moved.`;
+  }
   if (run.status === "confirmed")
     return `Execution v${run.revision.toString().padStart(2, "0")} confirmed at block ${run.evidence?.blockNumber}. The receiver event and fresh vault read verify spending is paused.`;
   if (run.status === "failed")
@@ -347,6 +356,73 @@ function PriceNode({
     </article>
   );
 }
+/** Feeds span $0.10 (MATIC) to $85k (BTC), so fixed precision would hide one end. */
+const feedMoney = (n: number) =>
+  Number.isFinite(n)
+    ? new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: n >= 100 ? 2 : n >= 1 ? 4 : 6,
+      }).format(n)
+    : "\u2014";
+
+/**
+ * Chainlink feeds publish on a deviation threshold or heartbeat, so every row
+ * carries the aggregator's own write age. A feed hours behind spot is normal
+ * and must read as such rather than as a live quote.
+ */
+function FeedNode({
+  objects,
+  focus,
+}: {
+  objects: GraphObject[];
+  focus: string | null;
+}) {
+  return (
+    <article className="graph-node feed-node">
+      <NodeHeader
+        index="05"
+        type="Chainlink Data Feeds"
+        extra={<span className="live-label">On-chain</span>}
+      />
+      <div className="node-body feed-list">
+        {objects.map((object) => {
+          const stale = Number(object.data.ageSeconds) > 3600;
+          return (
+            <div
+              key={object.id}
+              data-object-id={object.id}
+              className={`feed-row ${focus === object.id ? "focused" : ""}`}
+            >
+              <div className="feed-row-main">
+                <div className="feed-row-asset">
+                  <h4>{object.data.name}</h4>
+                  <span className="mono sublabel">{object.label}</span>
+                </div>
+                <strong className="feed-price">
+                  {feedMoney(Number(object.data.price))}
+                </strong>
+              </div>
+              <div className="feed-row-meta mono">
+                <span>round {String(object.data.roundId).slice(-8)}</span>
+                <span className={stale ? "feed-age is-stale" : "feed-age"}>
+                  {object.data.ageLabel}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="node-foot">
+        <span>
+          <i className="tiny-dot" />
+          Ethereum mainnet oracle
+        </span>
+        <span>Reference only</span>
+      </div>
+    </article>
+  );
+}
 function VaultNode({
   object,
   focused,
@@ -418,6 +494,133 @@ function VaultNode({
         </div>
       </div>
       <NodeFooter object={object} />
+    </article>
+  );
+}
+/**
+ * A composed graph's condition rows. Source naming is duplicated from
+ * cre/graph.ts rather than imported so the browser bundle stays free of the
+ * validation schema and its zod dependency.
+ */
+type GraphNodeLike = Record<string, any>;
+/** Mirrors isLegacyShape in cre/graph.ts, kept local to avoid bundling zod. */
+function isLegacyPolicy(graph: PolicyGraph | undefined): boolean {
+  if (!graph || graph.nodes.length !== 2) return true;
+  const nodes = graph.nodes as GraphNodeLike[];
+  const compare = nodes.find((n) => n.kind === "compare");
+  const price = nodes.find((n) => n.kind === "price");
+  return Boolean(
+    compare &&
+      price &&
+      compare.input === price.id &&
+      compare.op === "<" &&
+      graph.root === compare.id &&
+      price.source?.type === "exchange-trade",
+  );
+}
+function sourceLabel(node: GraphNodeLike | undefined): string {
+  const source = node?.source;
+  if (!source) return "input";
+  return source.type === "chainlink-feed"
+    ? `Chainlink ${source.symbol}/USD`
+    : `Coinbase ${source.pair}`;
+}
+function conditionRows(graph: PolicyGraph) {
+  const byId = new Map<string, GraphNodeLike>(
+    (graph.nodes as GraphNodeLike[]).map((n) => [n.id, n]),
+  );
+  const rows: {
+    nodeId: string;
+    symbol: string;
+    label: string;
+    value: string;
+  }[] = [];
+  for (const node of graph.nodes as GraphNodeLike[]) {
+    if (node.kind === "compare")
+      rows.push({
+        nodeId: node.id,
+        symbol: node.op,
+        label: sourceLabel(byId.get(node.input)),
+        value: money(Number(node.value)),
+      });
+    else if (node.kind === "freshness")
+      rows.push({
+        nodeId: node.id,
+        symbol: "~",
+        label: `${sourceLabel(byId.get(node.input))} freshness`,
+        value: `Within ${node.maxAgeSeconds}s`,
+      });
+    else if (node.kind === "vault-paused")
+      rows.push({
+        nodeId: node.id,
+        symbol: "=",
+        label: "Vault state",
+        value: node.equals ? "Paused" : "Active",
+      });
+  }
+  const root = byId.get(graph.root);
+  const connective =
+    root?.kind === "or" ? "OR" : root?.kind === "not" ? "NOT" : "AND";
+  return { rows, connective };
+}
+function ComposedConditions({
+  state,
+  focused,
+}: {
+  state: CanvasState;
+  focused: string | null;
+}) {
+  const w = state.workflow;
+  const latest = state.runs[0];
+  const { rows, connective } = conditionRows(w.graph);
+  const current = latest?.revision === w.revision ? latest : undefined;
+  const verdict = (nodeId: string) =>
+    current?.decisions.find((d) => d.nodeId === nodeId);
+  return (
+    <article
+      className={`graph-node condition-node ${focused?.startsWith("condition:") ? "focused" : ""}`}
+    >
+      <NodeHeader
+        index="03"
+        type="Composed policy"
+        extra={<span className="mono">{connective}</span>}
+      />
+      <div className="conditions">
+        {rows.map((row, index) => {
+          const result = verdict(row.nodeId);
+          return (
+            <div
+              key={row.nodeId}
+              className={`condition-row ${focused === `condition:${row.nodeId}` ? "condition-focus" : ""}`}
+              data-object-id={`condition:${row.nodeId}`}
+            >
+              <span className="condition-symbol">{row.symbol}</span>
+              <div>
+                <span>{row.label}</span>
+                <strong>{row.value}</strong>
+              </div>
+              <span className="condition-state">
+                {result ? (
+                  result.passed ? (
+                    <Check size={14} />
+                  ) : (
+                    <span>—</span>
+                  )
+                ) : (
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="condition-bottom mono">
+        {rows.length} predicate{rows.length === 1 ? "" : "s"} · combined with{" "}
+        {connective}
+        <span className="receiver-guards">
+          Fresh data and active spending still gate execution.
+        </span>
+      </div>
     </article>
   );
 }
@@ -617,6 +820,19 @@ function RunEvidence({
         ))}
         {!run.decisions.length && <p>Fetching fresh execution inputs.</p>}
       </div>
+      {run.evidence?.simulatedOrder && (
+        <div className="receipt simulated-receipt">
+          <span className="mono">
+            SIMULATED · {run.evidence.simulatedOrder.venue}
+          </span>
+          <span>
+            Sell {run.evidence.simulatedOrder.amount}{" "}
+            {run.evidence.simulatedOrder.symbol} @{" "}
+            {money(run.evidence.simulatedOrder.referencePriceUsd)} ref · no
+            transaction, no asset moved
+          </span>
+        </div>
+      )}
       {run.evidence?.transactionHash && (
         <div className="receipt">
           <span className="mono">{short(run.evidence.transactionHash, 9)}</span>
@@ -651,6 +867,7 @@ const POS = {
   conditions: { x: 770, y: 350, w: 330 },
   action: { x: 405, y: 485, w: 310 },
   source: { x: 40, y: 345, w: 330 },
+  feeds: { x: 405, y: 35, w: 310 },
 };
 function Observatory({ state, signalMode }: { state: CanvasState; signalMode: SignalMode }) {
   const wrap = useRef<HTMLDivElement>(null);
@@ -669,6 +886,7 @@ function Observatory({ state, signalMode }: { state: CanvasState; signalMode: Si
   const price = objects.find((o) => o.kind === "price");
   const vault = objects.find((o) => o.kind === "vault");
   const source = objects.find((o) => o.kind === "source");
+  const feeds = objects.filter((o) => o.kind === "feed");
   const focus = state.focus.objectId;
   const composed = state.workflow.created;
   const run =
@@ -677,7 +895,7 @@ function Observatory({ state, signalMode }: { state: CanvasState; signalMode: Si
         r.id ===
         (state as CanvasState & { inspectedRunId?: string }).inspectedRunId,
     ) || state.runs[0];
-  const empty = !price && !vault;
+  const empty = !price && !vault && !feeds.length;
   useEffect(() => {
     if (window.innerWidth <= 1000 && focus && wrap.current) {
       const el = wrap.current.querySelector<HTMLElement>(
@@ -804,6 +1022,18 @@ function Observatory({ state, signalMode }: { state: CanvasState; signalMode: Si
               <PriceNode object={price} focused={focus === price.id} />
             </div>
           )}
+          {feeds.length > 0 && (
+            <div
+              className={`node-position feeds-position ${feeds.some((f) => f.id === focus) ? "in-focus" : ""}`}
+              style={{
+                left: POS.feeds.x,
+                top: POS.feeds.y,
+                width: POS.feeds.w,
+              }}
+            >
+              <FeedNode objects={feeds} focus={focus} />
+            </div>
+          )}
           {vault && (
             <div
               className={`node-position vault-position ${focus === vault.id ? "in-focus" : ""}`}
@@ -826,7 +1056,11 @@ function Observatory({ state, signalMode }: { state: CanvasState; signalMode: Si
                   width: POS.conditions.w,
                 }}
               >
-                <Conditions state={state} focused={focus} />
+                {isLegacyPolicy(state.workflow.graph) ? (
+                  <Conditions state={state} focused={focus} />
+                ) : (
+                  <ComposedConditions state={state} focused={focus} />
+                )}
               </div>
               <div
                 className={`node-position action-position ${focus === "action:pause" ? "in-focus" : ""}`}

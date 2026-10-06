@@ -1,10 +1,14 @@
 import { z } from 'zod';
+import { policyGraphSchema } from './graph';
 export const specificationSchema = z.object({
   runId:z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/),
   revision:z.number().int().min(1).max(1000000),
   thresholdUsd:z.number().positive().max(10000000),
   maxAgeSeconds:z.number().int().min(1).max(120),
-  requireFresh:z.boolean(), skipIfPaused:z.boolean(), broadcast:z.boolean().optional()
+  requireFresh:z.boolean(), skipIfPaused:z.boolean(), broadcast:z.boolean().optional(),
+  // Frozen with the rest of the specification, so a run's policy cannot drift
+  // between freeze and execution. Absent means the legacy single-threshold path.
+  graph:policyGraphSchema.optional()
 }).strict();
 export type ExecutionSpecification=z.infer<typeof specificationSchema>;
 export const PRICE_URL='https://api.exchange.coinbase.com/products/ETH-USD/ticker';

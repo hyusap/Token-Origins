@@ -1580,3 +1580,62 @@ button {
   margin-top: 7px;
   color: var(--bab-text-mute);
 }
+
+/* Chainlink Data Feeds — reference oracle reads, stacked in the centre column. */
+.feed-node .node-body.feed-list {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.feed-row {
+  padding: 15px 23px 13px;
+  border-bottom: 1px solid var(--bab-line-soft);
+  transition: background 300ms;
+}
+.feed-row:last-child {
+  border-bottom: 0;
+}
+.feed-row.focused {
+  background: var(--bab-surface-1);
+  box-shadow: inset 2px 0 0 var(--bab-gold);
+}
+.feed-row-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.feed-row-asset h4 {
+  font-size: 15px;
+  font-weight: 400;
+  margin: 0 0 1px;
+}
+.feed-price {
+  font: 300 21px/1 var(--bab-sans);
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+.feed-row-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  font-size: 8px;
+  text-transform: uppercase;
+  color: var(--bab-text-faint);
+}
+/* A feed older than its heartbeat is normal, not an error; it must still read
+   as visibly behind so nobody presents it as a spot quote. */
+.feed-age.is-stale {
+  color: var(--bab-gold-deep);
+}
+
+/* A simulated order must never be mistaken for a settled transaction. */
+.receipt.simulated-receipt {
+  border-color: var(--bab-gold-deep);
+  color: var(--bab-gold-deep);
+}
+.receipt.simulated-receipt .mono {
+  letter-spacing: 0.08em;
+}
