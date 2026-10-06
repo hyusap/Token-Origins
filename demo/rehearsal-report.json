@@ -1,0 +1,1244 @@
+{
+  "schemaVersion": 1,
+  "title": "Sotto: real Codex + MCP local EVM rehearsal",
+  "startedAt": "2026-10-06T04:43:03.385Z",
+  "completedAt": "2026-10-06T04:49:23.435Z",
+  "microphoneTested": false,
+  "executionMode": "Local EVM rehearsal · Anvil · no CRE/DON/Sepolia claim",
+  "transport": "Codex CLI → official MCP stdio → semantic backend → WebSocket canvas; preplanned text, microphone untested",
+  "cueCount": 13,
+  "completedTurnCount": 13,
+  "actualMcpCallCount": 31,
+  "agentTurnDurationMs": {
+    "min": 17114,
+    "median": 20608,
+    "max": 35260
+  },
+  "revisionCommandArrivedDuringActiveRun": false,
+  "assertions": {
+    "everyCueUsedRealMcp": true,
+    "falseConditionWithoutTransaction": true,
+    "confirmedReceiptAndVaultPause": true,
+    "canonicalVaultPaused": true,
+    "alreadyPausedNoop": true,
+    "frozenRevisionPreserved": true,
+    "noFailedRuns": true
+  },
+  "turns": [
+    {
+      "turnId": "agent-88d80ca7-c643-46c8-81f7-9a94984c361b",
+      "threadId": "01a10f85-b679-75e1-ba63-5d2103579fa2",
+      "startedAt": "2026-10-06T04:43:03.386Z",
+      "completedAt": "2026-10-06T04:43:27.287Z",
+      "durationMs": 23901,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:43:17.930Z",
+          "result": {
+            "ok": true,
+            "summary": "The canvas is ready for discovery.",
+            "seq": 4,
+            "revision": 0
+          }
+        },
+        {
+          "name": "discover_objects",
+          "server": "sotto",
+          "arguments": {
+            "objects": [
+              "price",
+              "vault"
+            ],
+            "operationId": "agent-88d80ca7-c643-46c8-81f7-9a94984c361b-discover"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:43:22.268Z",
+          "result": {
+            "ok": true,
+            "summary": "ETH price and grant vault are now persistent objects. ETH is $2701.67.",
+            "seq": 6,
+            "revision": 0
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-c1dc9b37-4720-4b69-b1ab-d28608a27a5b",
+      "threadId": "01a10f86-2b0a-7ff3-8516-ab3ea6b60699",
+      "startedAt": "2026-10-06T04:43:33.320Z",
+      "completedAt": "2026-10-06T04:43:50.434Z",
+      "durationMs": 17114,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:43:43.435Z",
+          "result": {
+            "ok": true,
+            "summary": "The canvas is ready for discovery.",
+            "seq": 10,
+            "revision": 0
+          }
+        },
+        {
+          "name": "focus_object",
+          "server": "sotto",
+          "arguments": {
+            "operationId": "agent-c1dc9b37-4720-4b69-b1ab-d28608a27a5b-focus",
+            "reference": "price:eth-usd"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:43:46.416Z",
+          "result": {
+            "ok": true,
+            "summary": "Focused: ETH / USD.",
+            "seq": 12,
+            "revision": 0
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-48917114-736f-44d8-8c3d-42cd8537bd90",
+      "threadId": "01a10f86-878d-76b0-ad39-9d32163023b0",
+      "startedAt": "2026-10-06T04:43:56.439Z",
+      "completedAt": "2026-10-06T04:44:16.360Z",
+      "durationMs": 19921,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:44:07.388Z",
+          "result": {
+            "ok": true,
+            "summary": "The canvas is ready for discovery.",
+            "seq": 16,
+            "revision": 0
+          }
+        },
+        {
+          "name": "patch_workflow",
+          "server": "sotto",
+          "arguments": {
+            "expectedRevision": 0,
+            "operationId": "agent-48917114-736f-44d8-8c3d-42cd8537bd90-patch",
+            "patch": {
+              "threshold": 3000
+            },
+            "reason": "Pause grant vault spending when the focused ETH/USD price is below $3,000."
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:44:12.268Z",
+          "result": {
+            "ok": true,
+            "summary": "Revision 1. When ETH / USD is below $3,000, pause grant vault spending.",
+            "seq": 18,
+            "revision": 1
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-e4cb42bb-4c39-4033-b0e8-c8aabfea5471",
+      "threadId": "01a10f86-f034-77e3-8748-6ba4a11e793d",
+      "startedAt": "2026-10-06T04:44:22.366Z",
+      "completedAt": "2026-10-06T04:44:42.118Z",
+      "durationMs": 19752,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:44:33.367Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $3,000, pause grant vault spending.",
+            "seq": 22,
+            "revision": 1
+          }
+        },
+        {
+          "name": "patch_workflow",
+          "server": "sotto",
+          "arguments": {
+            "expectedRevision": 1,
+            "operationId": "agent-e4cb42bb-4c39-4033-b0e8-c8aabfea5471-patch",
+            "patch": {
+              "maxAgeSeconds": 60,
+              "skipPaused": true
+            },
+            "reason": "Require an observation no older than sixty seconds and skip if the grant vault is already paused."
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:44:37.767Z",
+          "result": {
+            "ok": true,
+            "summary": "Revision 2. When ETH / USD is below $3,000, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 24,
+            "revision": 2
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-9dac7af3-16a3-4a2f-a349-8fb742e3edac",
+      "threadId": "01a10f87-4eee-7980-8d58-2b0155ff5e0d",
+      "startedAt": "2026-10-06T04:44:48.124Z",
+      "completedAt": "2026-10-06T04:45:07.518Z",
+      "durationMs": 19394,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:44:57.773Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $3,000, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 28,
+            "revision": 2
+          }
+        },
+        {
+          "name": "inspect_object",
+          "server": "sotto",
+          "arguments": {
+            "reference": "workflow",
+            "operationId": "agent-9dac7af3-16a3-4a2f-a349-8fb742e3edac-inspect"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:45:00.497Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $3,000, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 30,
+            "revision": 2
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-f2795d84-8f6e-4f06-8d12-f7ad9057a581",
+      "threadId": "01a10f87-b5f5-70e1-b6f6-97957a30483b",
+      "startedAt": "2026-10-06T04:45:13.526Z",
+      "completedAt": "2026-10-06T04:45:36.358Z",
+      "durationMs": 22832,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:45:26.039Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $3,000, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 34,
+            "revision": 2
+          }
+        },
+        {
+          "name": "focus_object",
+          "server": "sotto",
+          "arguments": {
+            "operationId": "agent-f2795d84-8f6e-4f06-8d12-f7ad9057a581-focus",
+            "reference": "condition"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:45:29.230Z",
+          "result": {
+            "ok": true,
+            "summary": "Which condition: Price threshold or Fresh observation or Vault is unpaused?",
+            "seq": 36,
+            "revision": 2
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-21f394a7-9cdb-4d7f-94c2-c46bd1bfac88",
+      "threadId": "01a10f88-2331-70e1-ae78-a8482f2adf25",
+      "startedAt": "2026-10-06T04:45:42.365Z",
+      "completedAt": "2026-10-06T04:46:02.973Z",
+      "durationMs": 20608,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:45:54.366Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $3,000, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 40,
+            "revision": 2
+          }
+        },
+        {
+          "name": "focus_object",
+          "server": "sotto",
+          "arguments": {
+            "operationId": "agent-21f394a7-9cdb-4d7f-94c2-c46bd1bfac88-focus-freshness",
+            "reference": "condition:freshness"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:45:59.073Z",
+          "result": {
+            "ok": true,
+            "summary": "Focused: Fresh observation.",
+            "seq": 42,
+            "revision": 2
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-990f2492-ad8d-43df-a96f-f5fd80b90d06",
+      "threadId": "01a10f88-8d9b-7f62-940b-06504f407bbe",
+      "startedAt": "2026-10-06T04:46:08.979Z",
+      "completedAt": "2026-10-06T04:46:44.239Z",
+      "durationMs": 35260,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:46:22.190Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $3,000, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 46,
+            "revision": 2
+          }
+        },
+        {
+          "name": "patch_workflow",
+          "server": "sotto",
+          "arguments": {
+            "expectedRevision": 2,
+            "operationId": "agent-990f2492-ad8d-43df-a96f-f5fd80b90d06-patch",
+            "patch": {
+              "threshold": 1
+            },
+            "reason": "Set the price threshold to $1 for the requested false-condition test; preserve other guards."
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:46:26.375Z",
+          "result": {
+            "ok": true,
+            "summary": "Revision 3. When ETH / USD is below $1, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 48,
+            "revision": 3
+          }
+        },
+        {
+          "name": "run_workflow",
+          "server": "sotto",
+          "arguments": {
+            "expectedRevision": 3,
+            "operationId": "agent-990f2492-ad8d-43df-a96f-f5fd80b90d06-run"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:46:32.824Z",
+          "result": {
+            "ok": true,
+            "summary": "Run run-c41f2e3f-8e42-4308-9f08-6737dc71443e started against immutable revision 3.",
+            "runId": "run-c41f2e3f-8e42-4308-9f08-6737dc71443e",
+            "seq": 49,
+            "revision": 3
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-e0433c29-9a80-4b83-9df1-5958a87f1282",
+      "threadId": "01a10f89-2c00-7910-b047-ba323480b58b",
+      "startedAt": "2026-10-06T04:46:50.247Z",
+      "completedAt": "2026-10-06T04:47:11.004Z",
+      "durationMs": 20757,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:47:02.285Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $1, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 63,
+            "revision": 3
+          }
+        },
+        {
+          "name": "patch_workflow",
+          "server": "sotto",
+          "arguments": {
+            "expectedRevision": 3,
+            "operationId": "agent-e0433c29-9a80-4b83-9df1-5958a87f1282-patch",
+            "patch": {
+              "thresholdAboveCurrent": true
+            },
+            "reason": "Raise the threshold above the current price to prepare a pause test, preserving freshness and already-paused guards."
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:47:05.829Z",
+          "result": {
+            "ok": true,
+            "summary": "Revision 4. When ETH / USD is below $2,835.66, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 65,
+            "revision": 4
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-562fee64-9f22-429c-9641-1027e89f4608",
+      "threadId": "01a10f89-94bd-7131-8c6f-bca938e8e233",
+      "startedAt": "2026-10-06T04:47:17.014Z",
+      "completedAt": "2026-10-06T04:47:35.932Z",
+      "durationMs": 18918,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:47:28.016Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $2,835.66, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 69,
+            "revision": 4
+          }
+        },
+        {
+          "name": "run_workflow",
+          "server": "sotto",
+          "arguments": {
+            "expectedRevision": 4,
+            "operationId": "agent-562fee64-9f22-429c-9641-1027e89f4608-run"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:47:30.895Z",
+          "result": {
+            "ok": true,
+            "summary": "Run run-f2a61b66-7ef9-4dde-ac9b-336251d04361 started against immutable revision 4.",
+            "runId": "run-f2a61b66-7ef9-4dde-ac9b-336251d04361",
+            "seq": 71,
+            "revision": 4
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-666c8aaa-f39e-4428-b044-8f958897508a",
+      "threadId": "01a10f89-de7b-74c1-aff1-71080a3c7bb4",
+      "startedAt": "2026-10-06T04:47:35.940Z",
+      "completedAt": "2026-10-06T04:47:55.005Z",
+      "durationMs": 19065,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:47:47.370Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $2,835.66, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 85,
+            "revision": 4
+          }
+        },
+        {
+          "name": "patch_workflow",
+          "server": "sotto",
+          "arguments": {
+            "expectedRevision": 4,
+            "operationId": "agent-666c8aaa-f39e-4428-b044-8f958897508a-patch",
+            "patch": {
+              "threshold": 1
+            },
+            "reason": "Set only the draft threshold back to $1; preserve guards and the submitted immutable revision 4."
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:47:50.603Z",
+          "result": {
+            "ok": true,
+            "summary": "Revision 5. When ETH / USD is below $1, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 87,
+            "revision": 5
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-2fc045b3-820d-40de-aa0a-7b72a6fdaced",
+      "threadId": "01a10f8a-4077-7a72-92b8-831e32d88a4e",
+      "startedAt": "2026-10-06T04:48:01.013Z",
+      "completedAt": "2026-10-06T04:48:23.114Z",
+      "durationMs": 22101,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:48:12.271Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $1, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 91,
+            "revision": 5
+          }
+        },
+        {
+          "name": "get_run",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:48:15.299Z",
+          "result": {
+            "ok": true,
+            "summary": "Run revision 4: confirmed. Confirmed receipt + SpendingPaused event + fresh paused() read at block 5",
+            "runId": "run-f2a61b66-7ef9-4dde-ac9b-336251d04361",
+            "seq": 93,
+            "revision": 5
+          }
+        },
+        {
+          "name": "inspect_object",
+          "server": "sotto",
+          "arguments": {
+            "operationId": "agent-2fc045b3-820d-40de-aa0a-7b72a6fdaced-vault-refresh",
+            "reference": "vault:grant",
+            "refresh": true
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:48:15.317Z",
+          "result": {
+            "ok": true,
+            "summary": "Grant vault: paused, 1.2049 ETH. Actual local contract · Anvil.",
+            "seq": 95,
+            "revision": 5
+          }
+        }
+      ]
+    },
+    {
+      "turnId": "agent-a28b44c1-08aa-45bb-bd11-6534b5da7ebb",
+      "threadId": "01a10f8a-b1bb-7ff2-959f-d94ae1316bea",
+      "startedAt": "2026-10-06T04:48:29.123Z",
+      "completedAt": "2026-10-06T04:49:03.883Z",
+      "durationMs": 34760,
+      "ok": true,
+      "mcpTools": [
+        {
+          "name": "get_context",
+          "server": "sotto",
+          "arguments": {},
+          "status": "completed",
+          "at": "2026-10-06T04:48:40.455Z",
+          "result": {
+            "ok": true,
+            "summary": "When ETH / USD is below $1, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 99,
+            "revision": 5
+          }
+        },
+        {
+          "name": "patch_workflow",
+          "server": "sotto",
+          "arguments": {
+            "expectedRevision": 5,
+            "operationId": "agent-a28b44c1-08aa-45bb-bd11-6534b5da7ebb-patch",
+            "patch": {
+              "thresholdAboveCurrent": true
+            },
+            "reason": "Raise threshold above current price for rerun, preserving freshness and already-paused guards."
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:48:45.095Z",
+          "result": {
+            "ok": true,
+            "summary": "Revision 6. When ETH / USD is below $2,835.36, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+            "seq": 101,
+            "revision": 6
+          }
+        },
+        {
+          "name": "run_workflow",
+          "server": "sotto",
+          "arguments": {
+            "expectedRevision": 6,
+            "operationId": "agent-a28b44c1-08aa-45bb-bd11-6534b5da7ebb-run"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:48:49.682Z",
+          "result": {
+            "ok": true,
+            "summary": "Run run-f069adb1-1fc6-412a-9e9d-41251ac53010 started against immutable revision 6.",
+            "runId": "run-f069adb1-1fc6-412a-9e9d-41251ac53010",
+            "seq": 102,
+            "revision": 6
+          }
+        },
+        {
+          "name": "get_run",
+          "server": "sotto",
+          "arguments": {
+            "runId": "run-f069adb1-1fc6-412a-9e9d-41251ac53010"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:48:57.928Z",
+          "result": {
+            "ok": true,
+            "summary": "Run revision 6: no-op. No report sent",
+            "runId": "run-f069adb1-1fc6-412a-9e9d-41251ac53010",
+            "seq": 114,
+            "revision": 6
+          }
+        },
+        {
+          "name": "inspect_object",
+          "server": "sotto",
+          "arguments": {
+            "reference": "vault",
+            "refresh": true,
+            "operationId": "agent-a28b44c1-08aa-45bb-bd11-6534b5da7ebb-inspect"
+          },
+          "status": "completed",
+          "at": "2026-10-06T04:48:57.945Z",
+          "result": {
+            "ok": true,
+            "summary": "Grant vault: paused, 1.2049 ETH. Actual local contract · Anvil.",
+            "seq": 116,
+            "revision": 6
+          }
+        }
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "runId": "run-f069adb1-1fc6-412a-9e9d-41251ac53010",
+      "revision": 6,
+      "snapshot": {
+        "revision": 6,
+        "threshold": 2835.36,
+        "maxAgeSeconds": 60,
+        "skipPaused": true,
+        "createdAt": "2026-10-06T04:48:45.086Z",
+        "reason": "Raise threshold above current price for rerun, preserving freshness and already-paused guards."
+      },
+      "status": "no-op",
+      "executionMode": "Local EVM rehearsal · no CRE consensus",
+      "startedAt": "2026-10-06T04:48:49.670Z",
+      "completedAt": "2026-10-06T04:48:50.078Z",
+      "inputs": {
+        "price": {
+          "usd": 2700.42,
+          "unit": "USD",
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "observedAt": "2026-10-06T04:48:48.548935879Z",
+          "fetchedAt": "2026-10-06T04:48:50.078Z"
+        },
+        "vault": {
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "chainId": 31337,
+          "pausedBefore": true,
+          "balanceWei": "1204900000000000000"
+        }
+      },
+      "decisions": [
+        {
+          "id": "threshold",
+          "label": "threshold",
+          "passed": true,
+          "detail": "$2700.42 < $2835.36"
+        },
+        {
+          "id": "freshness",
+          "label": "freshness",
+          "passed": true,
+          "detail": "Observation age 1.5s; maximum 60s"
+        },
+        {
+          "id": "vault-state",
+          "label": "vault-state",
+          "passed": false,
+          "detail": "Vault already paused; no action needed"
+        }
+      ],
+      "logs": [
+        {
+          "at": "2026-10-06T04:48:49.670Z",
+          "stage": "queued",
+          "message": "Frozen draft revision 6"
+        },
+        {
+          "at": "2026-10-06T04:48:49.680Z",
+          "stage": "fetching",
+          "message": "Fetching fresh execution inputs"
+        },
+        {
+          "at": "2026-10-06T04:48:49.683Z",
+          "stage": "evaluating",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-06T04:48:49.690Z",
+          "stage": "fetching",
+          "message": "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp"
+        },
+        {
+          "at": "2026-10-06T04:48:50.067Z",
+          "stage": "fetching",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-06T04:48:50.071Z",
+          "stage": "evaluating",
+          "message": "PASS threshold: $2700.42 < $2835.36"
+        },
+        {
+          "at": "2026-10-06T04:48:50.072Z",
+          "stage": "evaluating",
+          "message": "PASS freshness: Observation age 1.5s; maximum 60s"
+        },
+        {
+          "at": "2026-10-06T04:48:50.074Z",
+          "stage": "evaluating",
+          "message": "STOP vault-state: Vault already paused; no action needed"
+        },
+        {
+          "at": "2026-10-06T04:48:50.076Z",
+          "stage": "reporting",
+          "message": "No report sent"
+        },
+        {
+          "at": "2026-10-06T04:48:50.078Z",
+          "stage": "runner",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-06T04:48:50.078Z",
+          "stage": "runner",
+          "message": "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp"
+        },
+        {
+          "at": "2026-10-06T04:48:50.078Z",
+          "stage": "runner",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-06T04:48:50.078Z",
+          "stage": "runner",
+          "message": "PASS threshold: $2700.42 < $2835.36"
+        },
+        {
+          "at": "2026-10-06T04:48:50.078Z",
+          "stage": "runner",
+          "message": "PASS freshness: Observation age 1.5s; maximum 60s"
+        },
+        {
+          "at": "2026-10-06T04:48:50.078Z",
+          "stage": "runner",
+          "message": "STOP vault-state: Vault already paused; no action needed"
+        },
+        {
+          "at": "2026-10-06T04:48:50.078Z",
+          "stage": "runner",
+          "message": "No report sent"
+        }
+      ]
+    },
+    {
+      "runId": "run-f2a61b66-7ef9-4dde-ac9b-336251d04361",
+      "revision": 4,
+      "snapshot": {
+        "revision": 4,
+        "threshold": 2835.66,
+        "maxAgeSeconds": 60,
+        "skipPaused": true,
+        "createdAt": "2026-10-06T04:47:05.819Z",
+        "reason": "Raise the threshold above the current price to prepare a pause test, preserving freshness and already-paused guards."
+      },
+      "status": "confirmed",
+      "executionMode": "Local EVM rehearsal · no CRE consensus",
+      "startedAt": "2026-10-06T04:47:30.890Z",
+      "completedAt": "2026-10-06T04:47:31.486Z",
+      "inputs": {
+        "price": {
+          "usd": 2700.49,
+          "unit": "USD",
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "observedAt": "2026-10-06T04:47:30.328687575Z",
+          "fetchedAt": "2026-10-06T04:47:31.486Z"
+        },
+        "vault": {
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "chainId": 31337,
+          "pausedBefore": false,
+          "balanceWei": "1204900000000000000"
+        }
+      },
+      "decisions": [
+        {
+          "id": "threshold",
+          "label": "threshold",
+          "passed": true,
+          "detail": "$2700.49 < $2835.66"
+        },
+        {
+          "id": "freshness",
+          "label": "freshness",
+          "passed": true,
+          "detail": "Observation age 1.1s; maximum 60s"
+        },
+        {
+          "id": "vault-state",
+          "label": "vault-state",
+          "passed": true,
+          "detail": "Vault spending active"
+        }
+      ],
+      "evidence": {
+        "transactionHash": "0x5ba44057baa6627b4b895565206cabc4d0e19bffd7f6877aef99e1b3b106909e",
+        "blockNumber": "5",
+        "receiptStatus": "success",
+        "pausedAfter": true,
+        "chainId": 31337,
+        "contractAddress": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+        "verification": "Receiver event and paused state confirmed"
+      },
+      "logs": [
+        {
+          "at": "2026-10-06T04:47:30.890Z",
+          "stage": "queued",
+          "message": "Frozen draft revision 4"
+        },
+        {
+          "at": "2026-10-06T04:47:30.900Z",
+          "stage": "fetching",
+          "message": "Fetching fresh execution inputs"
+        },
+        {
+          "at": "2026-10-06T04:47:30.903Z",
+          "stage": "evaluating",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-06T04:47:30.908Z",
+          "stage": "fetching",
+          "message": "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp"
+        },
+        {
+          "at": "2026-10-06T04:47:31.411Z",
+          "stage": "fetching",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-06T04:47:31.412Z",
+          "stage": "evaluating",
+          "message": "PASS threshold: $2700.49 < $2835.66"
+        },
+        {
+          "at": "2026-10-06T04:47:31.413Z",
+          "stage": "evaluating",
+          "message": "PASS freshness: Observation age 1.1s; maximum 60s"
+        },
+        {
+          "at": "2026-10-06T04:47:31.413Z",
+          "stage": "evaluating",
+          "message": "PASS vault-state: Vault spending active"
+        },
+        {
+          "at": "2026-10-06T04:47:31.447Z",
+          "stage": "reporting",
+          "message": "Delivering ABI report through localhost rehearsal forwarder"
+        },
+        {
+          "at": "2026-10-06T04:47:31.484Z",
+          "stage": "reporting",
+          "message": "Confirmed receipt + SpendingPaused event + fresh paused() read at block 5"
+        },
+        {
+          "at": "2026-10-06T04:47:31.486Z",
+          "stage": "runner",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-06T04:47:31.486Z",
+          "stage": "runner",
+          "message": "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp"
+        },
+        {
+          "at": "2026-10-06T04:47:31.486Z",
+          "stage": "runner",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-06T04:47:31.486Z",
+          "stage": "runner",
+          "message": "PASS threshold: $2700.49 < $2835.66"
+        },
+        {
+          "at": "2026-10-06T04:47:31.486Z",
+          "stage": "runner",
+          "message": "PASS freshness: Observation age 1.1s; maximum 60s"
+        },
+        {
+          "at": "2026-10-06T04:47:31.486Z",
+          "stage": "runner",
+          "message": "PASS vault-state: Vault spending active"
+        },
+        {
+          "at": "2026-10-06T04:47:31.486Z",
+          "stage": "runner",
+          "message": "Delivering ABI report through localhost rehearsal forwarder"
+        },
+        {
+          "at": "2026-10-06T04:47:31.486Z",
+          "stage": "runner",
+          "message": "Confirmed receipt + SpendingPaused event + fresh paused() read at block 5"
+        }
+      ]
+    },
+    {
+      "runId": "run-c41f2e3f-8e42-4308-9f08-6737dc71443e",
+      "revision": 3,
+      "snapshot": {
+        "revision": 3,
+        "threshold": 1,
+        "maxAgeSeconds": 60,
+        "skipPaused": true,
+        "createdAt": "2026-10-06T04:46:26.371Z",
+        "reason": "Set the price threshold to $1 for the requested false-condition test; preserve other guards."
+      },
+      "status": "no-op",
+      "executionMode": "Local EVM rehearsal · no CRE consensus",
+      "startedAt": "2026-10-06T04:46:32.818Z",
+      "completedAt": "2026-10-06T04:46:33.179Z",
+      "inputs": {
+        "price": {
+          "usd": 2701.93,
+          "unit": "USD",
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "observedAt": "2026-10-06T04:46:28.275696916Z",
+          "fetchedAt": "2026-10-06T04:46:33.179Z"
+        },
+        "vault": {
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "chainId": 31337,
+          "pausedBefore": false,
+          "balanceWei": "1204900000000000000"
+        }
+      },
+      "decisions": [
+        {
+          "id": "threshold",
+          "label": "threshold",
+          "passed": false,
+          "detail": "$2701.93 < $1.00"
+        },
+        {
+          "id": "freshness",
+          "label": "freshness",
+          "passed": true,
+          "detail": "Observation age 4.9s; maximum 60s"
+        },
+        {
+          "id": "vault-state",
+          "label": "vault-state",
+          "passed": true,
+          "detail": "Vault spending active"
+        }
+      ],
+      "logs": [
+        {
+          "at": "2026-10-06T04:46:32.818Z",
+          "stage": "queued",
+          "message": "Frozen draft revision 3"
+        },
+        {
+          "at": "2026-10-06T04:46:32.829Z",
+          "stage": "fetching",
+          "message": "Fetching fresh execution inputs"
+        },
+        {
+          "at": "2026-10-06T04:46:32.946Z",
+          "stage": "evaluating",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-06T04:46:32.968Z",
+          "stage": "fetching",
+          "message": "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp"
+        },
+        {
+          "at": "2026-10-06T04:46:33.173Z",
+          "stage": "fetching",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-06T04:46:33.175Z",
+          "stage": "evaluating",
+          "message": "STOP threshold: $2701.93 < $1.00"
+        },
+        {
+          "at": "2026-10-06T04:46:33.176Z",
+          "stage": "evaluating",
+          "message": "PASS freshness: Observation age 4.9s; maximum 60s"
+        },
+        {
+          "at": "2026-10-06T04:46:33.177Z",
+          "stage": "evaluating",
+          "message": "PASS vault-state: Vault spending active"
+        },
+        {
+          "at": "2026-10-06T04:46:33.178Z",
+          "stage": "reporting",
+          "message": "No report sent"
+        },
+        {
+          "at": "2026-10-06T04:46:33.179Z",
+          "stage": "runner",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-06T04:46:33.179Z",
+          "stage": "runner",
+          "message": "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp"
+        },
+        {
+          "at": "2026-10-06T04:46:33.179Z",
+          "stage": "runner",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-06T04:46:33.179Z",
+          "stage": "runner",
+          "message": "STOP threshold: $2701.93 < $1.00"
+        },
+        {
+          "at": "2026-10-06T04:46:33.179Z",
+          "stage": "runner",
+          "message": "PASS freshness: Observation age 4.9s; maximum 60s"
+        },
+        {
+          "at": "2026-10-06T04:46:33.179Z",
+          "stage": "runner",
+          "message": "PASS vault-state: Vault spending active"
+        },
+        {
+          "at": "2026-10-06T04:46:33.179Z",
+          "stage": "runner",
+          "message": "No report sent"
+        }
+      ]
+    }
+  ],
+  "latency": {
+    "notes": "Agent durations exclude audio. Original browser acknowledgements could be overwritten by later broadcasts; final code keeps first acknowledgement. Repeat measurement before interpreting first-render performance.",
+    "operations": [
+      {
+        "operationId": "rehearsal-reset-e96688cf-0e0c-41fb-9a2a-8c877aca4b1b",
+        "tool": "reset_session",
+        "receivedAt": "2026-10-06T04:43:03.384Z",
+        "committedAt": "2026-10-06T04:43:03.384Z",
+        "commitMs": 0.15
+      },
+      {
+        "operationId": "agent-88d80ca7-c643-46c8-81f7-9a94984c361b-discover",
+        "tool": "discover_objects",
+        "receivedAt": "2026-10-06T04:43:21.737Z",
+        "committedAt": "2026-10-06T04:43:22.261Z",
+        "commitMs": 524.29,
+        "renderedAt": "2026-10-06T04:43:22.272Z",
+        "renderMs": 11
+      },
+      {
+        "operationId": "agent-c1dc9b37-4720-4b69-b1ab-d28608a27a5b-focus",
+        "tool": "focus_object",
+        "receivedAt": "2026-10-06T04:43:46.410Z",
+        "committedAt": "2026-10-06T04:43:46.410Z",
+        "commitMs": 0.58,
+        "renderedAt": "2026-10-06T04:43:46.417Z",
+        "renderMs": 7
+      },
+      {
+        "operationId": "agent-48917114-736f-44d8-8c3d-42cd8537bd90-patch",
+        "tool": "patch_workflow",
+        "receivedAt": "2026-10-06T04:44:12.250Z",
+        "committedAt": "2026-10-06T04:44:12.265Z",
+        "commitMs": 15.01,
+        "renderedAt": "2026-10-06T04:44:12.274Z",
+        "renderMs": 9
+      },
+      {
+        "operationId": "agent-e4cb42bb-4c39-4033-b0e8-c8aabfea5471-patch",
+        "tool": "patch_workflow",
+        "receivedAt": "2026-10-06T04:44:37.764Z",
+        "committedAt": "2026-10-06T04:44:37.764Z",
+        "commitMs": 0.39,
+        "renderedAt": "2026-10-06T04:44:37.777Z",
+        "renderMs": 13
+      },
+      {
+        "operationId": "agent-9dac7af3-16a3-4a2f-a349-8fb742e3edac-inspect",
+        "tool": "inspect_object",
+        "receivedAt": "2026-10-06T04:45:00.494Z",
+        "committedAt": "2026-10-06T04:45:00.494Z",
+        "commitMs": 0.06,
+        "renderedAt": "2026-10-06T04:45:03.646Z",
+        "renderMs": 3152
+      },
+      {
+        "operationId": "agent-f2795d84-8f6e-4f06-8d12-f7ad9057a581-focus",
+        "tool": "focus_object",
+        "receivedAt": "2026-10-06T04:45:29.227Z",
+        "committedAt": "2026-10-06T04:45:29.227Z",
+        "commitMs": 0.41,
+        "renderedAt": "2026-10-06T04:45:29.242Z",
+        "renderMs": 15
+      },
+      {
+        "operationId": "agent-21f394a7-9cdb-4d7f-94c2-c46bd1bfac88-focus-freshness",
+        "tool": "focus_object",
+        "receivedAt": "2026-10-06T04:45:59.070Z",
+        "committedAt": "2026-10-06T04:45:59.070Z",
+        "commitMs": 0.15,
+        "renderedAt": "2026-10-06T04:45:59.085Z",
+        "renderMs": 15
+      },
+      {
+        "operationId": "agent-990f2492-ad8d-43df-a96f-f5fd80b90d06-patch",
+        "tool": "patch_workflow",
+        "receivedAt": "2026-10-06T04:46:26.371Z",
+        "committedAt": "2026-10-06T04:46:26.371Z",
+        "commitMs": 0.42,
+        "renderedAt": "2026-10-06T04:46:30.022Z",
+        "renderMs": 3651
+      },
+      {
+        "operationId": "agent-990f2492-ad8d-43df-a96f-f5fd80b90d06-run",
+        "tool": "run_workflow",
+        "receivedAt": "2026-10-06T04:46:32.817Z",
+        "committedAt": "2026-10-06T04:46:32.818Z",
+        "commitMs": 0.56,
+        "renderedAt": "2026-10-06T04:46:32.827Z",
+        "renderMs": 9
+      },
+      {
+        "operationId": "agent-e0433c29-9a80-4b83-9df1-5958a87f1282-patch",
+        "tool": "patch_workflow",
+        "receivedAt": "2026-10-06T04:47:05.460Z",
+        "committedAt": "2026-10-06T04:47:05.821Z",
+        "commitMs": 361.19,
+        "renderedAt": "2026-10-06T04:47:05.834Z",
+        "renderMs": 13
+      },
+      {
+        "operationId": "agent-562fee64-9f22-429c-9641-1027e89f4608-run",
+        "tool": "run_workflow",
+        "receivedAt": "2026-10-06T04:47:30.889Z",
+        "committedAt": "2026-10-06T04:47:30.890Z",
+        "commitMs": 0.2,
+        "renderedAt": "2026-10-06T04:47:32.441Z",
+        "renderMs": 1551
+      },
+      {
+        "operationId": "agent-666c8aaa-f39e-4428-b044-8f958897508a-patch",
+        "tool": "patch_workflow",
+        "receivedAt": "2026-10-06T04:47:50.598Z",
+        "committedAt": "2026-10-06T04:47:50.598Z",
+        "commitMs": 0.42,
+        "renderedAt": "2026-10-06T04:47:50.609Z",
+        "renderMs": 11
+      },
+      {
+        "operationId": "6950a402-e8b9-482b-b197-fd8d1a557333",
+        "tool": "get_run",
+        "receivedAt": "2026-10-06T04:48:15.293Z",
+        "committedAt": "2026-10-06T04:48:15.293Z",
+        "commitMs": 0.1,
+        "renderedAt": "2026-10-06T04:48:15.308Z",
+        "renderMs": 15
+      },
+      {
+        "operationId": "agent-2fc045b3-820d-40de-aa0a-7b72a6fdaced-vault-refresh",
+        "tool": "inspect_object",
+        "receivedAt": "2026-10-06T04:48:15.304Z",
+        "committedAt": "2026-10-06T04:48:15.310Z",
+        "commitMs": 6,
+        "renderedAt": "2026-10-06T04:48:15.318Z",
+        "renderMs": 8
+      },
+      {
+        "operationId": "agent-a28b44c1-08aa-45bb-bd11-6534b5da7ebb-patch",
+        "tool": "patch_workflow",
+        "receivedAt": "2026-10-06T04:48:44.026Z",
+        "committedAt": "2026-10-06T04:48:45.087Z",
+        "commitMs": 1061.33,
+        "renderedAt": "2026-10-06T04:48:45.099Z",
+        "renderMs": 12
+      },
+      {
+        "operationId": "agent-a28b44c1-08aa-45bb-bd11-6534b5da7ebb-run",
+        "tool": "run_workflow",
+        "receivedAt": "2026-10-06T04:48:49.670Z",
+        "committedAt": "2026-10-06T04:48:49.670Z",
+        "commitMs": 0.24,
+        "renderedAt": "2026-10-06T04:48:49.682Z",
+        "renderMs": 12
+      },
+      {
+        "operationId": "02c3714a-e671-42f8-8b85-32a4ff3ae758",
+        "tool": "get_run",
+        "receivedAt": "2026-10-06T04:48:57.919Z",
+        "committedAt": "2026-10-06T04:48:57.920Z",
+        "commitMs": 0.57,
+        "renderedAt": "2026-10-06T04:48:57.937Z",
+        "renderMs": 17
+      },
+      {
+        "operationId": "agent-a28b44c1-08aa-45bb-bd11-6534b5da7ebb-inspect",
+        "tool": "inspect_object",
+        "receivedAt": "2026-10-06T04:48:57.933Z",
+        "committedAt": "2026-10-06T04:48:57.937Z",
+        "commitMs": 4.55,
+        "renderedAt": "2026-10-06T04:48:57.957Z",
+        "renderMs": 20
+      }
+    ]
+  }
+}

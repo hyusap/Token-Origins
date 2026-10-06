@@ -1,0 +1,141 @@
+{
+  "verifiedAt": "2026-10-06T04:40:02.493Z",
+  "falseResult": {
+    "runId": "verify-false-1791261601676",
+    "revision": 1,
+    "mode": "local-evm-rehearsal",
+    "price": {
+      "usd": 2702.73,
+      "observedAt": "2026-10-06T04:39:59.605625034Z",
+      "source": "https://api.exchange.coinbase.com/products/ETH-USD/ticker"
+    },
+    "vault": {
+      "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+      "chainId": 31337,
+      "balanceWei": "1204900000000000000",
+      "paused": false
+    },
+    "conditions": [
+      {
+        "kind": "threshold",
+        "passed": false,
+        "detail": "$2702.73 < $1.00"
+      },
+      {
+        "kind": "freshness",
+        "passed": true,
+        "detail": "Observation age 2.6s; maximum 120s"
+      },
+      {
+        "kind": "vault-state",
+        "passed": true,
+        "detail": "Vault spending active"
+      }
+    ],
+    "decision": "noop",
+    "logs": [
+      "Local EVM rehearsal · isolated evaluator · no CRE/DON claim",
+      "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp",
+      "Read vault state and balance directly from local EVM",
+      "STOP threshold: $2702.73 < $1.00",
+      "PASS freshness: Observation age 2.6s; maximum 120s",
+      "PASS vault-state: Vault spending active",
+      "No report sent"
+    ]
+  },
+  "trueResult": {
+    "runId": "verify-true-1791261601676",
+    "revision": 2,
+    "mode": "local-evm-rehearsal",
+    "price": {
+      "usd": 2702.73,
+      "observedAt": "2026-10-06T04:39:59.605625034Z",
+      "source": "https://api.exchange.coinbase.com/products/ETH-USD/ticker"
+    },
+    "vault": {
+      "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+      "chainId": 31337,
+      "balanceWei": "1204900000000000000",
+      "paused": false
+    },
+    "conditions": [
+      {
+        "kind": "threshold",
+        "passed": true,
+        "detail": "$2702.73 < $2974.00"
+      },
+      {
+        "kind": "freshness",
+        "passed": true,
+        "detail": "Observation age 2.7s; maximum 120s"
+      },
+      {
+        "kind": "vault-state",
+        "passed": true,
+        "detail": "Vault spending active"
+      }
+    ],
+    "decision": "pause",
+    "logs": [
+      "Local EVM rehearsal · isolated evaluator · no CRE/DON claim",
+      "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp",
+      "Read vault state and balance directly from local EVM",
+      "PASS threshold: $2702.73 < $2974.00",
+      "PASS freshness: Observation age 2.7s; maximum 120s",
+      "PASS vault-state: Vault spending active",
+      "Delivering ABI report through localhost rehearsal forwarder",
+      "Confirmed receipt + SpendingPaused event + fresh paused() read at block 3"
+    ],
+    "transaction": {
+      "hash": "0x2183268c425a05dc38ffbe04ba0dcc4c4ba91cac376197ab3ae4321f4cf031b2",
+      "blockNumber": 3,
+      "status": "success",
+      "receiverConfirmed": true,
+      "pausedAfter": true
+    }
+  },
+  "noopResult": {
+    "runId": "verify-paused-1791261601676",
+    "revision": 2,
+    "mode": "local-evm-rehearsal",
+    "price": {
+      "usd": 2702.73,
+      "observedAt": "2026-10-06T04:39:59.605625034Z",
+      "source": "https://api.exchange.coinbase.com/products/ETH-USD/ticker"
+    },
+    "vault": {
+      "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+      "chainId": 31337,
+      "balanceWei": "1204900000000000000",
+      "paused": true
+    },
+    "conditions": [
+      {
+        "kind": "threshold",
+        "passed": true,
+        "detail": "$2702.73 < $2974.00"
+      },
+      {
+        "kind": "freshness",
+        "passed": true,
+        "detail": "Observation age 2.9s; maximum 120s"
+      },
+      {
+        "kind": "vault-state",
+        "passed": false,
+        "detail": "Vault already paused; no action needed"
+      }
+    ],
+    "decision": "noop",
+    "logs": [
+      "Local EVM rehearsal · isolated evaluator · no CRE/DON claim",
+      "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp",
+      "Read vault state and balance directly from local EVM",
+      "PASS threshold: $2702.73 < $2974.00",
+      "PASS freshness: Observation age 2.9s; maximum 120s",
+      "STOP vault-state: Vault already paused; no action needed",
+      "No report sent"
+    ]
+  },
+  "replaySameHash": true
+}

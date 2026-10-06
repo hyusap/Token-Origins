@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.data/
+contracts/out/
+contracts/cache/
+cre/node_modules/
+demo/*.mp4
+cre/bin/
+cre/workflow/workflow.js
+cre/workflow/workflow.wasm
+cre/workflow/config.runtime.json

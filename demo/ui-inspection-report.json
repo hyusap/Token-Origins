@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "agentTurnId": "agent-c12d4e99-d7d5-41e2-a1c8-f437a6bb0ef6",
+  "threadId": "01a10f95-7272-7f90-a3c0-a9ceedc5a349",
+  "transport": "UI keyboard transcript → Codex CLI → semantic MCP",
+  "microphoneTested": false,
+  "source": "Actual persisted Codex JSONL events from the parent keyboard-only UI inspection",
+  "actualMcpCallCount": 4,
+  "usage": {
+    "input_tokens": 72523,
+    "cached_input_tokens": 49664,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 219,
+    "reasoning_output_tokens": 0
+  },
+  "tools": [
+    {
+      "name": "get_context",
+      "server": "sotto",
+      "arguments": {},
+      "status": "completed",
+      "result": {
+        "ok": true,
+        "summary": "When ETH / USD is below $2,835.36, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+        "seq": 138,
+        "revision": 8
+      }
+    },
+    {
+      "name": "get_run",
+      "server": "sotto",
+      "arguments": {},
+      "status": "completed",
+      "result": {
+        "ok": true,
+        "summary": "Run revision 6: no-op. No report sent",
+        "runId": "run-f069adb1-1fc6-412a-9e9d-41251ac53010",
+        "seq": 140,
+        "revision": 8
+      }
+    },
+    {
+      "name": "get_run",
+      "server": "sotto",
+      "arguments": {
+        "runId": "run-f2a61b66-7ef9-4dde-ac9b-336251d04361"
+      },
+      "status": "completed",
+      "result": {
+        "ok": true,
+        "summary": "Run revision 4: confirmed. Confirmed receipt + SpendingPaused event + fresh paused() read at block 5",
+        "runId": "run-f2a61b66-7ef9-4dde-ac9b-336251d04361",
+        "seq": 142,
+        "revision": 8
+      }
+    },
+    {
+      "name": "inspect_object",
+      "server": "sotto",
+      "arguments": {
+        "operationId": "agent-c12d4e99-d7d5-41e2-a1c8-f437a6bb0ef6-inspect",
+        "reference": "vault:grant",
+        "refresh": true
+      },
+      "status": "completed",
+      "result": {
+        "ok": true,
+        "summary": "Grant vault: paused, 1.2049 ETH. Actual local contract · Anvil.",
+        "seq": 143,
+        "revision": 8
+      }
+    }
+  ],
+  "assertions": {
+    "allToolsSotto": true,
+    "noRunCommand": true,
+    "noRunsAdded": true,
+    "confirmedOlderPauseSelected": true,
+    "vaultRefreshed": true,
+    "freshReadPaused": true
+  },
+  "inspectedRunId": "run-f2a61b66-7ef9-4dde-ac9b-336251d04361",
+  "confirmedRun": {
+    "id": "run-f2a61b66-7ef9-4dde-ac9b-336251d04361",
+    "revision": 4,
+    "snapshot": {
+      "revision": 4,
+      "threshold": 2835.66,
+      "maxAgeSeconds": 60,
+      "skipPaused": true,
+      "createdAt": "2026-10-06T04:47:05.819Z",
+      "reason": "Raise the threshold above the current price to prepare a pause test, preserving freshness and already-paused guards."
+    },
+    "status": "confirmed",
+    "decisions": [
+      {
+        "id": "threshold",
+        "label": "threshold",
+        "passed": true,
+        "detail": "$2700.49 < $2835.66"
+      },
+      {
+        "id": "freshness",
+        "label": "freshness",
+        "passed": true,
+        "detail": "Observation age 1.1s; maximum 60s"
+      },
+      {
+        "id": "vault-state",
+        "label": "vault-state",
+        "passed": true,
+        "detail": "Vault spending active"
+      }
+    ],
+    "evidence": {
+      "transactionHash": "0x5ba44057baa6627b4b895565206cabc4d0e19bffd7f6877aef99e1b3b106909e",
+      "blockNumber": "5",
+      "receiptStatus": "success",
+      "pausedAfter": true,
+      "chainId": 31337,
+      "contractAddress": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+      "verification": "Receiver event and paused state confirmed"
+    },
+    "startedAt": "2026-10-06T04:47:30.890Z",
+    "completedAt": "2026-10-06T04:47:31.486Z"
+  },
+  "freshVaultRead": {
+    "paused": true,
+    "balanceEth": 1.2049,
+    "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+    "chainId": 31337,
+    "blockNumber": "5",
+    "blockObservedAt": "2026-10-06T04:47:31.000Z",
+    "readFetchedAt": "2026-10-06T05:00:29.932Z",
+    "timestampMeaning": "blockObservedAt is the observed block timestamp; readFetchedAt is when this fresh RPC read completed. A fresh read does not make an older block timestamp equal to now."
+  },
+  "startedAt": "2026-10-06T05:00:12.053Z",
+  "completedAt": "2026-10-06T05:00:34.065Z",
+  "durationMs": 22012
+}

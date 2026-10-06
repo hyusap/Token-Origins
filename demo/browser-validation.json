@@ -1,0 +1,58 @@
+{
+  "verifiedAt": "2026-10-06T05:26:31.224619+00:00",
+  "demoUrl": "http://127.0.0.1:4318",
+  "browser": "Codex in-app browser",
+  "fallbacks": [
+    {
+      "browser": "Playwriter",
+      "outcome": "Extension disconnected; retry unavailable"
+    },
+    {
+      "browser": "Codex browser extension",
+      "outcome": "Navigation blocked by request-header policy"
+    },
+    {
+      "browser": "Codex in-app browser",
+      "outcome": "Validated actual application"
+    }
+  ],
+  "viewportChecks": [
+    {
+      "width": 1512,
+      "height": 982,
+      "outcome": "Desktop graph, source provenance, frozen execution and controls visible",
+      "screenshot": "demo/desktop.jpg"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "outcome": "Stacked instruments with focused confirmed run first, sticky metadata and full response",
+      "screenshot": "demo/mobile.jpg"
+    },
+    {
+      "width": 800,
+      "outcome": "Narrow in-app panel uses readable stacked layout after responsive breakpoint fix"
+    }
+  ],
+  "keyboardInspection": {
+    "keys": [
+      "I",
+      "PageDown",
+      "I"
+    ],
+    "outcome": "Inspector received focus; PageDown exposed block 7 and verified receiver event and paused state; I closed inspector"
+  },
+  "developmentHotReload": {
+    "outcome": "Actual source touch retained connected scene without new warning or duplicate React root error"
+  },
+  "finalBuild": {
+    "typecheck": "passed",
+    "productionBuild": "passed",
+    "javascriptAsset": "dist/assets/index-DrU9oubN.js",
+    "cssAsset": "dist/assets/index-nro_sLQs.css"
+  },
+  "viewportOverrideReset": true,
+  "tabMarkedDeliverable": true,
+  "microphoneTested": false,
+  "testnetOrCreRuntimeTested": false
+}

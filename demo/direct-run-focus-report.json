@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "title": "Verified direct semantic focus of immutable confirmed execution",
+  "verifiedAt": "2026-10-06T05:22:13.445Z",
+  "microphoneTested": false,
+  "actualMcpCallCount": 2,
+  "turn": {
+    "turnId": "agent-da268ad3-209c-44ad-a21e-64efc58f3365",
+    "threadId": "01a10fa7-a648-7422-9d7d-0a8c2c785836",
+    "startedAt": "2026-10-06T05:20:06.349Z",
+    "completedAt": "2026-10-06T05:20:28.376Z",
+    "durationMs": 22027,
+    "ok": true,
+    "usage": {
+      "input_tokens": 54527,
+      "cached_input_tokens": 36992,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 150,
+      "reasoning_output_tokens": 0
+    },
+    "mcpTools": [
+      {
+        "name": "get_context",
+        "server": "sotto",
+        "arguments": {},
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "When ETH / USD is below $2,839.87, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+          "seq": 151,
+          "revision": 8
+        },
+        "at": "2026-10-06T05:20:19.229Z"
+      },
+      {
+        "name": "focus_object",
+        "server": "sotto",
+        "arguments": {
+          "operationId": "agent-da268ad3-209c-44ad-a21e-64efc58f3365-focus",
+          "reference": "run:run-29f056c4-809a-4edb-b563-399624c586e1"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Focused: Execution v04. Immutable revision 4: confirmed.",
+          "runId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+          "seq": 153,
+          "revision": 8
+        },
+        "at": "2026-10-06T05:20:23.163Z"
+      }
+    ]
+  },
+  "assertions": {
+    "allToolsSotto": true,
+    "directSemanticRunFocusSucceeded": true,
+    "noRecoveryOrGetRunFallback": true,
+    "noPatchUndoOrRun": true,
+    "draftRevision8Preserved": true,
+    "fourRunsPreserved": true,
+    "frozenSnapshotHashesUnchanged": true,
+    "confirmedRevision4Selected": true,
+    "sourceStillVisibleAndPinned": true,
+    "chainBlock7Unchanged": true
+  },
+  "runRecordHashes": [
+    {
+      "runId": "run-e555a3b7-c4ff-4f69-ad03-bdd77ec66920",
+      "beforeSha256": "3f93204da96d2d4fa3a33dbbee5340219986d9a5f08304adf3b46401199604d8",
+      "afterSha256": "3f93204da96d2d4fa3a33dbbee5340219986d9a5f08304adf3b46401199604d8"
+    },
+    {
+      "runId": "run-96a7a4eb-08b2-48bd-ad4a-c8c10a76edc8",
+      "beforeSha256": "4179ed06f8cb6468b076bd136020c0b2fbccc0077aa7332a93003131e57f780a",
+      "afterSha256": "4179ed06f8cb6468b076bd136020c0b2fbccc0077aa7332a93003131e57f780a"
+    },
+    {
+      "runId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+      "beforeSha256": "c89aa994073e309d359862181bf9a4c04a0b3b03a43628bc69ccec60c2203f53",
+      "afterSha256": "c89aa994073e309d359862181bf9a4c04a0b3b03a43628bc69ccec60c2203f53"
+    },
+    {
+      "runId": "run-05df9833-1b29-4f89-9373-17d8504798cc",
+      "beforeSha256": "f143885be1c7738963aec0f3214072b637479cfa705143381963cebd512374fe",
+      "afterSha256": "f143885be1c7738963aec0f3214072b637479cfa705143381963cebd512374fe"
+    }
+  ],
+  "frozenSnapshotHashes": [
+    {
+      "runId": "run-e555a3b7-c4ff-4f69-ad03-bdd77ec66920",
+      "beforeSha256": "13617f19c9ef062357a9a0adfec498d1ae037a4a218dbd460ff62af2fe976170",
+      "afterSha256": "13617f19c9ef062357a9a0adfec498d1ae037a4a218dbd460ff62af2fe976170"
+    },
+    {
+      "runId": "run-96a7a4eb-08b2-48bd-ad4a-c8c10a76edc8",
+      "beforeSha256": "6b0381b72da78b8889551e9b56f8aa0d8bc2bc2fceea09fa5a6ae14a67d93ac3",
+      "afterSha256": "6b0381b72da78b8889551e9b56f8aa0d8bc2bc2fceea09fa5a6ae14a67d93ac3"
+    },
+    {
+      "runId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+      "beforeSha256": "06b9fa56f992215087da63c6da1038192fe25d29003dc89ed92efd2ad15d07bb",
+      "afterSha256": "06b9fa56f992215087da63c6da1038192fe25d29003dc89ed92efd2ad15d07bb"
+    },
+    {
+      "runId": "run-05df9833-1b29-4f89-9373-17d8504798cc",
+      "beforeSha256": "dabd648c0fd8a17a343eb64ad9ccfde4000bb3a2d591df3c714c0d2a7a5d9e62",
+      "afterSha256": "dabd648c0fd8a17a343eb64ad9ccfde4000bb3a2d591df3c714c0d2a7a5d9e62"
+    }
+  ],
+  "finalState": {
+    "draftRevision": 8,
+    "runCount": 4,
+    "selectedRunId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+    "focus": {
+      "objectId": "run:run-29f056c4-809a-4edb-b563-399624c586e1",
+      "label": "Execution v04"
+    },
+    "sourceVisible": true,
+    "sourcePinned": true,
+    "chainBlock": 7
+  },
+  "renderAcknowledgement": {
+    "operationId": "agent-da268ad3-209c-44ad-a21e-64efc58f3365-focus",
+    "tool": "focus_object",
+    "receivedAt": "2026-10-06T05:20:23.154Z",
+    "committedAt": "2026-10-06T05:20:23.154Z",
+    "commitMs": 0.27,
+    "renderedAt": "2026-10-06T05:20:23.159Z",
+    "renderMs": 5
+  },
+  "notes": [
+    "This separate real-agent probe validates the direct-run-focus fix. The previous failed/recovered probe is preserved unchanged.",
+    "Run-record and snapshot hashes compare canonical JSON before and after this read/navigation turn.",
+    "Microphone interaction and intermediate camera animation timing remain untested."
+  ]
+}

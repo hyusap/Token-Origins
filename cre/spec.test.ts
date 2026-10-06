@@ -1,0 +1,10 @@
+import {expect,test} from 'bun:test';
+import {specificationSchema,evaluate,parsePrice} from './spec';
+const spec={runId:'immutable-run',revision:1,thresholdUsd:3000,maxAgeSeconds:120,requireFresh:true,skipIfPaused:true,broadcast:true};
+const now=Date.parse('2026-10-06T04:40:00Z');
+const price={usd:2700,observedAt:'2026-10-06T04:39:30Z',source:'Coinbase'};
+test('fixed evaluator requires every condition to pass',()=>{expect(evaluate(spec,price,false,now).every(c=>c.passed)).toBe(true);expect(evaluate({...spec,thresholdUsd:2000},price,false,now)[0].passed).toBe(false);});
+test('stale and future observations block action',()=>{expect(evaluate(spec,{...price,observedAt:'2026-10-06T04:00:00Z'},false,now)[1].passed).toBe(false);expect(evaluate(spec,{...price,observedAt:'2026-10-06T04:41:00Z'},false,now)[1].passed).toBe(false);});
+test('paused vault blocks regardless of threshold',()=>{expect(evaluate(spec,price,true,now)[2].passed).toBe(false);});
+test('strict specification bounds cannot add arbitrary sources or targets',()=>{expect(()=>specificationSchema.parse({...spec,priceUrl:'https://evil.test'})).toThrow();expect(()=>specificationSchema.parse({...spec,maxAgeSeconds:121})).toThrow();expect(()=>specificationSchema.parse({...spec,runId:'../escape'})).toThrow();});
+test('invalid source data blocks rather than fabricating observation',()=>{expect(()=>parsePrice({price:'NaN',time:price.observedAt})).toThrow();expect(()=>parsePrice({price:'2700'})).toThrow();expect(parsePrice({price:'2700.00',time:'2026-10-06T04:39:30.123456789Z'}).usd).toBe(2700);});

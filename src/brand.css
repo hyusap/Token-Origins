@@ -1,0 +1,299 @@
+/* ============================================================================
+   Blockchain at Berkeley — brand.css
+   Drop-in design tokens + base classes for the B@B identity.
+   Link this first, then compose with the variables and utilities below.
+   Fonts (add to <head>):
+   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=EB+Garamond:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+   ========================================================================== */
+
+:root {
+  /* ---- Neutrals (the whole brand lives here) ---- */
+  /* Canvas: Figma spec is #0A0A0A; the shipped site uses #0C0C0C. Either reads
+     correct — anywhere in #0A0A0A–#0C0C0C is "B@B black". */
+  --bab-black:      #0C0C0C;
+  --bab-black-alt:  #0A0A0A;
+  --bab-black-true: #000000;
+  --bab-surface-1:  #111111;
+  --bab-surface-2:  #1B1B1B;
+  --bab-line:       #2A2A2A;
+  --bab-line-soft:  rgba(42, 42, 42, 0.65);
+  --bab-line-lit:   #3B3B3B;
+
+  --bab-white:      #FFFFFF;
+  --bab-text:       #FFFFFF;
+  --bab-text-dim:   rgba(255, 255, 255, 0.70);
+  --bab-text-mute:  rgba(255, 255, 255, 0.50);
+  --bab-text-faint: rgba(255, 255, 255, 0.30);
+
+  /* ---- California Gold — spend it like money ---- */
+  --bab-gold:       #FECB33;  /* THE gold — logo lit face, nav "Apply", glints  */
+  --bab-gold-sub:   #F8BE34;  /* "AT BERKELEY" subtitle gold (official guide)   */
+  --bab-gold-deep:  #EAA536;  /* logo shaded face / gold pressed-state          */
+  --bab-gold-cal:   #FDB515;  /* official Berkeley California Gold (heritage)    */
+  --bab-gold-warm:  #F4B320;  /* data-texture gold                              */
+  --bab-gold-hot:   #FAE42C;  /* rare spark / hottest hash                      */
+  --bab-amber-deep: #A43E04;  /* burnt amber — texture depth                    */
+
+  /* Wordmark grays (from the official logo color guide) */
+  --bab-wordmark-dark:  #E5E5E5;  /* "BLOCKCHAIN" on a dark canvas */
+  --bab-wordmark-light: #3D3D3D;  /* "BLOCKCHAIN" on a light canvas */
+
+  /* ---- Berkeley Blue — heritage secondary, rare ---- */
+  --bab-blue:       #003262;
+
+  /* ---- Type ---- */
+  --bab-display: "EB Garamond", Georgia, "Times New Roman", serif;
+  --bab-sans:    "Instrument Sans", -apple-system, "Segoe UI", Helvetica, sans-serif;
+  --bab-mono:    "DM Mono", "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  /* Shipped site sets the hash-field in IBM Plex Mono; DM Mono is the Figma spec
+     for labels. Both are on-brand — DM Mono reads a touch softer, IBM Plex a touch
+     more "terminal." Pick one per project and use it everywhere mono appears. */
+  --bab-track:   -0.03em;
+
+  --fs-display-xl: clamp(3.5rem, 9.5vw, 9rem);
+  --fs-display-l:  clamp(3rem, 6.4vw, 6rem);
+  --fs-display-m:  clamp(2.25rem, 4.2vw, 4rem);
+  --fs-display-s:  clamp(1.75rem, 2.6vw, 2.5rem);
+  --fs-lead:       clamp(1.2rem, 1.5vw, 1.44rem);
+  --fs-body:       1rem;
+  --fs-small:      0.875rem;
+  --fs-label:      0.75rem;
+  --fs-micro:      0.6875rem;
+
+  /* ---- Grid & shape ---- */
+  --bab-margin: clamp(20px, 5vw, 69px);
+  --bab-pad:    31px;
+  --bab-row:    46px;
+  --bab-radius: 0px;
+  --bab-hair:   1px;
+  --bab-maxw:   1374px;
+
+  /* ---- Motion ---- */
+  --bab-ease:  cubic-bezier(0.2, 0.6, 0, 1);
+  --bab-fast:  150ms;
+  --bab-slow:  480ms;
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bab-black);
+  color: var(--bab-text);
+  font-family: var(--bab-sans);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  letter-spacing: var(--bab-track);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection { background: var(--bab-gold); color: var(--bab-black); }
+
+/* Universal tracking — the fingerprint. */
+h1, h2, h3, h4, h5, h6, p, a, span, li, button, input, textarea, label {
+  letter-spacing: var(--bab-track);
+}
+
+/* ---------------------------------------------------------------------------
+   Typography utilities
+   ------------------------------------------------------------------------- */
+.bab-display    { font-family: var(--bab-display); font-weight: 500; line-height: 0.9; }
+.bab-display-xl { font-family: var(--bab-display); font-weight: 500; font-size: var(--fs-display-xl); line-height: 0.81; }
+.bab-display-l  { font-family: var(--bab-display); font-weight: 500; font-size: var(--fs-display-l);  line-height: 0.86; }
+.bab-display-m  { font-family: var(--bab-display); font-weight: 500; font-size: var(--fs-display-m);  line-height: 0.92; }
+.bab-display-s  { font-family: var(--bab-display); font-weight: 500; font-size: var(--fs-display-s);  line-height: 1.0;  }
+
+.bab-lead  { font-family: var(--bab-sans); font-size: var(--fs-lead); line-height: 1.4; color: var(--bab-text); }
+.bab-body  { font-family: var(--bab-sans); font-size: var(--fs-body); line-height: 1.5; }
+.bab-small { font-family: var(--bab-sans); font-size: var(--fs-small); line-height: 1.45; color: var(--bab-text-dim); }
+
+/* Mono label / eyebrow — UPPERCASE, muted. The "machine" voice. */
+.bab-label {
+  font-family: var(--bab-mono);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  color: var(--bab-text-mute);
+  line-height: 1;
+}
+.bab-mono  { font-family: var(--bab-mono); font-size: var(--fs-small); color: var(--bab-text-mute); }
+.bab-micro { font-family: var(--bab-mono); font-size: var(--fs-micro); text-transform: uppercase; color: var(--bab-text-mute); }
+
+.bab-gold  { color: var(--bab-gold); }
+.bab-dim   { color: var(--bab-text-dim); }
+.bab-mute  { color: var(--bab-text-mute); }
+
+/* ---------------------------------------------------------------------------
+   Layout — the ledger frame
+   ------------------------------------------------------------------------- */
+.bab-container {
+  max-width: var(--bab-maxw);
+  margin-inline: auto;
+  padding-inline: var(--bab-margin);
+}
+
+/* Content framed by vertical hairline rules at the margins (the ledger). */
+.bab-frame {
+  position: relative;
+  border-inline: var(--bab-hair) solid var(--bab-line-soft);
+}
+
+.bab-rule       { border: none; border-top: var(--bab-hair) solid var(--bab-line-soft); margin: 0; }
+.bab-rule-strong{ border: none; border-top: var(--bab-hair) solid var(--bab-line); margin: 0; }
+
+/* Bordered cell — 31px padding, square corners. */
+.bab-cell {
+  padding: var(--bab-pad);
+  border: var(--bab-hair) solid var(--bab-line-soft);
+  border-radius: var(--bab-radius);
+}
+
+/* A row of cells that share hairline borders (collapse doubles). */
+.bab-cells { display: grid; gap: 0; }
+.bab-cells > * + * { border-left: none; }        /* horizontal share */
+@media (max-width: 720px) {
+  .bab-cells { grid-template-columns: 1fr !important; }
+  .bab-cells > * + * { border-left: var(--bab-hair) solid var(--bab-line-soft); border-top: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Components
+   ------------------------------------------------------------------------- */
+
+/* Buttons — sharp, square, Instrument Sans. The shipped site uses a SOLID WHITE
+   primary and a ghost secondary; the trailing → arrow is part of the look.
+   Note: the primary CTA is WHITE, not gold. Gold is reserved for the logo, the
+   nav "Apply" link, hash glints, and active states — never a big button fill. */
+
+/* Primary CTA — solid white, black text. Often full-width in its column. */
+.bab-btn {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 2em;
+  font-family: var(--bab-sans);
+  font-weight: 500;
+  font-size: var(--fs-small);            /* 14px */
+  letter-spacing: -0.01em;
+  color: var(--bab-black);
+  background: var(--bab-white);
+  border: var(--bab-hair) solid var(--bab-white);
+  border-radius: var(--bab-radius);
+  padding: 16px 20px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity var(--bab-fast) var(--bab-ease),
+              background var(--bab-fast) var(--bab-ease),
+              color var(--bab-fast) var(--bab-ease);
+}
+.bab-btn:hover { background: var(--bab-gold); border-color: var(--bab-gold); color: var(--bab-black); }
+.bab-btn::after { content: "→"; }        /* trailing arrow; remove if you add your own */
+
+/* Secondary — ghost. Transparent, dimmed text, hairline top rule, → arrow. */
+.bab-btn-ghost {
+  color: var(--bab-text-dim);
+  background: transparent;
+  border: none;
+  border-top: var(--bab-hair) solid rgba(255,255,255,0.07);
+}
+.bab-btn-ghost:hover { color: var(--bab-white); background: transparent; }
+
+/* Outline variant — hairline box, gold on hover. Good for tertiary actions. */
+.bab-btn-outline {
+  color: var(--bab-text);
+  background: transparent;
+  border: var(--bab-hair) solid var(--bab-line);
+}
+.bab-btn-outline:hover { color: var(--bab-gold); border-color: var(--bab-gold); background: var(--bab-surface-2); }
+
+/* Link — underline offset, gold on hover. */
+.bab-link {
+  color: var(--bab-text);
+  text-decoration: none;
+  border-bottom: var(--bab-hair) solid var(--bab-line-lit);
+  transition: color var(--bab-fast) var(--bab-ease), border-color var(--bab-fast) var(--bab-ease);
+}
+.bab-link:hover { color: var(--bab-gold); border-color: var(--bab-gold); }
+
+/* Tag / pill — mono, hairline, square. */
+.bab-tag {
+  display: inline-flex; align-items: center;
+  font-family: var(--bab-mono);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  color: var(--bab-text-mute);
+  border: var(--bab-hair) solid var(--bab-line-soft);
+  border-radius: var(--bab-radius);
+  padding: 5px 10px;
+}
+
+/* Eyebrow above a heading. */
+.bab-eyebrow {
+  font-family: var(--bab-mono);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  color: var(--bab-gold);          /* the eyebrow is a fine place for one gold */
+  display: inline-block;
+  margin-bottom: var(--bab-row);
+}
+
+/* Index number (01 — 02 — 03) chrome. */
+.bab-index { font-family: var(--bab-mono); font-size: var(--fs-label); color: var(--bab-text-mute); }
+
+/* Stat — big Instrument Sans LIGHT number over a mono label (the live stats band).
+   e.g. "5,000+" / MEMBERS.  Promote exactly one number to gold, never all. */
+.bab-stat {
+  font-family: var(--bab-sans);
+  font-weight: 300;                      /* Light — key to the look */
+  font-size: clamp(2.25rem, 4vw, 3.25rem);
+  line-height: 1;
+  letter-spacing: -0.04em;               /* tighter than body */
+}
+.bab-stat-label {
+  font-family: var(--bab-mono);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  color: var(--bab-text-mute);
+  margin-top: 12px;
+}
+
+/* Focus ring — gold, for accessibility. */
+:where(a, button, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--bab-gold);
+  outline-offset: 2px;
+}
+
+/* Hash-field texture — ambient rows of hex behind heroes/footers.
+   Populate with JS from motifs.md (fills .bab-hashfield with hex + <b>/<i> spans).
+   <b> = warm-dark char, <i> = rare gold glint. Sits at z-index 0; content above. */
+.bab-hashfield {
+  position: absolute; inset: 0; overflow: hidden; z-index: 0;
+  font-family: var(--bab-mono); font-size: 12px; line-height: 1.35;
+  letter-spacing: var(--bab-track);
+  color: var(--bab-text-faint);
+  white-space: pre; user-select: none; pointer-events: none;
+  -webkit-mask-image: radial-gradient(120% 80% at 50% 0%, black, transparent 75%);
+          mask-image: radial-gradient(120% 80% at 50% 0%, black, transparent 75%);
+}
+.bab-hashfield b { color: var(--bab-amber-deep); font-weight: 400; }
+.bab-hashfield i { color: var(--bab-gold-warm); font-style: normal; }
+
+/* ASCII art container. */
+.bab-ascii {
+  font-family: var(--bab-mono); font-size: 9px; line-height: 1;
+  letter-spacing: 0; color: var(--bab-gold-warm); opacity: 0.85;
+  white-space: pre; background: var(--bab-black-true);
+}
+
+/* Dithered/monochrome image treatment (see motifs.md for true dithering). */
+.bab-img-mono {
+  filter: grayscale(1) contrast(1.15) brightness(0.9);
+  mix-blend-mode: screen;   /* drops black bg of a dithered PNG into the canvas */
+}
+
+/* ---------------------------------------------------------------------------
+   Motion
+   ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

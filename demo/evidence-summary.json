@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-10-06T04:49:23.435Z",
+  "microphoneTested": false,
+  "realCodexAgent": true,
+  "realMcpCalls": 31,
+  "completedCues": 13,
+  "executionMode": "Local EVM rehearsal · Anvil · no CRE/DON/Sepolia claim",
+  "assertions": {
+    "everyCueUsedRealMcp": true,
+    "falseConditionWithoutTransaction": true,
+    "confirmedReceiptAndVaultPause": true,
+    "canonicalVaultPaused": true,
+    "alreadyPausedNoop": true,
+    "frozenRevisionPreserved": true,
+    "noFailedRuns": true
+  },
+  "successfulPause": {
+    "runId": "run-f2a61b66-7ef9-4dde-ac9b-336251d04361",
+    "revision": 4,
+    "thresholdUsd": 2835.66,
+    "observedPriceUsd": 2700.49,
+    "sourceObservedAt": "2026-10-06T04:47:30.328687575Z",
+    "chainId": 31337,
+    "contractAddress": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+    "transactionHash": "0x5ba44057baa6627b4b895565206cabc4d0e19bffd7f6877aef99e1b3b106909e",
+    "blockNumber": "5",
+    "receiptStatus": "success",
+    "pausedAfter": true,
+    "verification": "Receiver event and paused state confirmed"
+  },
+  "agentTurnDurationMs": {
+    "min": 17114,
+    "median": 20608,
+    "max": 35260
+  },
+  "plannedDraftRevisionOverlappedRun": false,
+  "evidenceFile": "demo/rehearsal-report.json",
+  "additionalNavigationProbe": {
+    "evidenceFile": "demo/navigation-report.json",
+    "actualMcpCallCount": 8,
+    "agentTurnDurationMs": 30536,
+    "assertions": {
+      "realSemanticMcp": true,
+      "sourceVisibleAndPinned": true,
+      "draftConditionsRestored": true,
+      "revisionChecksCorrect": true,
+      "olderConfirmedRunSelected": true,
+      "noRunToolCalled": true,
+      "noRunsAdded": true,
+      "immutableRunEvidenceUnchanged": true,
+      "noChainBlockAdded": true
+    },
+    "finalDraftRevision": 8,
+    "selectedConfirmedRunId": "run-f2a61b66-7ef9-4dde-ac9b-336251d04361",
+    "correctedCommitToRenderAcknowledgementMs": {
+      "sampleCount": 7,
+      "min": 15,
+      "median": 17,
+      "max": 24
+    },
+    "microphoneLatencyMeasured": false
+  },
+  "totalProvenMcpCalls": 86,
+  "keyboardInspectionProbe": {
+    "evidenceFile": "demo/ui-inspection-report.json",
+    "actualMcpCallCount": 4,
+    "agentTurnDurationMs": 22012,
+    "assertions": {
+      "allToolsSotto": true,
+      "noRunCommand": true,
+      "noRunsAdded": true,
+      "confirmedOlderPauseSelected": true,
+      "vaultRefreshed": true,
+      "freshReadPaused": true
+    },
+    "blockObservedAt": "2026-10-06T04:47:31.000Z",
+    "readFetchedAt": "2026-10-06T05:00:29.932Z"
+  },
+  "secondTake": {
+    "evidenceFile": "demo/final-rehearsal-report.json",
+    "verifiedAt": "2026-10-06T05:11:08.181Z",
+    "actualMcpCallCount": 31,
+    "completedCues": 13,
+    "assertions": {
+      "everyCueUsedRealMcp": true,
+      "falseConditionWithoutTransaction": true,
+      "confirmedReceiptAndVaultPause": true,
+      "canonicalVaultPaused": true,
+      "alreadyPausedNoop": true,
+      "frozenRevisionsPreserved": true,
+      "noFailedRuns": true
+    },
+    "agentTurnDurationMs": {
+      "min": 17729,
+      "median": 21424,
+      "max": 30568
+    },
+    "usage": {
+      "inputTokens": 663426,
+      "cachedInputTokens": 485248,
+      "outputTokens": 2669
+    },
+    "firstTakeUsage": {
+      "inputTokens": 764481,
+      "cachedInputTokens": 489088
+    },
+    "observedInputTokenReductionPercent": 13.2,
+    "timingComparisonNote": "Two independent takes; timing changes are observations, not proof that compaction caused them. Median agent duration was 20.608s originally and 21.424s in the final take.",
+    "renderAcknowledgements": {
+      "sampleCount": 18,
+      "minMs": 8,
+      "medianMs": 13,
+      "maxMs": 20
+    },
+    "successfulPause": {
+      "runId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+      "revision": 4,
+      "thresholdUsd": 2840.11,
+      "observedPriceUsd": 2705.07,
+      "sourceObservedAt": "2026-10-06T05:09:29.802275518Z",
+      "transactionHash": "0x02f81a058f1e52a9698aec7635f7001ba8c37ed4036e54d2f357b3501f0b94d0",
+      "blockNumber": "7",
+      "receiptStatus": "success",
+      "pausedAfter": true,
+      "chainId": 31337,
+      "contractAddress": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+      "verification": "Receiver event and paused state confirmed"
+    },
+    "plannedDraftRevisionOverlappedRun": false,
+    "metadataFidelityNote": "Portable execution inputs omit inherited discovery tradeId and chart history. A subsequent metadata fix does not change frozen price, threshold, source timestamp, receipt, or assertions; raw reports remain as observed."
+  },
+  "finalMetadataProbe": {
+    "evidenceFile": "demo/final-probe-report.json",
+    "actualMcpCallCount": 10,
+    "successfulMcpCallCount": 9,
+    "failedMcpCallCount": 1,
+    "agentTurnDurationMs": 46352,
+    "assertions": {
+      "allToolsSotto": true,
+      "exactlyOneAdditionalNoopRun": true,
+      "falseConditionProducedNoTransaction": true,
+      "revisionChecksCorrect": true,
+      "draftRestoredAsRevision8": true,
+      "confirmedRevision4Selected": true,
+      "sourceVisibleAndPinned": true,
+      "refreshedActualPriceHistory": true,
+      "executionInputWithoutInheritedTradeId": true,
+      "executionHistoryContainsOnlyActualInput": true,
+      "olderRunsPreservedExactly": true,
+      "confirmedReceiptUnchanged": true,
+      "chainBlockUnchanged": true,
+      "invalidRunFocusRecovered": true
+    },
+    "newNoopRunId": "run-e555a3b7-c4ff-4f69-ad03-bdd77ec66920",
+    "finalDraftRevision": 8,
+    "selectedConfirmedRunId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+    "blockAfter": 7,
+    "recovery": "Rejected synthetic run focus recovered using get_run"
+  },
+  "directRunFocusProbe": {
+    "evidenceFile": "demo/direct-run-focus-report.json",
+    "actualMcpCallCount": 2,
+    "agentTurnDurationMs": 22027,
+    "assertions": {
+      "allToolsSotto": true,
+      "directSemanticRunFocusSucceeded": true,
+      "noRecoveryOrGetRunFallback": true,
+      "noPatchUndoOrRun": true,
+      "draftRevision8Preserved": true,
+      "fourRunsPreserved": true,
+      "frozenSnapshotHashesUnchanged": true,
+      "confirmedRevision4Selected": true,
+      "sourceStillVisibleAndPinned": true,
+      "chainBlock7Unchanged": true
+    },
+    "selectedConfirmedRunId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+    "renderAcknowledgementMs": 5
+  }
+}

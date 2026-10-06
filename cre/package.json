@@ -1,0 +1,20 @@
+{
+  "name": "origins-cre-workflow",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "build:wasm": "cre-compile workflow/main.ts workflow/workflow.wasm",
+    "install:cli": "bun install-cli.ts"
+  },
+  "dependencies": {
+    "@chainlink/cre-sdk": "1.23.0",
+    "viem": "^2.38.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/bun": "latest"
+  }
+}

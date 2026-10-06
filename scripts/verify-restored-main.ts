@@ -1,0 +1,34 @@
+import {resolve} from 'node:path';
+import {parseAbi,decodeEventLog} from 'viem';
+import {localRpc} from './snapshot-local';
+const root=resolve(import.meta.dir,'..');
+const before=await Bun.file(resolve(root,'.data/anvil-replacement-before.json')).json();
+const deployment=await Bun.file(resolve(root,'contracts/deployment.local.json')).json();
+if(deployment.rpcUrl!=='http://127.0.0.1:8545'||deployment.chainId!==31337)throw new Error('Only isolated local chain supported');
+const after={chainId:await localRpc('eth_chainId'),head:await localRpc<any>('eth_getBlockByNumber',['latest',false]),balance:await localRpc<string>('eth_getBalance',[deployment.address,'latest']),paused:await localRpc<string>('eth_call',[{to:deployment.address,data:'0x5c975abb'},'latest'])};
+if(after.chainId!==before.chainId||after.head.hash!==before.head.hash||after.head.number!==before.head.number||after.head.number!=='0x7'||after.balance!==before.balance||after.paused!==before.paused||BigInt(after.paused)!==1n||BigInt(after.balance)!==1204900000000000000n)throw new Error('Restored main node head/vault differs from original node');
+const abi=parseAbi(['event SpendingPaused(bytes32 indexed runId,uint256 indexed revision,uint256 priceUsdCents,uint256 thresholdUsdCents,uint256 observedAt)']);
+const receipts=[];
+for(const original of before.receipts) {
+  const hash=original.receipt.transactionHash;
+  const receipt=await localRpc<any>('eth_getTransactionReceipt',[hash]);
+  const transaction=await localRpc<any>('eth_getTransactionByHash',[hash]);
+  if(!receipt||receipt.status!=='0x1'||receipt.blockHash!==original.receipt.blockHash||JSON.stringify(receipt.logs)!==JSON.stringify(original.receipt.logs)||!transaction||transaction.hash!==original.transaction.hash||transaction.blockHash!==original.transaction.blockHash||transaction.input!==original.transaction.input)throw new Error('A restored transaction/receipt/event differs from original node');
+  const entry=receipt.logs.find((entry:any)=>entry.address.toLowerCase()===deployment.address.toLowerCase());
+  if(!entry)throw new Error('Restored receiver event missing');
+  const event=decodeEventLog({abi,data:entry.data,topics:entry.topics});
+  const receiverEvent={name:event.eventName,runId:event.args.runId,revision:Number(event.args.revision),priceUsdCents:Number(event.args.priceUsdCents),thresholdUsdCents:Number(event.args.thresholdUsdCents),observedAtSeconds:Number(event.args.observedAt)};
+  receipts.push({hash,blockNumber:Number(BigInt(receipt.blockNumber)),blockHash:receipt.blockHash,status:'success',receiptRetained:true,transactionLookupRetained:true,transactionCalldataMatches:true,allLogsMatchOriginal:true,logCount:receipt.logs.length,receiverEvent});
+}
+const statePath=resolve(root,'.data/anvil-state.json');
+const previousModified=Bun.file(statePath).lastModified;
+await Bun.sleep(5500);
+const saved=await Bun.file(statePath).json();
+const periodicCheckpointConfirmed=Bun.file(statePath).lastModified>previousModified&&saved.best_block_number===7;
+if(!periodicCheckpointConfirmed)throw new Error('Main persistent node did not checkpoint block 7');
+const preflight=await fetch('http://127.0.0.1:8545',{method:'OPTIONS',headers:{Origin:'https://unrelated.example','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'}});
+const browserCorsPermission=preflight.headers.get('access-control-allow-origin');
+if(browserCorsPermission)throw new Error('Owned Anvil unexpectedly exposes CORS to browser pages');
+const report={verifiedAt:new Date().toISOString(),mode:'local-evm-rehearsal',chainId:31337,processReplacementOnly:true,transactionsSubmittedDuringReplacement:0,head:{blockNumber:7,hash:after.head.hash,unchanged:true},vault:{address:deployment.address,forwarder:deployment.forwarder,balanceWei:BigInt(after.balance).toString(),balanceEth:'1.2049',paused:true,unchanged:true},receipts,checkpoint:{file:'.data/anvil-state.json',loadedSuccessfully:true,historicalStatesPreserved:true,periodicIntervalSeconds:5,periodicCheckpointConfirmed},browserCorsPermission:null,containsPrivateKeys:false};
+await Bun.write(resolve(root,'demo/chain-persistence-report.json'),JSON.stringify(report,null,2));
+console.log(JSON.stringify({verified:true,head:report.head,paused:report.vault.paused,balanceEth:report.vault.balanceEth,retainedReceiptBlocks:receipts.map(receipt=>receipt.blockNumber),periodicCheckpointConfirmed,browserCorsPermission},null,2));

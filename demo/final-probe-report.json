@@ -1,0 +1,534 @@
+{
+  "schemaVersion": 1,
+  "title": "Final real-agent false run, undo, metadata and receipt probe",
+  "verifiedAt": "2026-10-06T05:18:09.836Z",
+  "microphoneTested": false,
+  "browserCameraTransitionsIndividuallyObserved": false,
+  "executionMode": "Local EVM · restored Anvil chain 31337",
+  "actualMcpCallCount": 10,
+  "successfulMcpCallCount": 9,
+  "failedMcpCallCount": 1,
+  "turn": {
+    "turnId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec",
+    "threadId": "01a10fa3-f4a6-7e91-a5fe-c6be03053aa9",
+    "startedAt": "2026-10-06T05:16:04.530Z",
+    "completedAt": "2026-10-06T05:16:50.882Z",
+    "durationMs": 46352,
+    "ok": true,
+    "usage": {
+      "input_tokens": 163380,
+      "cached_input_tokens": 127104,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 711,
+      "reasoning_output_tokens": 11
+    },
+    "mcpTools": [
+      {
+        "name": "get_context",
+        "server": "sotto",
+        "arguments": {},
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "When ETH / USD is below $2,839.87, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+          "seq": 120,
+          "revision": 6
+        },
+        "at": "2026-10-06T05:16:15.985Z"
+      },
+      {
+        "name": "patch_workflow",
+        "server": "sotto",
+        "arguments": {
+          "expectedRevision": 6,
+          "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-patch",
+          "patch": {
+            "threshold": 1
+          },
+          "reason": "Set draft threshold to $1 for requested false-condition run, preserving guards."
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Revision 7. When ETH / USD is below $1, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+          "seq": 122,
+          "revision": 7
+        },
+        "at": "2026-10-06T05:16:21.489Z"
+      },
+      {
+        "name": "run_workflow",
+        "server": "sotto",
+        "arguments": {
+          "expectedRevision": 7,
+          "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-run"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Run run-e555a3b7-c4ff-4f69-ad03-bdd77ec66920 started against immutable revision 7.",
+          "runId": "run-e555a3b7-c4ff-4f69-ad03-bdd77ec66920",
+          "seq": 124,
+          "revision": 7
+        },
+        "at": "2026-10-06T05:16:25.938Z"
+      },
+      {
+        "name": "undo_revision",
+        "server": "sotto",
+        "arguments": {
+          "expectedRevision": 7,
+          "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-undo"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Restored revision 6 as revision 8. When ETH / USD is below $2,839.87, the observation is no more than 60 seconds old, and the grant vault is not already paused, pause grant vault spending.",
+          "seq": 135,
+          "revision": 8
+        },
+        "at": "2026-10-06T05:16:32.584Z"
+      },
+      {
+        "name": "inspect_object",
+        "server": "sotto",
+        "arguments": {
+          "reference": "price",
+          "refresh": true,
+          "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-price"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "ETH / USD: $2703.67. Live exchange trade · source timestamp. Observed 2026-10-06T05:16:39.396636Z.",
+          "seq": 136,
+          "revision": 8
+        },
+        "at": "2026-10-06T05:16:41.138Z"
+      },
+      {
+        "name": "focus_object",
+        "server": "sotto",
+        "arguments": {
+          "reference": "source:coinbase",
+          "pin": true,
+          "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-pin"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Focused: Coinbase Exchange.",
+          "seq": 139,
+          "revision": 8
+        },
+        "at": "2026-10-06T05:16:41.149Z"
+      },
+      {
+        "name": "get_run",
+        "server": "sotto",
+        "arguments": {
+          "runId": "run-29f056c4-809a-4edb-b563-399624c586e1"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Run revision 4: confirmed. Confirmed receipt + SpendingPaused event + fresh paused() read at block 7",
+          "runId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+          "seq": 141,
+          "revision": 8
+        },
+        "at": "2026-10-06T05:16:41.159Z"
+      },
+      {
+        "name": "inspect_object",
+        "server": "sotto",
+        "arguments": {
+          "reference": "vault",
+          "refresh": true,
+          "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-vault"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Grant vault: paused, 1.2049 ETH. Actual local contract · Anvil.",
+          "seq": 143,
+          "revision": 8
+        },
+        "at": "2026-10-06T05:16:41.180Z"
+      },
+      {
+        "name": "focus_object",
+        "server": "sotto",
+        "arguments": {
+          "reference": "run:run-29f056c4-809a-4edb-b563-399624c586e1",
+          "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-show"
+        },
+        "status": "failed",
+        "result": {
+          "ok": false,
+          "summary": "That object has not been discovered yet",
+          "error": "That object has not been discovered yet",
+          "seq": 145,
+          "revision": 8
+        },
+        "at": "2026-10-06T05:16:41.193Z"
+      },
+      {
+        "name": "get_run",
+        "server": "sotto",
+        "arguments": {
+          "runId": "run-29f056c4-809a-4edb-b563-399624c586e1"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Run revision 4: confirmed. Confirmed receipt + SpendingPaused event + fresh paused() read at block 7",
+          "runId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+          "seq": 147,
+          "revision": 8
+        },
+        "at": "2026-10-06T05:16:46.120Z"
+      }
+    ]
+  },
+  "assertions": {
+    "allToolsSotto": true,
+    "exactlyOneAdditionalNoopRun": true,
+    "falseConditionProducedNoTransaction": true,
+    "revisionChecksCorrect": true,
+    "draftRestoredAsRevision8": true,
+    "confirmedRevision4Selected": true,
+    "sourceVisibleAndPinned": true,
+    "refreshedActualPriceHistory": true,
+    "executionInputWithoutInheritedTradeId": true,
+    "executionHistoryContainsOnlyActualInput": true,
+    "olderRunsPreservedExactly": true,
+    "confirmedReceiptUnchanged": true,
+    "chainBlockUnchanged": true,
+    "invalidRunFocusRecovered": true
+  },
+  "newRun": {
+    "id": "run-e555a3b7-c4ff-4f69-ad03-bdd77ec66920",
+    "revision": 7,
+    "snapshot": {
+      "revision": 7,
+      "threshold": 1,
+      "maxAgeSeconds": 60,
+      "skipPaused": true,
+      "createdAt": "2026-10-06T05:16:21.471Z",
+      "reason": "Set draft threshold to $1 for requested false-condition run, preserving guards."
+    },
+    "status": "no-op",
+    "startedAt": "2026-10-06T05:16:25.932Z",
+    "executionMode": "Local EVM rehearsal · no CRE consensus",
+    "decisions": [
+      {
+        "id": "threshold",
+        "label": "threshold",
+        "passed": false,
+        "detail": "$2703.28 < $1.00"
+      },
+      {
+        "id": "freshness",
+        "label": "freshness",
+        "passed": true,
+        "detail": "Observation age 2.7s; maximum 60s"
+      },
+      {
+        "id": "vault-state",
+        "label": "vault-state",
+        "passed": false,
+        "detail": "Vault already paused; no action needed"
+      }
+    ],
+    "logs": [
+      {
+        "at": "2026-10-06T05:16:25.932Z",
+        "stage": "queued",
+        "message": "Frozen draft revision 7"
+      },
+      {
+        "at": "2026-10-06T05:16:25.969Z",
+        "stage": "fetching",
+        "message": "Fetching fresh execution inputs"
+      },
+      {
+        "at": "2026-10-06T05:16:26.121Z",
+        "stage": "evaluating",
+        "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+      },
+      {
+        "at": "2026-10-06T05:16:26.130Z",
+        "stage": "fetching",
+        "message": "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp"
+      },
+      {
+        "at": "2026-10-06T05:16:26.231Z",
+        "stage": "fetching",
+        "message": "Read vault state and balance directly from local EVM"
+      },
+      {
+        "at": "2026-10-06T05:16:26.232Z",
+        "stage": "evaluating",
+        "message": "STOP threshold: $2703.28 < $1.00"
+      },
+      {
+        "at": "2026-10-06T05:16:26.234Z",
+        "stage": "evaluating",
+        "message": "PASS freshness: Observation age 2.7s; maximum 60s"
+      },
+      {
+        "at": "2026-10-06T05:16:26.236Z",
+        "stage": "evaluating",
+        "message": "STOP vault-state: Vault already paused; no action needed"
+      },
+      {
+        "at": "2026-10-06T05:16:26.237Z",
+        "stage": "reporting",
+        "message": "No report sent"
+      },
+      {
+        "at": "2026-10-06T05:16:26.240Z",
+        "stage": "runner",
+        "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+      },
+      {
+        "at": "2026-10-06T05:16:26.240Z",
+        "stage": "runner",
+        "message": "Fetching fresh Coinbase ETH/USD ticker with source trade timestamp"
+      },
+      {
+        "at": "2026-10-06T05:16:26.240Z",
+        "stage": "runner",
+        "message": "Read vault state and balance directly from local EVM"
+      },
+      {
+        "at": "2026-10-06T05:16:26.240Z",
+        "stage": "runner",
+        "message": "STOP threshold: $2703.28 < $1.00"
+      },
+      {
+        "at": "2026-10-06T05:16:26.240Z",
+        "stage": "runner",
+        "message": "PASS freshness: Observation age 2.7s; maximum 60s"
+      },
+      {
+        "at": "2026-10-06T05:16:26.240Z",
+        "stage": "runner",
+        "message": "STOP vault-state: Vault already paused; no action needed"
+      },
+      {
+        "at": "2026-10-06T05:16:26.240Z",
+        "stage": "runner",
+        "message": "No report sent"
+      }
+    ],
+    "inputs": {
+      "price": {
+        "id": "price:eth-usd",
+        "kind": "price",
+        "label": "ETH / USD",
+        "visible": true,
+        "pinned": false,
+        "data": {
+          "price": 2703.28,
+          "unit": "USD",
+          "symbol": "ETH",
+          "history": [
+            {
+              "price": 2703.28,
+              "observedAt": "2026-10-06T05:16:23.485425082Z"
+            }
+          ],
+          "historyLabel": "Actual execution observation"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "observedAt": "2026-10-06T05:16:23.485425082Z",
+          "fetchedAt": "2026-10-06T05:16:26.239Z",
+          "kind": "live",
+          "label": "Live exchange observation · execution input"
+        }
+      },
+      "vault": {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "visible": true,
+        "pinned": false,
+        "data": {
+          "paused": true,
+          "balance": "1.2049",
+          "balanceEth": 1.2049,
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "chainId": 31337,
+          "blockNumber": "7",
+          "fixture": false,
+          "network": "Local Anvil",
+          "balanceWei": "1204900000000000000"
+        },
+        "provenance": {
+          "source": "Anvil contract read",
+          "observedAt": "2026-10-06T05:09:31.000Z",
+          "fetchedAt": "2026-10-06T05:16:26.240Z",
+          "kind": "chain",
+          "chainId": 31337,
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "label": "Actual local contract · Anvil"
+        }
+      }
+    },
+    "completedAt": "2026-10-06T05:16:26.240Z"
+  },
+  "restoredDraft": {
+    "revision": 8,
+    "thresholdUsd": 2839.87,
+    "maxAgeSeconds": 60,
+    "skipPaused": true,
+    "restoredFromRevision": 6
+  },
+  "selectedConfirmedRun": {
+    "runId": "run-29f056c4-809a-4edb-b563-399624c586e1",
+    "revision": 4,
+    "status": "confirmed",
+    "thresholdUsd": 2840.11,
+    "observedPriceUsd": 2705.07,
+    "sourceObservedAt": "2026-10-06T05:09:29.802275518Z",
+    "evidence": {
+      "transactionHash": "0x02f81a058f1e52a9698aec7635f7001ba8c37ed4036e54d2f357b3501f0b94d0",
+      "blockNumber": "7",
+      "receiptStatus": "success",
+      "pausedAfter": true,
+      "chainId": 31337,
+      "contractAddress": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+      "verification": "Receiver event and paused state confirmed"
+    }
+  },
+  "refreshedPrice": {
+    "priceUsd": 2703.67,
+    "source": {
+      "source": "Coinbase Exchange",
+      "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+      "observedAt": "2026-10-06T05:16:39.396636Z",
+      "fetchedAt": "2026-10-06T05:16:41.125Z",
+      "kind": "live",
+      "label": "Live exchange trade · source timestamp"
+    },
+    "historyPointCount": 100,
+    "firstObservation": {
+      "price": 2702.48,
+      "observedAt": "2026-10-06T05:15:19.062091Z"
+    },
+    "latestObservation": {
+      "price": 2703.67,
+      "observedAt": "2026-10-06T05:16:39.396636Z"
+    },
+    "historyLabel": "Actual exchange trades · latest 100 observations"
+  },
+  "source": {
+    "id": "source:coinbase",
+    "visible": true,
+    "pinned": true,
+    "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100"
+  },
+  "vaultFreshRead": {
+    "paused": true,
+    "blockNumber": "7",
+    "blockObservedAt": "2026-10-06T05:09:31.000Z",
+    "readFetchedAt": "2026-10-06T05:16:41.173Z"
+  },
+  "chain": {
+    "chainId": 31337,
+    "blockBefore": 7,
+    "blockAfter": 7,
+    "persistedRestoreRetainedReceipt": true
+  },
+  "renderAcknowledgements": {
+    "sampleCount": 8,
+    "minMs": 9,
+    "medianMs": 15.5,
+    "maxMs": 33,
+    "operations": [
+      {
+        "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-patch",
+        "tool": "patch_workflow",
+        "receivedAt": "2026-10-06T05:16:21.471Z",
+        "committedAt": "2026-10-06T05:16:21.483Z",
+        "commitMs": 11.83,
+        "renderedAt": "2026-10-06T05:16:21.494Z",
+        "renderMs": 11
+      },
+      {
+        "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-run",
+        "tool": "run_workflow",
+        "receivedAt": "2026-10-06T05:16:25.931Z",
+        "committedAt": "2026-10-06T05:16:25.932Z",
+        "commitMs": 0.56,
+        "renderedAt": "2026-10-06T05:16:25.950Z",
+        "renderMs": 18
+      },
+      {
+        "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-undo",
+        "tool": "undo_revision",
+        "receivedAt": "2026-10-06T05:16:32.577Z",
+        "committedAt": "2026-10-06T05:16:32.578Z",
+        "commitMs": 0.78,
+        "renderedAt": "2026-10-06T05:16:32.587Z",
+        "renderMs": 9
+      },
+      {
+        "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-price",
+        "tool": "inspect_object",
+        "receivedAt": "2026-10-06T05:16:40.799Z",
+        "committedAt": "2026-10-06T05:16:41.125Z",
+        "commitMs": 325.67,
+        "renderedAt": "2026-10-06T05:16:41.140Z",
+        "renderMs": 15
+      },
+      {
+        "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-pin",
+        "tool": "focus_object",
+        "receivedAt": "2026-10-06T05:16:41.143Z",
+        "committedAt": "2026-10-06T05:16:41.143Z",
+        "commitMs": 0.06,
+        "renderedAt": "2026-10-06T05:16:41.159Z",
+        "renderMs": 16
+      },
+      {
+        "operationId": "bd52d347-d89e-4004-833b-287683b9ce4b",
+        "tool": "get_run",
+        "receivedAt": "2026-10-06T05:16:41.153Z",
+        "committedAt": "2026-10-06T05:16:41.154Z",
+        "commitMs": 0.34,
+        "renderedAt": "2026-10-06T05:16:41.187Z",
+        "renderMs": 33
+      },
+      {
+        "operationId": "agent-879f54aa-94ac-410e-b898-bc210c07f5ec-vault",
+        "tool": "inspect_object",
+        "receivedAt": "2026-10-06T05:16:41.164Z",
+        "committedAt": "2026-10-06T05:16:41.173Z",
+        "commitMs": 8.59,
+        "renderedAt": "2026-10-06T05:16:41.201Z",
+        "renderMs": 28
+      },
+      {
+        "operationId": "a4c80d95-3e6a-4417-be57-95cbae16824e",
+        "tool": "get_run",
+        "receivedAt": "2026-10-06T05:16:46.114Z",
+        "committedAt": "2026-10-06T05:16:46.114Z",
+        "commitMs": 0.22,
+        "renderedAt": "2026-10-06T05:16:46.125Z",
+        "renderMs": 11
+      }
+    ]
+  },
+  "limitations": [
+    "One synthetic run focus was rejected as undiscovered; the model recovered by selecting it through get_run.",
+    "New execution history contains one actual runner observation; it does not inherit the prior discovery trade history.",
+    "Historical run records are retained exactly as observed, including their legacy metadata. Portable selected-receipt evidence omits that legacy chart metadata.",
+    "Block observation time and later fetch time describe separate events.",
+    "Render acknowledgements exclude model and microphone latency."
+  ]
+}

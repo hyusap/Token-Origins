@@ -1,0 +1,71 @@
+{
+  "verifiedAt": "2026-10-06T05:14:42.436Z",
+  "mode": "local-evm-rehearsal",
+  "chainId": 31337,
+  "processReplacementOnly": true,
+  "transactionsSubmittedDuringReplacement": 0,
+  "head": {
+    "blockNumber": 7,
+    "hash": "0x08b4ee9cb91c7fb9e16077b7c9119aa68b32c4099da0a091fd1e1006ceec8bb9",
+    "unchanged": true
+  },
+  "vault": {
+    "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+    "forwarder": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+    "balanceWei": "1204900000000000000",
+    "balanceEth": "1.2049",
+    "paused": true,
+    "unchanged": true
+  },
+  "receipts": [
+    {
+      "hash": "0x5ba44057baa6627b4b895565206cabc4d0e19bffd7f6877aef99e1b3b106909e",
+      "blockNumber": 5,
+      "blockHash": "0x561b77f9679922ee37d4b3275f5636a645bc58f6386a2bd91d61561d8fcc6acc",
+      "status": "success",
+      "receiptRetained": true,
+      "transactionLookupRetained": true,
+      "transactionCalldataMatches": true,
+      "allLogsMatchOriginal": true,
+      "logCount": 2,
+      "receiverEvent": {
+        "name": "SpendingPaused",
+        "runId": "0x55e6048f06d3dad7461c03f3a05ccc297a4308c4ef418e223da843fc62744213",
+        "revision": 4,
+        "priceUsdCents": 270049,
+        "thresholdUsdCents": 283566,
+        "observedAtSeconds": 1791262050
+      }
+    },
+    {
+      "hash": "0x02f81a058f1e52a9698aec7635f7001ba8c37ed4036e54d2f357b3501f0b94d0",
+      "blockNumber": 7,
+      "blockHash": "0x08b4ee9cb91c7fb9e16077b7c9119aa68b32c4099da0a091fd1e1006ceec8bb9",
+      "status": "success",
+      "receiptRetained": true,
+      "transactionLookupRetained": true,
+      "transactionCalldataMatches": true,
+      "allLogsMatchOriginal": true,
+      "logCount": 2,
+      "receiverEvent": {
+        "name": "SpendingPaused",
+        "runId": "0xab0ba6108853cafa7431efa5f7baf01397f2572a485695b483e28202e1cc1bc9",
+        "revision": 4,
+        "priceUsdCents": 270507,
+        "thresholdUsdCents": 284011,
+        "observedAtSeconds": 1791263369
+      }
+    }
+  ],
+  "checkpoint": {
+    "file": ".data/anvil-state.json",
+    "loadedSuccessfully": true,
+    "historicalStatesPreserved": true,
+    "periodicIntervalSeconds": 5,
+    "periodicCheckpointConfirmed": true,
+    "historicalStateCount": 7,
+    "historicalBlock5Paused": true
+  },
+  "browserCorsPermission": null,
+  "containsPrivateKeys": false
+}
