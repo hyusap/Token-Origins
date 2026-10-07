@@ -1,0 +1,24 @@
+{
+  "verified": true,
+  "verifiedAt": "2026-10-07T09:29:24.986Z",
+  "browser": "Playwriter controlled Chrome",
+  "typedOperatorCommands": true,
+  "productionBuild": true,
+  "chainProof": "demo/browser-cre-broadcast-verification.json",
+  "independentReceiptChecks": 15,
+  "desktopScreenshot": "demo/judge-final-desktop.png",
+  "mobileScreenshot": "demo/judge-final-mobile.png",
+  "mobileViewport": {
+    "width": 390,
+    "height": 844,
+    "documentScrollWidth": 390
+  },
+  "visuallyInspected": true,
+  "primaryApi": 6,
+  "judgeApi": 6,
+  "sameRuntime": true,
+  "limitations": [
+    "CRE local simulation with real Sepolia broadcast; no deployed DON claim",
+    "Recovered source data remains in the original recorded CRE evidence; missing archived canvas readings are explicitly unavailable"
+  ]
+}

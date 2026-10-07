@@ -1,116 +1,35 @@
-# Sotto TODO — Ayush and Shivam
+# Woga readiness
 
-Baseline: `b19a04b` · Plan created 2026-10-07.
-Read the [detailed implementation plan](docs/implementation-plan.md) for code
-locations, interfaces, dependencies, and acceptance scenarios J1–J15.
+Updated October 7, 2026. CRE is the sole product execution authority following the user's explicit scope requirement.
 
-Check items only after their acceptance evidence exists. The review's passing
-baseline tests do not mean these tasks are finished. No implementation changes
-are included in this planning update.
+## Verified
 
-## Shared contract — first handoff
+- [x] Graph/report v2 with structural hashes, exact source identity and frozen run/receiver/revision.
+- [x] Comparisons, AND/OR/NOT, freshness and vault-state predicates; exact Coinbase markets and registered Chainlink feeds.
+- [x] Actual CRE HTTP/EVM capability workflow, report generation and Sepolia receiver delivery; direct signer fallback removed.
+- [x] API 6 HTTP/MCP scope exposes only implemented CRE actions. Direct swap/copy/Solana tools and incompatible graphs are rejected.
+- [x] CRE-only frozen monitors; archived direct jobs cannot reactivate. Restart pauses schedules; uncertain recovery remains read-only.
+- [x] Submitted hash persistence, retry deduplication and receipt/event/historical state correlation.
+- [x] Independent public Sepolia re-verification of the merged CRE simulation broadcast (18 proof checks).
+- [x] Minimal responsive canvas, immutable run inspection, live CRE readiness, distinct historical proof and accessible prompt controls.
+- [x] Real local Whisper installation and browser dictation→authenticated operator→live market reading E2E (9 checks, synthetic spoken input).
+- [x] 266 application/CRE tests, TypeScript/frontend/WASM builds, 10 receiver tests; direct engineering test modules remain explicit research.
+- [x] Real default-model operator refuses unsupported direct action requests without substituting a pause or writing anything.
 
-- [ ] **Shivam; Ayush reviews:** agree on versioned graph, source identity, units/precision, and action schema.
-- [ ] **Shivam; Ayush reviews:** define complete immutable observations, node/root/guard results, and action outcomes.
-- [ ] **Shivam; Ayush reviews:** separate retries from fresh runs and define test/run/activate semantics.
-- [ ] **Both:** publish representative UI/API fixture states with expected graph and spoken summaries.
-- [ ] **Both:** agree on shared-file ownership and merge the contract PR before divergent implementations.
+[CRE boundary](demo/cre-boundary-verification.json) · [Public proof](demo/sepolia-independent-proof-verification.json) · [Voice E2E](demo/voice-browser-e2e-verification.json).
 
-## Shivam — priority execution fixes
+## Required to complete current execution acceptance
 
-- [ ] **S1:** prevent simulated sells from reaching CRE `writeReport`; test zero writes (J3).
-- [ ] **S1:** make fixture, local EVM, and CRE paths evaluate the same validated graph (J2).
-- [ ] **S1:** eliminate first-comparison/node-order-dependent receiver thresholds (J1).
-- [ ] **S1:** validate graph structure at every execution boundary, including direct CRE input (J8).
-- [ ] **S1:** define the new receiver/report contract and reject unsupported old-receiver combinations before submission.
-- [ ] **S1:** test action-specific guards, authorization, expiry, replay, and target/chain/policy binding.
+- [x] Authenticate the CRE CLI through its standard login flow; actual status verified.
+- [x] Fresh actual CRE frozen-policy monitor/stop/retry/restart acceptance: 10 checks passed ([evidence](demo/cre-acceptance-verification.json)).
+- [x] Fund a fresh project test wallet, deploy an owned report-v2 Sepolia receiver, and verify a new CRE broadcast plus no-op/replay/refusal cases through two RPC providers.
+- [x] Actual production browser→operator→CRE Sepolia delivery; 15 independent receipt checks passed. Read-only recovery verified without resubmission. Desktop/mobile visual proof saved.
 
-## Ayush — priority UI fixes
+## Explicitly deferred
 
-- [ ] **A1:** fix larger graphs being classified as legacy and add a five-node regression test.
-- [ ] **A1:** restore simulated-order receipts and completion captions; remove false block/pause claims (J3).
-- [ ] **A1:** derive policy/action wording from the actual graph instead of fixed ETH/below/pause copy.
-- [ ] **A1:** distinguish root outcome from false intermediate branches; use node IDs for results.
-- [ ] **A1:** show mandatory guard failures and accurate no-op explanations.
+- [ ] Deployed DON access, billing, workflow metadata authorization and actual deployed trigger execution. Simulation does not claim this.
+- [ ] CRE copy-trading receiver/report/workflow and public-chain proof. Standalone copier is faded. [Requirements](docs/cre-copytrading-feasibility.md).
+- [ ] CRE Solana receiver program and verified report-delivered action. Direct signer is disabled.
+- [ ] Human microphone and user-started Codex desktop voice walkthrough; synthetic browser speech proof does not establish either.
 
-## Ayush — graph and voice interaction
-
-- [ ] **A2:** render actual graph edges and nested AND/OR/NOT structure (J4).
-- [ ] **A2:** support stable node focus, source inspection, and configured-but-unfetched inputs.
-- [ ] **A2:** preserve layout/viewport while routing semantic edits through revision-checked tools.
-- [ ] **A2:** render source identity and live age from timestamps.
-- [ ] **A2:** inspect the selected run's frozen graph and inputs separately from the draft (J5).
-- [ ] **A3:** update operator instructions and tool guidance for composed-graph edits.
-- [ ] **A3:** validate spoken source/operator/group edits, ambiguity, undo, and old-run inspection (J11).
-- [ ] **A3:** preserve completion-first captions and truthful stop/interruption behavior.
-- [ ] **A3:** update rehearsal prompts and record the working live voice path with timing evidence.
-
-## Shivam — Chainlink, persistence, and evidence
-
-- [ ] **S2:** bind every source to provider/network/address; reject unsupported mode combinations (J7).
-- [ ] **S2:** validate source identity, value precision, and per-source timestamps/freshness (J8).
-- [ ] **S2:** fetch only required inputs, deduplicate reads, and bound the plan to CRE quotas.
-- [ ] **S2:** archive every execution reading/provenance and preserve it through `get_run`/MCP compaction.
-- [ ] **S2:** correlate receipt, receiver event, and fresh post-state to the intended run/revision/target (J9).
-- [ ] **S3:** migrate pre-graph workflows/revisions/restorable sessions without fabricating old evidence (J6).
-- [ ] **S3:** persist deduplication and recover uncertain submitted transactions without blind replay (J10).
-- [ ] **S3:** version graph semantics and reject incompatible MCP/backend combinations.
-- [ ] **S3:** remove automatic destructive chain replacement; verify restart persistence (J10).
-
-## Shivam — prove execution onchain
-
-- [ ] **S4:** run contract tests and local Anvil integration cases for composed graphs.
-- [ ] **S4:** confirm CRE access, CLI/SDK setup, Sepolia RPC, funded test signer, and correct simulation forwarder.
-- [ ] **S4:** add a repeatable Sepolia deployment and verification procedure.
-- [ ] **S4:** record actual CRE simulation + Sepolia broadcast: false, true, duplicate, and failure cases.
-- [ ] **S4:** publish portable receipt/event/post-state evidence that Ayush can inspect in the canvas.
-- [ ] **Separate deployed-DON milestone:** obtain deployment access, configure authenticated triggers and production receiver binding, deploy/activate, and record actual deployed execution.
-
-## Solana write target — hackathon track
-
-CRE writes to Solana directly, through the Keystone Forwarder into a receiver
-program's `on_report`. The installed `@chainlink/cre-sdk@1.23.0` already ships
-`SolanaClient`, the write capability, the Solana helpers and a contract mock, so
-**no SDK upgrade is needed** and steps S5a–S5b need no credentials. See Phase 1C
-in the detailed plan for the verified API surface and account layout.
-
-Sequence this with S1/S2: it changes the same action and config contracts, so
-doing it afterwards means editing those interfaces twice.
-
-- [ ] **S5a:** make the workflow config a discriminated target (`evm-sepolia` |
-      `solana-devnet`) instead of the hardcoded Sepolia chain selector.
-- [ ] **S5a:** bind each action to its target chain and program/contract so a
-      policy composed for one family cannot silently execute on the other (J12).
-- [ ] **S5a:** decide whether the Solana receiver adopts the EVM
-      `price < threshold` rule, or make `guard:receiver-threshold` target-specific.
-- [ ] **S5b:** add the Solana handler branch: Borsh payload, `ForwarderReport`
-      framing, `calculateAccountsHash`, `prepareSolanaReportRequest`.
-- [ ] **S5b:** test it with the SDK's Solana contract mock; assert account order
-      and account hash, and assert zero live submissions (J13, J14).
-- [ ] **S5c:** write the Anchor receiver mirroring GrantVault: `on_report`
-      deserializes the payload, enforces run/revision/price/staleness, idempotent
-      per run ID (J15). Rust and Anchor are new to this repo; this is the long pole.
-- [ ] **S5c:** unit-test the receiver against a local validator before deploying.
-- [ ] **S5d:** deploy to devnet with a funded keypair and record a real signed
-      report end to end, labelled separately from mocked evidence.
-- [ ] **Ayush:** show the target chain on the canvas and in spoken summaries so a
-      Solana policy is never described as a Sepolia one.
-
-## Joint integration gate — before adding features
-
-- [ ] **Both:** pass J1–J11 from the detailed plan; keep mocked and live evidence distinct.
-- [ ] **Both:** pass application/CRE tests, both typechecks, frontend/WASM builds, and Solidity tests.
-- [ ] **Both:** confirm old evidence survives upgrades, undo/restore, and restart.
-- [ ] **Both:** reconcile README, operator, voice, and CRE documentation with verified behavior.
-
-## Next useful composition increment — after the integration gate
-
-- [ ] **Shivam:** add typed arithmetic/constants and native/ERC-20 balance reads.
-- [ ] **Ayush:** support spoken calculation edits and render treasury valuation graphs.
-- [ ] **Shivam:** add one notification action with durable idempotency.
-- [ ] **Ayush:** add notification configuration and truthful delivery evidence.
-- [ ] **Shivam:** add scheduled checks, activated revisions, fresh run IDs, cooldown/rearm state.
-- [ ] **Ayush:** add test/run/activate/pause interactions and distinguish drafts from active versions.
-- [ ] **Shivam:** scope drafts, revisions, runs, and activation by policy ID.
-- [ ] **Ayush:** add policy selection and voice disambiguation between independent policies.
-- [ ] **Both:** verify valuation, notification retry/cooldown, scheduled execution, and two-policy isolation end to end.
+Prior local/direct signer artifacts are preserved as historical research (`acceptedProductProof:false`). They are not advertised as CRE functionality.

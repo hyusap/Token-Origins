@@ -1,9 +1,11 @@
 import { Engine } from "./engine";
-import { toolDefinitions } from "./schemas";
+import { publicToolDefinitions } from "./schemas";
 import { command } from "./command";
 import { requestAccess } from "./access";
 import { resolve, sep } from "node:path";
 import { runtime } from "./runtime";
+import { voiceCapabilities, transcribeAudio, VoiceTranscriptionError } from "./transcribe";
+import { creReadiness } from "./cre-status";
 const engine = new Engine();
 let bridgePromise: Promise<any> | undefined;
 async function bridge() {
@@ -20,6 +22,7 @@ const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(process.env.PORT || 4318),
   idleTimeout: 120,
+  maxRequestBodySize: 6 * 1024 * 1024,
   async fetch(request, server) {
     const url = new URL(request.url);
     const access = requestAccess(request);
@@ -47,16 +50,82 @@ const server = Bun.serve({
           seq: engine.state.seq,
         });
       if (url.pathname === "/api/state") return json(engine.context());
+      if (url.pathname === "/api/cre/capabilities" && request.method === "GET")
+        return json({ ok: true, ...await creReadiness() });
+      if (url.pathname === "/api/voice/capabilities" && request.method === "GET")
+        return json({ ok: true, ...await voiceCapabilities() });
+      if (url.pathname === "/api/voice/transcribe" && request.method === "POST") {
+        try {
+          const maximum = 5 * 1024 * 1024;
+          const length = Number(request.headers.get("content-length"));
+          if (length > 6 * 1024 * 1024)
+            return json({ ok: false, error: "Audio upload is too large.", code: "AUDIO_TOO_LARGE" }, 413);
+          let bytes: Uint8Array, mimeType: string;
+          const type = request.headers.get("content-type") || "";
+          if (type.toLowerCase().startsWith("multipart/form-data")) {
+            const audio = (await request.formData()).get("audio");
+            if (!(audio instanceof File))
+              return json({ ok: false, error: "An audio file is required.", code: "AUDIO_REQUIRED" }, 400);
+            if (audio.size > maximum)
+              return json({ ok: false, error: "Audio upload is too large.", code: "AUDIO_TOO_LARGE" }, 413);
+            bytes = new Uint8Array(await audio.arrayBuffer());
+            mimeType = audio.type;
+          } else {
+            const reader = request.body?.getReader();
+            if (!reader) return json({ ok: false, error: "Audio is required.", code: "AUDIO_REQUIRED" }, 400);
+            const chunks: Uint8Array[] = [];
+            let size = 0;
+            while (true) {
+              const next = await reader.read();
+              if (next.done) break;
+              size += next.value.byteLength;
+              if (size > maximum) {
+                await reader.cancel();
+                return json({ ok: false, error: "Audio upload is too large.", code: "AUDIO_TOO_LARGE" }, 413);
+              }
+              chunks.push(next.value);
+            }
+            bytes = new Uint8Array(size);
+            let offset = 0;
+            for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+            mimeType = type.split(";")[0].trim().toLowerCase();
+          }
+          return json({ ok: true, ...await transcribeAudio({ bytes, mimeType, signal: request.signal }) });
+        } catch (error) {
+          if (error instanceof VoiceTranscriptionError)
+            return json({ ok: false, error: error.message, code: error.code }, error.status);
+          throw error;
+        }
+      }
+      if (url.pathname === "/api/proof" && request.method === "GET") {
+        const latest = Bun.file(resolve("demo/sepolia-current-rpc-verification.json"));
+        const file = await latest.exists() ? latest : Bun.file(resolve("demo/sepolia-independent-rpc-verification.json"));
+        if (!(await file.exists())) return json({ ok: false, error: "No saved public-chain proof is available." }, 404);
+        const evidence = await file.json();
+        if (evidence.chainId !== 11155111 || evidence.status !== "success" ||
+            !/^0x[0-9a-fA-F]{64}$/.test(evidence.transactionHash))
+          return json({ ok: false, error: "Saved public-chain proof is invalid." }, 500);
+        const source = evidence.evidenceFile || "sepolia-evidence-2026-10-07T07-28-49-635Z.json";
+        if (!/^sepolia-evidence-[\dTZ-]+\.json$/.test(source))
+          return json({ ok: false, error: "Saved proof source is invalid." }, 500);
+        const original = await Bun.file(resolve("demo", source)).json();
+        const correlated = original.label === "cre-simulation-sepolia-broadcast" &&
+          original.chainId === evidence.chainId &&
+          original.pause?.transactionHash?.toLowerCase() === evidence.transactionHash.toLowerCase();
+        return json({ ok: true, kind: "saved-public-proof", evidence,
+          ...(correlated ? { executionMode: "cre-local-simulation", provenance: "CRE local simulation with Sepolia broadcast; not deployed DON execution." } : {}),
+          explorerUrl: `https://sepolia.etherscan.io/tx/${evidence.transactionHash}` });
+      }
       if (url.pathname === "/api/tools")
         return json(
           Object.fromEntries(
-            Object.entries(toolDefinitions).map(([k, v]) => [k, v.description]),
+            Object.entries(publicToolDefinitions).map(([k, v]) => [k, v.description]),
           ),
         );
       if (url.pathname.startsWith("/api/tools/") && request.method === "POST") {
         const name = url.pathname.slice("/api/tools/".length);
         const definition =
-          toolDefinitions[name as keyof typeof toolDefinitions];
+          publicToolDefinitions[name as keyof typeof publicToolDefinitions];
         if (!definition) return json({ ok: false, error: "Unknown tool" }, 404);
         const parsed = definition.schema.safeParse(await request.json());
         if (!parsed.success)
@@ -100,12 +169,12 @@ const server = Bun.serve({
         }
         return json({ ok: true });
       }
-      if (["/api/canvas/clear", "/api/canvas/restore"].includes(url.pathname) && request.method === "POST") {
+      if (url.pathname === "/api/canvas/clear" && request.method === "POST") {
         const status = (await bridge()).rehearsalStatus();
         if (status.busy || status.running)
-          return json({ ok: false, error: "Stop the demo and let the active agent turn finish before clearing or restoring the canvas." }, 409);
-        const name = url.pathname.endsWith("restore") ? "restore_session" : "reset_session";
-        const parsed = toolDefinitions[name].schema.safeParse(await request.json());
+          return json({ ok: false, error: "Stop the demo and let the active agent turn finish before clearing the canvas." }, 409);
+        const name = "reset_session";
+        const parsed = publicToolDefinitions[name].schema.safeParse(await request.json());
         if (!parsed.success) return json({ ok: false, error: "Invalid canvas operation." }, 400);
         const result = await engine.invoke(name, parsed.data);
         return json(result, result.ok ? 200 : 409);

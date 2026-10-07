@@ -1,92 +1,162 @@
 import {expect} from 'bun:test';
 import {test,newTestRuntime,HttpActionsMock,EvmMock,addContractMock} from '@chainlink/cre-sdk/test';
 import {bigintToProtoBigInt,type HTTPPayload} from '@chainlink/cre-sdk';
-import {parseAbi} from 'viem';
+import {parseAbi,decodeAbiParameters,parseAbiParameters,keccak256,toBytes,type Hex} from 'viem';
 import {onHttp} from './workflow/handler';
+import {policyHash,legacyGraph,policyGraphSchema,NETWORKS,FEED_REGISTRY} from './graph';
+import {assertCreSupports} from './runner';
+import {joinEvidenceChunks,evidenceChunks} from './evidence-log';
+
 const vaultAddress='0x0000000000000000000000000000000000001234';
-const selector=16015286601757825753n;
-const config={vaultAddress,chainSelector:'16015286601757825753' as const,gasLimit:'350000'};
+const sepolia=BigInt(NETWORKS['ethereum-sepolia'].chainSelector);
+const mainnet=BigInt(NETWORKS['ethereum-mainnet'].chainSelector);
+const config={vaultAddress,chainSelector:NETWORKS['ethereum-sepolia'].chainSelector,gasLimit:'350000'};
 const now=Date.parse('2026-10-06T04:40:00Z');
-const spec={runId:'sdk-test-run',revision:2,thresholdUsd:3000,maxAgeSeconds:120,requireFresh:true,skipIfPaused:true,broadcast:true};
-function setup(price:number,paused=false,time='2026-10-06T04:39:50Z') {
+const specFor=(graphInput:unknown,overrides:Record<string,unknown>={})=>{
+  const graph=policyGraphSchema.parse(graphInput);
+  return {version:2,runId:'sdk-test-run',revision:2,graph,policyHash:policyHash(graph),maxAgeSeconds:60,broadcast:true,...overrides};
+};
+function setup(price:number,{paused=false,time='2026-10-06T04:39:50Z',reportVersion=2 as number|null}={}) {
   const runtime=newTestRuntime(null,{timeProvider:()=>now},config);
   const http=HttpActionsMock.testInstance();
-  http.sendRequest=(request)=>{expect(request.url).toBe('https://api.exchange.coinbase.com/products/ETH-USD/ticker');return {statusCode:200,body:Buffer.from(JSON.stringify({price:String(price),time})).toString('base64')};};
-  const evm=EvmMock.testInstance(selector);
-  const contract=addContractMock(evm,{address:vaultAddress,abi:parseAbi(['function paused() view returns (bool)'])});
+  let httpCalls=0;
+  http.sendRequest=(request)=>{httpCalls++;expect(request.url).toBe('https://api.exchange.coinbase.com/products/ETH-USD/ticker');return {statusCode:200,body:Buffer.from(JSON.stringify({price:String(price),time})).toString('base64')};};
+  const evm=EvmMock.testInstance(sepolia);
+  const contract=addContractMock(evm,{address:vaultAddress,abi:parseAbi(['function paused() view returns (bool)','function reportVersion() view returns (uint256)'])});
   contract.paused=()=>paused;
+  if(reportVersion!==null) contract.reportVersion=()=>BigInt(reportVersion);
   evm.balanceAt=()=>({balance:bigintToProtoBigInt(1204900000000000000n)});
-  return {runtime,evm,contract};
+  let writes=0; let lastReport:Uint8Array|undefined;
+  evm.writeReport=(request)=>{writes++;lastReport=request.report?.rawReport;return {txStatus:'TX_STATUS_SUCCESS',receiverContractExecutionStatus:'RECEIVER_CONTRACT_EXECUTION_STATUS_SUCCESS',txHash:Buffer.alloc(32,1).toString('base64')};};
+  return {runtime,evm,contract,writes:()=>writes,httpCalls:()=>httpCalls,lastReport:()=>lastReport};
 }
-function payload(input=spec):HTTPPayload {return {$typeName:'capabilities.networking.http.v1alpha.Payload',input:new TextEncoder().encode(JSON.stringify(input))};}
-test('actual CRE handler fetches and reads via capabilities, false threshold never writes',()=>{const {runtime,evm}=setup(3500);let writes=0;evm.writeReport=()=>{writes++;return {};};const result=JSON.parse(onHttp(runtime,payload()));expect(result.decision).toBe('noop');expect(result.vault.balanceWei).toBe('1204900000000000000');expect(writes).toBe(0);});
-test('actual CRE handler changes decision with threshold and submits report',()=>{const {runtime,evm}=setup(2700);let writes=0;evm.writeReport=(request)=>{writes++;expect(request.report?.rawReport.length).toBeGreaterThan(160);return {txStatus:'TX_STATUS_SUCCESS',receiverContractExecutionStatus:'RECEIVER_CONTRACT_EXECUTION_STATUS_SUCCESS',txHash:Buffer.alloc(32,1).toString('base64')};};const result=JSON.parse(onHttp(runtime,payload()));expect(result.decision).toBe('pause');expect(result.transaction.receiverConfirmed).toBe(true);expect(writes).toBe(1);});
-test('actual CRE handler refuses stale observations and already-paused state',()=>{for(const [paused,time] of [[true,'2026-10-06T04:39:50Z'],[false,'2026-10-06T04:35:00Z']] as const){const {runtime,evm}=setup(2700,paused,time);evm.writeReport=()=>{throw new Error('Unexpected report');};expect(JSON.parse(onHttp(runtime,payload())).decision).toBe('noop');}});
-test('actual CRE handler treats receiver revert as failure even when transaction succeeded',()=>{const {runtime,evm}=setup(2700);evm.writeReport=()=>({txStatus:'TX_STATUS_SUCCESS',receiverContractExecutionStatus:'RECEIVER_CONTRACT_EXECUTION_STATUS_REVERTED'});expect(()=>onHttp(runtime,payload())).toThrow('Report did not execute successfully');});
-
-const graphSpec={...spec,thresholdUsd:9_999_999,graph:{
-  nodes:[
-    {id:'eth',kind:'price',source:{type:'exchange-trade',pair:'ETH-USD'}},
-    {id:'btc',kind:'price',source:{type:'chainlink-feed',symbol:'BTC'}},
-    {id:'a',kind:'compare',input:'eth',op:'<',value:9_999_999},
-    {id:'b',kind:'compare',input:'btc',op:'<',value:90_000},
-    {id:'both',kind:'and',inputs:['a','b']}],
-  root:'both',action:{type:'pause-vault'}}} as const;
-
-/** Adds a Sepolia BTC aggregator to the EVM mock at the address the handler reads. */
-function withFeed(evm:ReturnType<typeof EvmMock.testInstance>,answer:bigint,updatedAt:number) {
-  const feed=addContractMock(evm,{address:'0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43',abi:parseAbi(['function latestRoundData() view returns (uint80 roundId,int256 answer,uint256 startedAt,uint256 updatedAt,uint80 answeredInRound)','function decimals() view returns (uint8)'])});
-  feed.decimals=()=>8;
-  feed.latestRoundData=()=>[1n,answer,BigInt(updatedAt),BigInt(updatedAt),1n];
+function payload(input:unknown):HTTPPayload {return {$typeName:'capabilities.networking.http.v1alpha.Payload',input:new TextEncoder().encode(JSON.stringify(input))};}
+const feedAbi=parseAbi(['function latestRoundData() view returns (uint80 roundId,int256 answer,uint256 startedAt,uint256 updatedAt,uint80 answeredInRound)']);
+function withFeed(selector:bigint,address:string,answer:bigint,updatedAt:number) {
+  const evm=selector===sepolia?EvmMock.testInstance(sepolia):EvmMock.testInstance(selector);
+  const feed=addContractMock(evm,{address:address as Hex,abi:feedAbi});
+  feed.latestRoundData=()=>[7n,answer,BigInt(updatedAt),BigInt(updatedAt),7n];
   return feed;
 }
 
-test('graph handler reads a Chainlink aggregator on the vault chain and pauses when both branches hold',()=>{
-  const {runtime,evm}=setup(2700);
-  withFeed(evm,8_500_000_000_000n,Math.floor(now/1000)-2400);
-  let writes=0;
-  evm.writeReport=()=>{writes++;return {txStatus:'TX_STATUS_SUCCESS',receiverContractExecutionStatus:'RECEIVER_CONTRACT_EXECUTION_STATUS_SUCCESS',txHash:Buffer.alloc(32,1).toString('base64')};};
-  const result=JSON.parse(onHttp(runtime,payload(graphSpec as any)));
-  expect(result.decision).toBe('pause');
-  expect(writes).toBe(1);
-  // The oracle branch decided while 40 minutes stale; only the reported trade must be fresh.
-  expect(result.conditions.find((c:any)=>c.nodeId==='b').passed).toBe(true);
-  expect(result.conditions.find((c:any)=>c.nodeId==='guard:freshness').passed).toBe(true);
+test('legacy threshold: false condition reads through capabilities and never writes',()=>{
+  const t=setup(3500);
+  const result=JSON.parse(onHttp(t.runtime,payload(specFor(legacyGraph(3000)))));
+  expect(result.decision).toBe('noop');
+  expect(result.noopReason).toBe('The policy condition was not met.');
+  expect(result.vault.balanceWei).toBe('1204900000000000000');
+  expect(result.observations[0].provider).toBe('coinbase');
+  expect(t.writes()).toBe(0);
 });
 
-test('graph handler withholds the report when an oracle branch fails',()=>{
-  const {runtime,evm}=setup(2700);
-  withFeed(evm,9_500_000_000_000n,Math.floor(now/1000)-2400); // $95k, above the $90k branch
-  evm.writeReport=()=>{throw new Error('Unexpected report');};
-  const result=JSON.parse(onHttp(runtime,payload(graphSpec as any)));
+test('true condition submits one v2 report bound to vault, chain, run, revision and policy',()=>{
+  const t=setup(2700);
+  const spec=specFor(legacyGraph(3000));
+  const result=JSON.parse(onHttp(t.runtime,payload(spec)));
+  expect(result.decision).toBe('act');
+  expect(result.transaction.receiverConfirmed).toBe(true);
+  expect(t.writes()).toBe(1);
+  const [version,target,chainId,runId,revision,policy,action,decidedAt]=decodeAbiParameters(parseAbiParameters('uint256,address,uint256,bytes32,uint256,bytes32,uint256,uint256'),`0x${Buffer.from(t.lastReport()!).toString('hex').slice(-512)}` as Hex);
+  expect([version,target.toLowerCase(),chainId,runId,revision,policy,action]).toEqual([2n,vaultAddress,11155111n,keccak256(toBytes('sdk-test-run')),2n,spec.policyHash,1n]);
+  expect(Number(decidedAt)).toBe(now/1000);
+});
+
+test('stale trades and an already-paused vault stop before any write',()=>{
+  for(const opts of [{paused:true},{time:'2026-10-06T04:35:00Z'}]) {
+    const t=setup(2700,opts);
+    const result=JSON.parse(onHttp(t.runtime,payload(specFor(legacyGraph(3000)))));
+    expect(result.decision).toBe('noop');
+    expect(t.writes()).toBe(0);
+  }
+});
+
+test('a receiver revert is a failure even when the transaction succeeded',()=>{
+  const t=setup(2700);
+  t.evm.writeReport=()=>({txStatus:'TX_STATUS_SUCCESS',receiverContractExecutionStatus:'RECEIVER_CONTRACT_EXECUTION_STATUS_REVERTED'});
+  expect(()=>onHttp(t.runtime,payload(specFor(legacyGraph(3000))))).toThrow('Report did not execute successfully');
+});
+
+test('J3: a simulated sell never reaches writeReport or any read',()=>{
+  const t=setup(2700);
+  const sell={...specFor(legacyGraph(3000)),graph:{...legacyGraph(3000),action:{type:'sell',symbol:'ETH',amount:1,venue:'mock-venue'}}};
+  expect(()=>onHttp(t.runtime,payload(sell as any))).toThrow();
+  expect(t.writes()).toBe(0);
+  expect(t.httpCalls()).toBe(0);
+});
+
+test('a vault that predates report v2 is refused before anything is submitted',()=>{
+  const t=setup(2700,{reportVersion:null});
+  expect(()=>onHttp(t.runtime,payload(specFor(legacyGraph(3000))))).toThrow(/accepts report v1, not v2/);
+  expect(t.writes()).toBe(0);
+});
+
+test('J8: a direct CRE request with an invalid graph or mismatched hash is rejected',()=>{
+  const t=setup(2700);
+  const good=specFor(legacyGraph(3000));
+  expect(()=>onHttp(t.runtime,payload({...good,policyHash:policyHash(legacyGraph(1))}))).toThrow(/Policy hash does not match/);
+  expect(()=>onHttp(t.runtime,payload({...good,graph:{nodes:[{id:'a',kind:'not',input:'a'}],root:'a',action:{type:'pause-vault'}}}))).toThrow(/cycle/);
+  expect(t.writes()).toBe(0);
+});
+
+const crossChain={
+  nodes:[
+    {id:'eth',kind:'price',source:{type:'exchange-trade',pair:'ETH-USD'}},
+    {id:'btc',kind:'price',source:{type:'chainlink-feed',symbol:'BTC',network:'ethereum-mainnet'}},
+    {id:'a',kind:'compare',input:'eth',op:'<',value:9_999_999},
+    {id:'b',kind:'compare',input:'btc',op:'<',value:90_000},
+    {id:'both',kind:'and',inputs:['a','b']}],
+  root:'both',action:{type:'pause-vault'}} as const;
+
+test('a mainnet feed is read from the mainnet aggregator the canvas shows, while the report lands on Sepolia',()=>{
+  const t=setup(2700);
+  withFeed(mainnet,FEED_REGISTRY['ethereum-mainnet'].BTC!,8_500_000_000_000n,Math.floor(now/1000)-2400);
+  const result=JSON.parse(onHttp(t.runtime,payload(specFor(crossChain))));
+  expect(result.decision).toBe('act');
+  expect(t.writes()).toBe(1);
+  const btc=result.observations.find((o:any)=>o.provider==='chainlink');
+  expect(btc).toMatchObject({network:'ethereum-mainnet',chainId:1,address:FEED_REGISTRY['ethereum-mainnet'].BTC,usd:85000,raw:'8500000000000',roundId:'7'});
+  expect(result.conditions.find((c:any)=>c.nodeId==='b').passed).toBe(true);
+});
+
+test('a Sepolia feed is read on Sepolia, and an oracle branch can withhold the report',()=>{
+  const t=setup(2700);
+  withFeed(sepolia,FEED_REGISTRY['ethereum-sepolia'].BTC!,9_500_000_000_000n,Math.floor(now/1000)-600);
+  const sepoliaGraph={...crossChain,nodes:crossChain.nodes.map(n=>n.id==='btc'?{...n,source:{type:'chainlink-feed',symbol:'BTC',network:'ethereum-sepolia'}}:n)};
+  const result=JSON.parse(onHttp(t.runtime,payload(specFor(sepoliaGraph as any))));
   expect(result.decision).toBe('noop');
   expect(result.conditions.find((c:any)=>c.nodeId==='b').passed).toBe(false);
-  expect(result.conditions.find((c:any)=>c.nodeId==='both').passed).toBe(false);
+  expect(t.writes()).toBe(0);
 });
 
-test('graph handler refuses a feed with no configured aggregator on the vault chain',()=>{
-  const {runtime}=setup(2700);
-  const solSpec={...graphSpec,graph:{...graphSpec.graph,nodes:graphSpec.graph.nodes.map(n=>n.id==='btc'?{...n,source:{type:'chainlink-feed',symbol:'SOL'}}:n)}};
-  expect(()=>onHttp(runtime,payload(solSpec as any))).toThrow(/No Sepolia Chainlink feed/);
+test('J7: a network the CRE project has no RPC for is refused before simulation',async()=>{
+  const spec=specFor(crossChain) as any;
+  await expect(assertCreSupports(spec,['ethereum-testnet-sepolia'])).rejects.toThrow(/needs an RPC for ethereum-mainnet.*will not substitute/);
+  await expect(assertCreSupports(spec,['ethereum-testnet-sepolia','ethereum-mainnet'])).resolves.toBeUndefined();
+
 });
 
-test('graph handler surfaces receiver threshold incompatibility instead of a silent revert',()=>{
-  const {runtime,evm}=setup(2700);
-  withFeed(evm,8_500_000_000_000n,Math.floor(now/1000)-2400);
-  evm.writeReport=()=>{throw new Error('Unexpected report');};
-  // Reported price $2700 is not below the reported threshold $1000, which the
-  // receiver rejects; the policy's own logic still evaluates true.
-  const result=JSON.parse(onHttp(runtime,payload({...graphSpec,thresholdUsd:1000} as any)));
-  expect(result.decision).toBe('noop');
-  expect(result.conditions.find((c:any)=>c.nodeId==='guard:composed').passed).toBe(true);
-  expect(result.conditions.find((c:any)=>c.nodeId==='guard:receiver-threshold').passed).toBe(false);
+test('the project configures RPCs for both feed networks',async()=>{
+  const {configuredCreChains}=await import('./runner');
+  expect((await configuredCreChains()).sort()).toEqual(['ethereum-mainnet','ethereum-testnet-sepolia']);
 });
 
-test('the legacy single-threshold spec still drives the handler unchanged',()=>{
-  const {runtime,evm}=setup(2700);
-  let writes=0;
-  evm.writeReport=()=>{writes++;return {txStatus:'TX_STATUS_SUCCESS',receiverContractExecutionStatus:'RECEIVER_CONTRACT_EXECUTION_STATUS_SUCCESS',txHash:Buffer.alloc(32,1).toString('base64')};};
-  const result=JSON.parse(onHttp(runtime,payload()));
-  expect(result.decision).toBe('pause');
-  expect(writes).toBe(1);
+test('evidence leaves the workflow in log lines under the 1 KB CRE limit and reassembles exactly',()=>{
+  const t=setup(2700);
+  withFeed(mainnet,FEED_REGISTRY['ethereum-mainnet'].BTC!,8_500_000_000_000n,Math.floor(now/1000)-2400);
+  const logs:string[]=[];
+  const original=t.runtime.log.bind(t.runtime);
+  t.runtime.log=(message:string)=>{logs.push(message);original(message);};
+  const returned=onHttp(t.runtime,payload(specFor(crossChain)));
+  expect(returned.length).toBeGreaterThan(1024);
+  for(const line of logs) expect(new TextEncoder().encode(line).length).toBeLessThan(1024);
+  // The CLI decorates and interleaves lines; reassembly must not care.
+  const transcript=logs.map((line,i)=>`2026-10-07T05:00:0${i%10}Z [USER LOG] ${line}`).reverse().join('\n');
+  expect(joinEvidenceChunks(transcript)).toBe(returned);
+});
+
+test('a missing or inconsistent evidence chunk is an error, never partial evidence',()=>{
+  const chunks=evidenceChunks(JSON.stringify({big:'x'.repeat(3000)}));
+  expect(chunks.length).toBeGreaterThan(3);
+  expect(()=>joinEvidenceChunks(chunks.filter((_,i)=>i!==1).join('\n'))).toThrow(/chunk 2\/\d+ is missing/);
+  expect(()=>joinEvidenceChunks('no evidence here')).toThrow(/no structured execution evidence/);
 });

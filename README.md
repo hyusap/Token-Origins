@@ -1,120 +1,70 @@
-# Sotto
+# Woga
 
-**Speak. Observe. Execute.** A voice-native treasury observatory for TOKEN2049 Origins, built around Codex semantic MCP tools and a bounded Chainlink CRE workflow.
+**Speak. Observe. Execute.** A treasury policy canvas for TOKEN2049 Origins, with Chainlink CRE as its execution authority. A real Codex operator composes typed policies through MCP; the canvas retains source identities, frozen revisions, observations and verified receipts.
 
-The canvas keeps observations, their sources, conversational focus, policy revisions, and immutable execution evidence together. This implementation includes a real Codex-agent rehearsal and real local contract execution. It uses the Blockchain at Berkeley design system with an original Sotto wordmark.
-
-## Open the demo
-
-For an operator chat, open [`operator/`](operator/README.md) as the primary Codex project folder. Its `AGENTS.md` and `.codex/config.toml` make new chats Sotto operators with the semantic MCP attached. Coding chats belong in the parent project. The rehearsal agents also start in `operator/` with that same prompt.
+## Run
 
 ```sh
 bun install
 bun run dev
 ```
 
-Open http://127.0.0.1:5173. A production build is also served by the backend at http://127.0.0.1:4318 after `bun run build`. The supervisor starts an isolated localhost Anvil chain, deploys the grant vault if needed, and starts the backend and Vite. Prerequisites: Bun, Foundry (`forge`, `anvil`), and an authenticated Codex CLI. No private wallet or testnet credentials are needed for the local demo.
+Open [the observatory](http://127.0.0.1:5173). Bun and a signed-in Codex CLI are required for conversational commands. `bun run dev` starts the backend and canvas in CRE mode; it does not start a standalone chain signer. To prepare speech recognition, run `bun run voice:setup` (pinned local whisper.cpp and verified base.en model; requires the build tools printed by the installer).
 
-- **Space** starts the complete timed rehearsal from an empty canvas. Each prompt is interpreted by a real Codex CLI agent, which calls semantic MCP tools. A new rehearsal resumes only this project's local vault.
-- **/** opens a text transcript prompt; **Enter** sends it to Codex.
-- **I** shows provenance and the semantic tool trace.
-- **M** or **Mic** enables a local microphone waveform after browser permission. Audio is analysed in memory, with no recording or upload; this does not transcribe commands.
-- **V** narrates planned prompts and final responses with optional browser speech synthesis. The waveform responds only to the microphone.
-- **Clear** archives the current canvas; **Undo clear** restores its policy and execution evidence while the canvas is still empty. Neither changes the deployed contract.
-- **+ / −** zoom, arrow keys pan, and **0** fits the graph. Trackpad pan and pinch also work.
-- **Escape** stops microphone capture, future rehearsal prompts, and narration. Submitted actions and blockchain transactions continue.
+Type in the command dock, or select **Mic** to speak. Local transcription sends final text to the same real operator/MCP pipeline. `/` expands the dock; `I` opens proof; `0` fits the graph. Optional browser recognition may use its browser provider when local recognition is unavailable; its privacy status is visible. The timed demo uses preplanned text turns. Stop prevents future cues, and Clear preserves contract state.
 
-The canvas uses React Flow custom nodes, port-connected edges, and its real viewport. Discovery, focus, source navigation, pinning, composition, revision, undo, execution, and inspection remain semantic operations; objects are not manually rewired. Semantic focus and navigation also move the viewport.
+For Codex desktop voice, use [operator/](operator/README.md). Browser dictation has its own verified implementation; desktop voice remains a separate integration requiring an actual user-started walkthrough.
 
-The 13-cue rehearsal takes around six minutes with the measured CLI/model setup. Prompts have minimum scheduled offsets and defer when a previous turn is still working. To trigger each prompt manually in the terminal, run `bun run rehearse`; for automatic timing, run `bun run demo`.
+## Compose through CRE
 
-The app opens directly on the full-screen graph. A compact microphone meter sits beside the mic control in the header and appears only while capture is live. The completion caption updates after the user's task finishes; price timestamps and exchange provenance stay in the cards and inspector. Permission denial, cancellation, and device disconnection are handled. Live microphone capture was verified in the Codex in-app browser with 2,048-sample frames and changing measured amplitude; spoken command transcription remains separate.
+Example prompts:
 
-Price discovery accepts exact Coinbase USD asset names, symbols, and qualified market IDs, and keeps each asset as a separate observation. Omitted tokens defaults to ETH; the grant-vault spending policy always uses ETH/USD. Restart `bun run server` after backend changes: a newly started MCP bridge checks semantic API compatibility before discovery and rejects older backends that would discard token arguments. `/api/health` reports the running process ID, start time, semantic API version, and a startup fingerprint of the semantic sources.
+- “Show SOL and ETH prices, BTC's mainnet Chainlink feed, and the grant vault.”
+- “Pause the vault if SOL is below $100, or ETH is above $4,000 and BTC's mainnet feed is above $80,000.”
+- “Explain the policy and its freshness guards.”
+- “Evaluate this revision without broadcasting and inspect its exact inputs.”
+- “Watch this policy every 30 seconds.”
+- “Stop the active monitor.”
 
-## What actually works
+The vocabulary covers exact Coinbase USD markets and configured Chainlink feeds on explicit networks, comparisons, freshness, vault state, AND, OR and NOT. The operator assembles validated data, never arbitrary executable code. Every node must be reachable; equivalent reordered graphs have the same structural hash.
 
-Two complete 13-cue takes each made **31 real MCP calls**. They discovered live timestamped Coinbase ETH/USD data and a deployed local vault, composed and revised the rule, recovered from an ambiguous reference, executed a false condition without a transaction, then delivered a pause report on the local EVM. The app required all three proofs before confirmation: a successful mined receipt, the matching receiver event, and a fresh `paused()` contract read. Later already-paused runs were no-ops. Additional real-agent probes verified source pinning, undo, old-receipt selection, and execution metadata, bringing the total to **86 actual MCP calls**. A rejected direct run reference in one probe was fixed and successfully retested with the real agent; the original failure remains in the saved evidence.
+The implemented action is **pause-vault**, delivered by the actual CRE workflow. Execution reads exchange APIs through CRE HTTP capabilities and feed/vault state through CRE EVM capabilities, evaluates the frozen graph, generates a report and submits it through the configured forwarder. Canvas discovery readings are previews; a run archives its own CRE observations. Direct local/testnet signers, standalone Solana transfers and copy-trading are unavailable in the product, including through HTTP/MCP bypass attempts. Unsupported requests do not substitute a different action.
 
-[Portable execution evidence](demo/evidence-summary.json) · [Full rehearsal evidence](demo/rehearsal-report.json) · [Observed validation](docs/voice-validation.md) · [Final browser checks](demo/browser-validation.json)
+A run freezes its graph, revision, hash and Sepolia receiver. Confirmation requires a successful receipt, the matching run/revision/hash event, and paused state at the receipt block. Failed sources or guards produce an explicit no-op or failure; uncertain submissions remain blocked until read-only reconciliation establishes their outcome.
 
-The final take's verified pause transaction is `0x02f81a058f1e52a9698aec7635f7001ba8c37ed4036e54d2f357b3501f0b94d0`, block 7 on **Anvil chain 31337**. Both this receipt and the first take's block-5 receipt survived an actual node restart. These are local EVM evidence; Sepolia remains untested.
+`run_workflow` evaluates once. `evaluationOnly:true` freezes no-broadcast authority even when the policy passes; evaluations cannot join a broadcast run or reuse its operation ID. An identical operation ID returns the original run; a new completed-run request fetches fresh inputs. Explicit `activate_policy` schedules CRE checks against a frozen revision. Draft edits do not change it. The backend scheduler pauses across restart and stops after settlement. **It is not a deployed DON trigger.** There is no direct-signing fallback when CRE is unavailable.
 
-## Architecture
+## CRE setup and real chain proof
 
-```text
-Preplanned transcript / Codex desktop voice (future actual voice test)
-    → Codex agent
-    → official MCP stdio server
-    → Bun semantic backend + SQLite
-    → WebSocket → React observatory
-    → immutable execution specification
-        → local EVM rehearsal runner (default)
-        → CRE HTTP-trigger workflow (explicit authenticated mode)
-    → receipt + receiver event + fresh contract read → same canvas
-```
+Authenticate using `cre/bin/cre login` or `CRE_API_KEY`. Configure the report-v2 Sepolia receiver and a funded Sepolia test wallet for broadcast; keep keys out of source control. The inspector's live readiness check separates CLI authentication, evaluation configuration, broadcast configuration and unverified funding.
 
-The backend has optimistic revision checks and persistent operation deduplication. Executions freeze a revision and inputs; delayed tools cannot overwrite a newer draft. A repeated run of the same revision returns its existing run. Errors and no-ops are visible and inspectable.
+A fresh owned receiver and successful **CRE local simulation with actual Sepolia broadcast** are verified:
 
-The CRE implementation is a fixed, allowlisted graph evaluator. The composed graph supplies a specification for Coinbase price fetch → EVM vault read → threshold + freshness + active-vault guards → AND → pause report. It does not generate arbitrary code or claim to be a native CRE graph feature. In CRE mode, fetches, reads, decisions, and report submission happen inside the CRE workflow.
+[Sepolia transaction](https://sepolia.etherscan.io/tx/0xbf74d6505904c5cd08761cfd652faa17c6c84caae03eae7f1fd62b302a2c01a8) · block **11861976** · matching receiver event, frozen policy and historical paused state independently verified through two public RPC providers on October 7, 2026. The vault was subsequently resumed. This is historical chain proof, not current state or deployed DON consensus.
 
-## Honest boundaries
+[Fresh CRE evidence](demo/sepolia-evidence-2026-10-07T09-06-03-441Z.json) · [Independent verification](demo/sepolia-current-proof-verification.json) · [CRE-only API/MCP boundary](demo/cre-boundary-verification.json) · [Fresh CRE acceptance](demo/cre-acceptance-verification.json) · [Browser dictation E2E](demo/voice-browser-e2e-verification.json) · [Browser CRE delivery](demo/browser-cre-broadcast-verification.json)
 
-- **The default runs actual local EVM transactions through an explicitly named rehearsal forwarder.** It does not invoke CRE or demonstrate DON consensus.
-- **The actual CRE HTTP handler passes SDK capability tests and compiles to WASM.** Authenticated CRE CLI execution and Sepolia broadcast remain untested; they require a fresh CRE account/API key and funded fresh test wallet. Existing user credentials were not inspected for chain execution.
-- **Built-in desktop voice remains untested.** Preplanned voice prompts use the real Codex/MCP agent. Browser microphone capture supplies only the requested amplitude display; speech recognition and native Codex voice are separate integrations.
-- The draft revision in the observed take arrived after the fast local run finished. Snapshot immutability was verified; audio interruption during an in-flight transaction was not.
-- Measured CLI agent turn duration was 17.1–35.3 seconds, median 20.6 seconds. These are not voice latency figures. First-render acknowledgement handling was corrected after that take; its original render numbers are not claimed as reliable performance.
+Copy-trading is technically possible through a CRE report receiver that owns the swap assets and enforces budgets, source identity and replay protection. That receiver/workflow is not implemented or publicly verified here, so copy-trading is faded. Existing direct signer modules and local-AMM proof are retained as isolated research, excluded from product tools. [Feasibility review](docs/cre-copytrading-feasibility.md).
 
-[CRE setup and implementation](docs/cre-integration.md) · [Future voice feasibility test and exact MCP setup](docs/voice-rehearsal.md)
-
-## Validation
+## Verification
 
 ```sh
 bun run check
 bun run build
-bun test tests
+bun test
 bun run --cwd cre typecheck
-bun run --cwd cre test
 bun run --cwd cre build:wasm
 forge test --root contracts -vv
+bun run test:boundary
+bun run verify:proof
+# Requires CRE authentication; no broadcast or private signing key:
+bun run test:e2e
 ```
 
-Backend safety checks cover revision conflicts, operation collisions/retries, immutable runs, run deduplication, ambiguity, strict freshness, persistence, and selecting older receipt evidence. CRE tests exercise the actual HTTP handler with the official capability mock harness. Solidity tests cover report authorization, threshold/freshness validation, replay, and paused spending.
+The accepted E2E harness uses a disposable backend/SQLite and official MCP, evaluates a contradictory condition through the real CRE CLI, checks frozen-monitor behavior and restart persistence, then independently verifies the saved public receipt. A missing CRE login fails honestly. The prior direct local harness requires an explicit research flag and cannot certify CRE execution.
 
-`bun run scripts/verify-local.ts` independently verifies the real local false → true → already-paused sequence and resumes this local vault afterward. Run it outside an active demo. The development key is the public Anvil account and is explicitly rejected by the rehearsal runner outside localhost chain 31337.
+Browser voice proof used synthetic spoken input through real MediaRecorder, local Whisper, Codex and live market discovery; no ambient human microphone or chain action was claimed. [Audio bounds verification](demo/voice-api-validation.json).
 
-## Files
+`bun run build` serves the production app from [the backend](http://127.0.0.1:4318). Services bind to localhost. Optional private-tailnet sharing is not started automatically.
 
-- `src/` — observatory and brand tokens
-- `server/` — semantic state engine, sources, SQLite, HTTP and WebSocket
-- `scripts/mcp.ts` — official MCP SDK stdio server
-- `scripts/agent.ts` — real Codex CLI bridge, traces and timed cues
-- `demo/script.json` — filming transcript and minimum cue offsets
-- `cre/workflow/main.ts` — actual fixed CRE workflow
-- `contracts/src/GrantVault.sol` — receiver-enabled grant vault
-- `.codex/config.toml` — project-scoped Sotto MCP connection
-
-The public frontend and backend bind only to localhost. Live broadcasts use an explicitly selected CRE mode and fresh configuration; the local forwarder is not a production Chainlink forwarder.
-
-Local chain persistence: new nodes started by `bun run dev` load/save `.data/anvil-state.json`, checkpoint every five seconds, and preserve block/transaction/history data. Stop the supervisor gracefully to allow its owned node to finish saving. An already-running node is reused; to checkpoint it without stopping or changing it, run `bun run scripts/snapshot-local.ts` after the rehearsal finishes. Keep `.data/` and `contracts/deployment.local.json` together when preserving a demo.
-
-`bun run scripts/verify-local-persistence.ts` selects a confirmed local pause transaction from the current API or saved rehearsal evidence, verifies restoration on a temporary node at port 8546, and stops only that node. An optional `ORIGINS_VERIFY_TX_HASH` accepts a public transaction hash. The check validates the correlated vault event, successful receipt, matching logs, transaction lookup, current balance/state, and paused state at the selected receipt block. Run a true policy version first on a fresh local chain. Dynamic evidence is saved in `demo/dynamic-persistence-verification.json`; the original process replacement proof remains in `demo/chain-persistence-report.json`. The live chain at 8545 is unchanged. See [Foundry state management](https://www.getfoundry.sh/anvil/state-management) for the snapshot mechanism.
-
-## Token price discovery
-
-`discover_objects` accepts `tokens`, for example:
-
-```json
-{"objects":["price","vault"],"tokens":["Ethereum","Solana","BTC"],"operationId":"discover-markets-1"}
-```
-
-Omitting `tokens` preserves ETH discovery. Exact names, symbols, and identifiers such as `coinbase:SOL-USD` resolve against Coinbase Exchange’s online USD market catalog (cached for five minutes). Each token retains its own canvas card, exchange product identity, source object, trade history, and source/fetch timestamps. Refreshing a token refreshes that market. Ambiguous names require a qualified identifier; unknown names, unsupported contract addresses, missing USD markets, and source failures produce errors rather than substitute prices. Market coverage is bounded by Coinbase listings, not every token on every chain. ETH retains its Kraken fallback. Small token prices retain meaningful decimal precision.
-
-The grant-vault policy and CRE runner remain explicitly **ETH/USD**. Additional discovered markets are observations; SOL cannot silently replace the ETH trigger. Discover ETH and the vault before composing that rule.
-
-The keyboard fallback recognizes “Show me Solana’s price” and “Show prices for ETH and SOL and our grant vault.” Voice/agent clients should use the structured `tokens` argument.
-
-To activate this change on an existing demo: integrate these changes into the checkout used by its backend and MCP launcher, rebuild with `bun run build`, restart only the backend with its existing `STATE_DB`, deployment, and execution environment, then reload/reconnect the Sotto MCP so its tool schema exposes `tokens` (and reconnect voice if that session caches the old tools). Keep Anvil running and preserve the existing canvas database. Code/schema changes cannot update a backend already running the old code; a safe restart window is required. Do not run the demo/rehearsal reset commands to activate pricing.
-
-For a separate preview, use `PORT=4319 STATE_DB=.data/token-preview.sqlite bun run server` in this worktree and point a separate MCP launcher at it with `ORIGINS_BACKEND_URL=http://127.0.0.1:4319 bun run mcp`. This creates a separate canvas; its vault defaults to an explicit fixture unless a deployment is configured. It does not replace the active demo.
+[Execution contract](docs/execution-contract.md) · [CRE setup](docs/cre-integration.md) · [Environment options](.env.example) · [Operator guidance](operator/AGENTS.md)

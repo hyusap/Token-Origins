@@ -1,0 +1,480 @@
+{
+  "verified": true,
+  "acceptedProductProof": true,
+  "scope": "CRE CLI simulation with live inputs; historical public CRE broadcast reverified; DON deployment not claimed",
+  "verifiedAt": "2026-10-07T08:53:13.891Z",
+  "temporaryDirectory": "/var/folders/34/vr8fyd1s5fsd42n8f2l4t5yc0000gn/T/woga-cre-acceptance-TVjMtA",
+  "isolatedBackend": "http://127.0.0.1:57852",
+  "checks": [
+    {
+      "check": "real backend exposes CRE-only semantic API",
+      "passed": true,
+      "detail": {
+        "version": 5,
+        "fingerprint": "c6b2444443c5c9f3094d74e3aaa7449f3580ffd8ac967a1bfe23b7f0949cf41e"
+      }
+    },
+    {
+      "check": "readiness reports actual CLI authentication and distinguishes DON deployment",
+      "passed": true,
+      "detail": {
+        "ok": true,
+        "executionAuthority": "chainlink-cre",
+        "mode": "cre-local-simulation",
+        "donDeployed": false,
+        "cliInstalled": true,
+        "authenticated": true,
+        "receiver": {
+          "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+          "chainId": 11155111
+        },
+        "signingKeyConfigured": false,
+        "readyForEvaluation": true,
+        "broadcastConfigured": false,
+        "fundingVerified": false,
+        "reason": "Evaluation is available. A funded Sepolia test wallet is required for broadcast.",
+        "checkedAt": "2026-10-07T08:52:52.610Z"
+      }
+    },
+    {
+      "check": "HTTP manifest and routes exclude every standalone signer utility",
+      "passed": true,
+      "detail": {
+        "excluded": [
+          "inspect_solana_wallet",
+          "get_solana_devnet_wallet",
+          "transfer_solana_devnet",
+          "list_evm_trade_venues",
+          "get_evm_trade_wallet",
+          "inspect_evm_swap",
+          "inspect_evm_wallet_swaps",
+          "quote_evm_copy_swap",
+          "copy_evm_swap",
+          "reconcile_evm_copy_swap",
+          "activate_evm_trade_watch",
+          "get_evm_trade_watches",
+          "deactivate_evm_trade_watch",
+          "reconcile_evm_trade_watch"
+        ]
+      }
+    },
+    {
+      "check": "official MCP refuses unavailable direct action tools",
+      "passed": true
+    },
+    {
+      "check": "direct Solana graph cannot mutate draft or queue execution",
+      "passed": true
+    },
+    {
+      "check": "actual CRE CLI evaluates frozen contradictory policy from live exchange and real Sepolia receiver",
+      "passed": true,
+      "detail": {
+        "monitorId": "monitor_053779c7a559451ab5695d3c584d6516",
+        "policyHash": "0xcc36089a9464febdbc039fdc823db144ff637d042bcde6123a748e2da2cb2821",
+        "noTransaction": true
+      }
+    },
+    {
+      "check": "later draft edit does not alter active CRE policy authority or graph",
+      "passed": true
+    },
+    {
+      "check": "SQLite restart preserves stopped monitor and exact CRE evidence without reactivation",
+      "passed": true,
+      "detail": {
+        "status": "paused",
+        "checks": 1,
+        "monitorId": "monitor_053779c7a559451ab5695d3c584d6516"
+      }
+    },
+    {
+      "check": "original activation retry deduplicates rather than granting new scheduling authority",
+      "passed": true
+    },
+    {
+      "check": "existing public CRE broadcast is independently verified against Sepolia",
+      "passed": true,
+      "detail": {
+        "verified": true,
+        "chainId": 11155111,
+        "vault": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+        "pausedPolicy": "Pause spending when (Coinbase ETH-USD trade < $2,880 and Chainlink BTC/USD (mainnet) > $1).",
+        "verifiedAt": "2026-10-07T08:53:13.891Z",
+        "independentReadOnly": true,
+        "verificationScope": "Saved CRE simulation claim and frozen graphs correlated with actual public receipt/receiver event; this does not establish deployed DON execution or independently recreate historical off-chain source reads",
+        "trustedForwarder": "0x15fC6ae953E024d975e77382eEeC56A9101f9F88",
+        "transaction": "0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec",
+        "block": 11861492,
+        "blockHash": "0x9d726cbe8c29a724dbda7c4342aa2e151a72123d4644992e5523355a720675b4",
+        "checks": {
+          "falseCondition.policyHashRecomputed": true,
+          "trueCondition.policyHashRecomputed": true,
+          "falseCondition.noTransaction": true,
+          "savedEvidence.creSimulationMode": true,
+          "pause.savedSpecCorrelation": true,
+          "pause.savedTransactionCorrelation": true,
+          "pause.receiptSuccess": true,
+          "pause.receiptBlockCorrelation": true,
+          "pause.authorizedForwarderDestination": true,
+          "pause.eventRunId": true,
+          "pause.eventRevision": true,
+          "pause.eventPolicyHash": true,
+          "pause.processedOnChain": true,
+          "pause.pausedAtReceiptBlock": true,
+          "duplicate.noSecondTransaction": true,
+          "unsupportedAction.noTransaction": true,
+          "unsupportedAction.refused": true,
+          "unsupportedAction.noSimulatedOrder": true
+        }
+      }
+    }
+  ],
+  "liveMonitor": {
+    "id": "monitor_053779c7a559451ab5695d3c584d6516",
+    "sessionId": "f5aaefa2-e4f9-4dee-a971-6d93442dc8f0",
+    "status": "active",
+    "spec": {
+      "version": 2,
+      "runId": "monitor_053779c7a559451ab5695d3c584d6516",
+      "revision": 1,
+      "graph": {
+        "nodes": [
+          {
+            "id": "eth",
+            "kind": "price",
+            "source": {
+              "type": "exchange-trade",
+              "pair": "ETH-USD"
+            }
+          },
+          {
+            "id": "under-threshold",
+            "kind": "compare",
+            "input": "eth",
+            "op": "<",
+            "value": 1
+          },
+          {
+            "id": "at-least-one",
+            "kind": "compare",
+            "input": "eth",
+            "op": ">=",
+            "value": 1
+          },
+          {
+            "id": "impossible-and",
+            "kind": "and",
+            "inputs": [
+              "under-threshold",
+              "at-least-one"
+            ]
+          }
+        ],
+        "root": "impossible-and",
+        "action": {
+          "type": "pause-vault"
+        }
+      },
+      "policyHash": "0xcc36089a9464febdbc039fdc823db144ff637d042bcde6123a748e2da2cb2821",
+      "maxAgeSeconds": 60,
+      "broadcast": true
+    },
+    "target": {
+      "kind": "evm-vault",
+      "chainId": 11155111,
+      "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+      "executor": "cre"
+    },
+    "intervalSeconds": 3600,
+    "createdAt": "2026-10-07T08:52:55.090Z",
+    "updatedAt": "2026-10-07T08:53:11.688Z",
+    "checks": 1,
+    "failures": 0,
+    "logs": [
+      {
+        "at": "2026-10-07T08:52:55.091Z",
+        "message": "Activated revision 1; checking every 3600s while this backend is running"
+      },
+      {
+        "at": "2026-10-07T08:52:55.188Z",
+        "message": "CRE CLI compiling and executing the frozen HTTP-trigger specification"
+      },
+      {
+        "at": "2026-10-07T08:53:11.686Z",
+        "message": "ORIGINS_SOURCE Reading Coinbase ETH-USD trade"
+      }
+    ],
+    "lastRunId": "monitor_053779c7a559451ab5695d3c584d6516_1_observe",
+    "latestEvidence": {
+      "runId": "monitor_053779c7a559451ab5695d3c584d6516_1_observe",
+      "revision": 1,
+      "policyHash": "0xcc36089a9464febdbc039fdc823db144ff637d042bcde6123a748e2da2cb2821",
+      "mode": "cre-local-simulation",
+      "observations": [
+        {
+          "key": "exchange-trade:ETH-USD",
+          "provider": "coinbase",
+          "label": "Coinbase ETH-USD trade",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "usd": 2609.6,
+          "raw": "2609.6",
+          "observedAt": "2026-10-07T08:53:07.638Z",
+          "fetchedAt": "2026-10-07T08:53:11.306Z"
+        }
+      ],
+      "vault": {
+        "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+        "chainId": 11155111,
+        "paused": false,
+        "balanceWei": "0",
+        "reportVersion": 2
+      },
+      "conditions": [
+        {
+          "nodeId": "under-threshold",
+          "kind": "threshold",
+          "role": "node",
+          "passed": false,
+          "detail": "Coinbase ETH-USD trade $2609.6 < $1"
+        },
+        {
+          "nodeId": "at-least-one",
+          "kind": "threshold",
+          "role": "node",
+          "passed": true,
+          "detail": "Coinbase ETH-USD trade $2609.6 >= $1"
+        },
+        {
+          "nodeId": "impossible-and",
+          "kind": "and",
+          "role": "node",
+          "passed": false,
+          "detail": "under-threshold AND at-least-one → false"
+        },
+        {
+          "nodeId": "guard:root",
+          "kind": "composed-policy",
+          "role": "root",
+          "passed": false,
+          "detail": "Policy root \"impossible-and\" evaluated false"
+        },
+        {
+          "nodeId": "guard:source:exchange-trade:ETH-USD",
+          "kind": "source-freshness",
+          "role": "guard",
+          "passed": true,
+          "detail": "Coinbase ETH-USD trade observed 3.8s ago; limit 60s"
+        },
+        {
+          "nodeId": "guard:vault-active",
+          "kind": "vault-state",
+          "role": "guard",
+          "passed": true,
+          "detail": "Vault spending active"
+        }
+      ],
+      "root": false,
+      "decision": "noop",
+      "action": "pause-vault",
+      "decidedAt": "2026-10-07T08:53:11.464Z",
+      "logs": [
+        "ORIGINS_SOURCE Reading Coinbase ETH-USD trade"
+      ],
+      "noopReason": "The policy condition was not met."
+    },
+    "nextCheckAt": "2026-10-07T09:53:11.688Z"
+  },
+  "publicProof": {
+    "verified": true,
+    "chainId": 11155111,
+    "vault": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+    "pausedPolicy": "Pause spending when (Coinbase ETH-USD trade < $2,880 and Chainlink BTC/USD (mainnet) > $1).",
+    "verifiedAt": "2026-10-07T08:53:13.891Z",
+    "independentReadOnly": true,
+    "verificationScope": "Saved CRE simulation claim and frozen graphs correlated with actual public receipt/receiver event; this does not establish deployed DON execution or independently recreate historical off-chain source reads",
+    "trustedForwarder": "0x15fC6ae953E024d975e77382eEeC56A9101f9F88",
+    "transaction": "0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec",
+    "block": 11861492,
+    "blockHash": "0x9d726cbe8c29a724dbda7c4342aa2e151a72123d4644992e5523355a720675b4",
+    "checks": {
+      "falseCondition.policyHashRecomputed": true,
+      "trueCondition.policyHashRecomputed": true,
+      "falseCondition.noTransaction": true,
+      "savedEvidence.creSimulationMode": true,
+      "pause.savedSpecCorrelation": true,
+      "pause.savedTransactionCorrelation": true,
+      "pause.receiptSuccess": true,
+      "pause.receiptBlockCorrelation": true,
+      "pause.authorizedForwarderDestination": true,
+      "pause.eventRunId": true,
+      "pause.eventRevision": true,
+      "pause.eventPolicyHash": true,
+      "pause.processedOnChain": true,
+      "pause.pausedAtReceiptBlock": true,
+      "duplicate.noSecondTransaction": true,
+      "unsupportedAction.noTransaction": true,
+      "unsupportedAction.refused": true,
+      "unsupportedAction.noSimulatedOrder": true
+    }
+  },
+  "monitorAfterRestart": {
+    "id": "monitor_053779c7a559451ab5695d3c584d6516",
+    "sessionId": "f5aaefa2-e4f9-4dee-a971-6d93442dc8f0",
+    "status": "paused",
+    "spec": {
+      "version": 2,
+      "runId": "monitor_053779c7a559451ab5695d3c584d6516",
+      "revision": 1,
+      "graph": {
+        "nodes": [
+          {
+            "id": "eth",
+            "kind": "price",
+            "source": {
+              "type": "exchange-trade",
+              "pair": "ETH-USD"
+            }
+          },
+          {
+            "id": "under-threshold",
+            "kind": "compare",
+            "input": "eth",
+            "op": "<",
+            "value": 1
+          },
+          {
+            "id": "at-least-one",
+            "kind": "compare",
+            "input": "eth",
+            "op": ">=",
+            "value": 1
+          },
+          {
+            "id": "impossible-and",
+            "kind": "and",
+            "inputs": [
+              "under-threshold",
+              "at-least-one"
+            ]
+          }
+        ],
+        "root": "impossible-and",
+        "action": {
+          "type": "pause-vault"
+        }
+      },
+      "policyHash": "0xcc36089a9464febdbc039fdc823db144ff637d042bcde6123a748e2da2cb2821",
+      "maxAgeSeconds": 60,
+      "broadcast": true
+    },
+    "target": {
+      "kind": "evm-vault",
+      "chainId": 11155111,
+      "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+      "executor": "cre"
+    },
+    "intervalSeconds": 3600,
+    "createdAt": "2026-10-07T08:52:55.090Z",
+    "updatedAt": "2026-10-07T08:53:11.844Z",
+    "checks": 1,
+    "failures": 0,
+    "logs": [
+      {
+        "at": "2026-10-07T08:52:55.091Z",
+        "message": "Activated revision 1; checking every 3600s while this backend is running"
+      },
+      {
+        "at": "2026-10-07T08:52:55.188Z",
+        "message": "CRE CLI compiling and executing the frozen HTTP-trigger specification"
+      },
+      {
+        "at": "2026-10-07T08:53:11.686Z",
+        "message": "ORIGINS_SOURCE Reading Coinbase ETH-USD trade"
+      },
+      {
+        "at": "2026-10-07T08:53:11.844Z",
+        "message": "Deactivated by explicit request; no further checks will run."
+      }
+    ],
+    "lastRunId": "monitor_053779c7a559451ab5695d3c584d6516_1_observe",
+    "latestEvidence": {
+      "runId": "monitor_053779c7a559451ab5695d3c584d6516_1_observe",
+      "revision": 1,
+      "policyHash": "0xcc36089a9464febdbc039fdc823db144ff637d042bcde6123a748e2da2cb2821",
+      "mode": "cre-local-simulation",
+      "observations": [
+        {
+          "key": "exchange-trade:ETH-USD",
+          "provider": "coinbase",
+          "label": "Coinbase ETH-USD trade",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "usd": 2609.6,
+          "raw": "2609.6",
+          "observedAt": "2026-10-07T08:53:07.638Z",
+          "fetchedAt": "2026-10-07T08:53:11.306Z"
+        }
+      ],
+      "vault": {
+        "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+        "chainId": 11155111,
+        "paused": false,
+        "balanceWei": "0",
+        "reportVersion": 2
+      },
+      "conditions": [
+        {
+          "nodeId": "under-threshold",
+          "kind": "threshold",
+          "role": "node",
+          "passed": false,
+          "detail": "Coinbase ETH-USD trade $2609.6 < $1"
+        },
+        {
+          "nodeId": "at-least-one",
+          "kind": "threshold",
+          "role": "node",
+          "passed": true,
+          "detail": "Coinbase ETH-USD trade $2609.6 >= $1"
+        },
+        {
+          "nodeId": "impossible-and",
+          "kind": "and",
+          "role": "node",
+          "passed": false,
+          "detail": "under-threshold AND at-least-one → false"
+        },
+        {
+          "nodeId": "guard:root",
+          "kind": "composed-policy",
+          "role": "root",
+          "passed": false,
+          "detail": "Policy root \"impossible-and\" evaluated false"
+        },
+        {
+          "nodeId": "guard:source:exchange-trade:ETH-USD",
+          "kind": "source-freshness",
+          "role": "guard",
+          "passed": true,
+          "detail": "Coinbase ETH-USD trade observed 3.8s ago; limit 60s"
+        },
+        {
+          "nodeId": "guard:vault-active",
+          "kind": "vault-state",
+          "role": "guard",
+          "passed": true,
+          "detail": "Vault spending active"
+        }
+      ],
+      "root": false,
+      "decision": "noop",
+      "action": "pause-vault",
+      "decidedAt": "2026-10-07T08:53:11.464Z",
+      "logs": [
+        "ORIGINS_SOURCE Reading Coinbase ETH-USD trade"
+      ],
+      "noopReason": "The policy condition was not met."
+    },
+    "stopReason": "Deactivated by explicit request; no further checks will run."
+  }
+}

@@ -1,12 +1,13 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import type { CanvasState, ToolResult } from "../shared/types";
 
 export class StateStore {
   db: Database;
   constructor(path = process.env.STATE_DB || ".data/origins.sqlite") {
     if (path !== ":memory:")
-      mkdirSync(path.slice(0, path.lastIndexOf("/")) || ".", {
+      mkdirSync(dirname(path), {
         recursive: true,
       });
     this.db = new Database(path, { create: true });
@@ -21,17 +22,11 @@ export class StateStore {
     return row ? JSON.parse(row.payload) : null;
   }
   save(state: CanvasState) {
-    this.db
-      .query(
-        "INSERT INTO states(id,payload) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
-      )
-      .run(JSON.stringify(state));
-    for (const run of state.runs)
-      this.db
-        .query(
-          "INSERT INTO executions(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
-        )
-        .run(run.id, JSON.stringify(run));
+    this.db.transaction(() => {
+      this.db.query("INSERT INTO states(id,payload) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload").run(JSON.stringify(state));
+      const saveRun = this.db.query("INSERT INTO executions(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload");
+      for (const run of state.runs) saveRun.run(run.id, JSON.stringify(run));
+    })();
   }
   archiveSession(state: CanvasState) {
     this.db.query("INSERT INTO cleared_sessions(id,payload,cleared_at) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING")

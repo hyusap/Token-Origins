@@ -1,0 +1,262 @@
+{
+  "verified": true,
+  "verifiedAt": "2026-10-07T09:29:48.970Z",
+  "independentReadOnly": true,
+  "rpcProvider": "sepolia.gateway.tenderly.co",
+  "claim": "Actual browser typed instruction → Codex operator → semantic MCP → CRE local simulation → public Sepolia report delivery; not deployed DON execution.",
+  "chainId": 11155111,
+  "vault": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+  "transactionHash": "0x3479462f65013c97b0705a7e5ac30024d00b066356674fbed05b98a8e8132c33",
+  "blockNumber": "11862058",
+  "blockHash": "0x88ff3039ec90450df1101f05f3bff913faf89f7555e4c2963907a26fbe60fbbd",
+  "checks": {
+    "chainIsSepolia": true,
+    "frozenReceiverIsSepolia": true,
+    "frozenAuthorityIsCre": true,
+    "executionIsCre": true,
+    "broadcastWasPermitted": true,
+    "policyHashRecomputed": true,
+    "receiptSuccess": true,
+    "receiptBlockMatches": true,
+    "authorizedForwarder": true,
+    "receiverEventRun": true,
+    "receiverEventRevision": true,
+    "receiverEventPolicyHash": true,
+    "processedOnChain": true,
+    "pausedAtReceiptBlock": true,
+    "noMonitorsActivated": true
+  },
+  "run": {
+    "id": "run-fef2e11f-59bf-4140-8fea-8744eaa53526",
+    "revision": 1,
+    "snapshot": {
+      "revision": 1,
+      "threshold": 3000,
+      "maxAgeSeconds": null,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T09:19:57.654Z",
+      "reason": "Pause when mainnet Chainlink SOL/USD is above $1; retain mandatory freshness safeguards.",
+      "target": {
+        "kind": "evm-vault",
+        "chainId": 11155111,
+        "address": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+        "executor": "cre"
+      },
+      "graph": {
+        "nodes": [
+          {
+            "id": "sol",
+            "kind": "price",
+            "source": {
+              "type": "chainlink-feed",
+              "symbol": "SOL",
+              "network": "ethereum-mainnet"
+            }
+          },
+          {
+            "id": "above-one",
+            "kind": "compare",
+            "input": "sol",
+            "op": ">",
+            "value": 1
+          }
+        ],
+        "root": "above-one",
+        "action": {
+          "type": "pause-vault"
+        }
+      },
+      "policyHash": "0xd4ce151f5f3be4d322118894578153d63ac7b7f4b6c6ef2c388f6038918306ae"
+    },
+    "policyHash": "0xd4ce151f5f3be4d322118894578153d63ac7b7f4b6c6ef2c388f6038918306ae",
+    "target": {
+      "kind": "evm-vault",
+      "chainId": 11155111,
+      "address": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+      "executor": "cre"
+    },
+    "action": "pause-vault",
+    "evaluationOnly": false,
+    "status": "confirmed",
+    "startedAt": "2026-10-07T09:22:00.338Z",
+    "executionMode": "CRE local simulation · Sepolia broadcast · recovered receipt",
+    "decisions": [],
+    "logs": [
+      {
+        "at": "2026-10-07T09:22:00.338Z",
+        "stage": "queued",
+        "message": "Frozen draft revision 1 · report submission permitted if the policy passes"
+      },
+      {
+        "at": "2026-10-07T09:22:00.349Z",
+        "stage": "fetching",
+        "message": "Fetching fresh execution inputs"
+      },
+      {
+        "at": "2026-10-07T09:22:00.356Z",
+        "stage": "fetching",
+        "message": "CRE CLI compiling and executing the frozen HTTP-trigger specification"
+      },
+      {
+        "at": "2026-10-07T09:22:15.074Z",
+        "stage": "fetching",
+        "message": "ORIGINS_SUBMITTED {\"hash\":\"0x3479462f65013c97b0705a7e5ac30024d00b066356674fbed05b98a8e8132c33\",\"runId\":\"run-fef2e11f-59bf-4140-8fea-8744eaa53526\",\"revision\":1,\"policyHash\":\"0xd4ce151f5f3be4d322118894578153d63ac7b7f4b6c6ef2c388f6038918306ae\"}"
+      },
+      {
+        "at": "2026-10-07T09:22:15.295Z",
+        "stage": "fetching",
+        "message": "ORIGINS_SOURCE Reading Chainlink SOL/USD (mainnet) at 0x4ffC43a60e009B551865A93d232E33Fce9f01507"
+      },
+      {
+        "at": "2026-10-07T09:22:15.296Z",
+        "stage": "failed",
+        "message": "JSON Parse error: Unrecognized token '…'"
+      },
+      {
+        "at": "2026-10-07T09:25:04.576Z",
+        "stage": "recovery",
+        "message": "Recovered after restart: this run's report landed at block 11862058"
+      }
+    ],
+    "submissionPossible": true,
+    "evidence": {
+      "transactionHash": "0x3479462f65013c97b0705a7e5ac30024d00b066356674fbed05b98a8e8132c33",
+      "contractAddress": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+      "chainId": 11155111,
+      "receiptStatus": "success",
+      "verification": "Recovered after restart from the receiver event for this run",
+      "blockNumber": "11862058",
+      "pausedAfter": true,
+      "policyHash": "0xd4ce151f5f3be4d322118894578153d63ac7b7f4b6c6ef2c388f6038918306ae",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x3479462f65013c97b0705a7e5ac30024d00b066356674fbed05b98a8e8132c33"
+    },
+    "completedAt": "2026-10-07T09:22:15.296Z",
+    "uncertain": false
+  },
+  "typedInstructions": [
+    {
+      "text": "Compose pause-vault when mainnet Chainlink SOL/USD is above $1, preserving mandatory freshness safeguards. Run it once through CRE with Sepolia broadcast now. Inspect the resulting run and finish when its receipt is confirmed; do not activate monitoring.",
+      "at": "2026-10-07T09:21:12.428Z",
+      "source": "codex-cli-rehearsal"
+    },
+    {
+      "text": "Retry the current unchanged policy once through CRE with Sepolia broadcast, using a new operation ID because the previous run failed during authentication before any submission. Do not change the graph or activate monitoring. Inspect the result and finish once it is terminal.",
+      "at": "2026-10-07T09:22:49.237Z",
+      "source": "codex-cli-rehearsal"
+    }
+  ],
+  "semanticTrace": [
+    {
+      "operationId": "345a5d01-deea-476a-9cdf-2d2057538ec2",
+      "tool": "describe_policy",
+      "receivedAt": "2026-10-07T09:19:34.759Z",
+      "committedAt": "2026-10-07T09:19:34.759Z",
+      "commitMs": 0.3,
+      "renderedAt": "2026-10-07T09:19:34.770Z",
+      "renderMs": 11
+    },
+    {
+      "operationId": "agent-740323a3-8853-419b-979e-ca129eebaaac-source",
+      "tool": "read_price_feed",
+      "receivedAt": "2026-10-07T09:19:50.226Z",
+      "committedAt": "2026-10-07T09:19:50.740Z",
+      "commitMs": 513.78,
+      "renderedAt": "2026-10-07T09:19:50.750Z",
+      "renderMs": 10
+    },
+    {
+      "operationId": "agent-740323a3-8853-419b-979e-ca129eebaaac-vault",
+      "tool": "discover_objects",
+      "receivedAt": "2026-10-07T09:19:50.746Z",
+      "committedAt": "2026-10-07T09:19:51.460Z",
+      "commitMs": 714.33,
+      "renderedAt": "2026-10-07T09:19:51.889Z",
+      "renderMs": 429
+    },
+    {
+      "operationId": "agent-740323a3-8853-419b-979e-ca129eebaaac-compose",
+      "tool": "compose_graph",
+      "receivedAt": "2026-10-07T09:19:57.652Z",
+      "committedAt": "2026-10-07T09:19:57.656Z",
+      "commitMs": 3.54,
+      "renderedAt": "2026-10-07T09:19:57.670Z",
+      "renderMs": 14
+    },
+    {
+      "operationId": "agent-740323a3-8853-419b-979e-ca129eebaaac-run",
+      "tool": "run_workflow",
+      "receivedAt": "2026-10-07T09:20:03.312Z",
+      "committedAt": "2026-10-07T09:20:03.315Z",
+      "commitMs": 3.38,
+      "renderedAt": "2026-10-07T09:20:03.335Z",
+      "renderMs": 20
+    },
+    {
+      "operationId": "cb886038-9d27-49ae-9b8c-a5e0a3a5da04",
+      "tool": "get_run",
+      "receivedAt": "2026-10-07T09:20:08.185Z",
+      "committedAt": "2026-10-07T09:20:08.185Z",
+      "commitMs": 0.25,
+      "renderedAt": "2026-10-07T09:20:08.406Z",
+      "renderMs": 221
+    },
+    {
+      "operationId": "157a61a9-1250-48c7-b2a7-20a9dc60ba9f",
+      "tool": "get_run",
+      "receivedAt": "2026-10-07T09:20:36.797Z",
+      "committedAt": "2026-10-07T09:20:36.797Z",
+      "commitMs": 0.16,
+      "renderedAt": "2026-10-07T09:20:36.809Z",
+      "renderMs": 12
+    },
+    {
+      "operationId": "61aaf5d2-4e74-4567-ab52-dfeee60e55d8",
+      "tool": "get_run",
+      "receivedAt": "2026-10-07T09:21:05.380Z",
+      "committedAt": "2026-10-07T09:21:05.380Z",
+      "commitMs": 0.12,
+      "renderedAt": "2026-10-07T09:21:05.389Z",
+      "renderMs": 9
+    },
+    {
+      "operationId": "agent-4aa886d8-e8c2-4b74-bd4d-5a18e18f1096-retry",
+      "tool": "run_workflow",
+      "receivedAt": "2026-10-07T09:22:00.337Z",
+      "committedAt": "2026-10-07T09:22:00.338Z",
+      "commitMs": 0.89,
+      "renderedAt": "2026-10-07T09:22:00.352Z",
+      "renderMs": 14
+    },
+    {
+      "operationId": "8e024bda-7f33-4699-a4b7-dc3a8a3a6236",
+      "tool": "get_run",
+      "receivedAt": "2026-10-07T09:22:04.704Z",
+      "committedAt": "2026-10-07T09:22:04.704Z",
+      "commitMs": 0.18,
+      "renderedAt": "2026-10-07T09:22:04.977Z",
+      "renderMs": 273
+    },
+    {
+      "operationId": "86ed206b-d419-4e56-ab76-461eb6d90b91",
+      "tool": "get_run",
+      "receivedAt": "2026-10-07T09:22:38.411Z",
+      "committedAt": "2026-10-07T09:22:38.411Z",
+      "commitMs": 0.24,
+      "renderedAt": "2026-10-07T09:22:38.422Z",
+      "renderMs": 11
+    },
+    {
+      "operationId": "31ad5648-3a87-4426-9d12-dcef0c54c3bd",
+      "tool": "get_run",
+      "receivedAt": "2026-10-07T09:27:33.872Z",
+      "committedAt": "2026-10-07T09:27:33.874Z",
+      "commitMs": 1.54,
+      "renderedAt": "2026-10-07T09:27:33.881Z",
+      "renderMs": 7
+    }
+  ],
+  "operator": {
+    "busy": false,
+    "turns": []
+  }
+}

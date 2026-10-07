@@ -1,0 +1,77 @@
+{
+  "verifiedAt": "2026-10-07T07:59:51.335Z",
+  "activityInspectionVerified": true,
+  "sourceWallet": "Fee payer observed in actual finalized public block 454162764",
+  "address": "87CcUxpyR72ZyfaZirj86mqkbk5uuU2EfnwTegVMLJL5",
+  "network": "mainnet-beta",
+  "balanceLamports": 2169741540,
+  "balanceSol": 2.16974154,
+  "slot": 454162847,
+  "activity": [
+    {
+      "signature": "4PFtBgspoBLPnTqVcyFPddn5bPeGGa1pxs5TH1Njewj3WCiigLK5giv2S3tM5YMjByQBY23tvg8m9V9MyYBM6xKs",
+      "slot": 454162848,
+      "blockTime": "2026-10-07T07:59:49.000Z",
+      "success": true,
+      "feeLamports": 5000,
+      "balanceDeltaLamports": -5000,
+      "nativeTransfers": [],
+      "tokenBalanceChanges": {
+        "before": [],
+        "after": []
+      },
+      "programs": [
+        "Vote111111111111111111111111111111111111111"
+      ],
+      "available": true,
+      "explorerUrl": "https://explorer.solana.com/tx/4PFtBgspoBLPnTqVcyFPddn5bPeGGa1pxs5TH1Njewj3WCiigLK5giv2S3tM5YMjByQBY23tvg8m9V9MyYBM6xKs"
+    },
+    {
+      "signature": "3YozuBsqZXvqJRXSEs8e6GorGZdRPC9ebfVJ6F4xtRVtQnCUsmqvY1eCCj3UoCGAVNtexWGeggDuqdWgzjEUTP1M",
+      "slot": 454162847,
+      "blockTime": "2026-10-07T07:59:49.000Z",
+      "success": true,
+      "feeLamports": 5000,
+      "balanceDeltaLamports": -5000,
+      "nativeTransfers": [],
+      "tokenBalanceChanges": {
+        "before": [],
+        "after": []
+      },
+      "programs": [
+        "Vote111111111111111111111111111111111111111"
+      ],
+      "available": true,
+      "explorerUrl": "https://explorer.solana.com/tx/3YozuBsqZXvqJRXSEs8e6GorGZdRPC9ebfVJ6F4xtRVtQnCUsmqvY1eCCj3UoCGAVNtexWGeggDuqdWgzjEUTP1M"
+    },
+    {
+      "signature": "qPAeFEHEuhi7kHyVnzuuhBLumG4j4RmAEmFu4LuiN4hroUgMkMM5S2PNRQVZtJe7K1CApjo5zZHyTsPc3C2pZnN",
+      "slot": 454162846,
+      "blockTime": "2026-10-07T07:59:49.000Z",
+      "success": true,
+      "feeLamports": 5000,
+      "balanceDeltaLamports": -5000,
+      "nativeTransfers": [],
+      "tokenBalanceChanges": {
+        "before": [],
+        "after": []
+      },
+      "programs": [
+        "Vote111111111111111111111111111111111111111"
+      ],
+      "available": true,
+      "explorerUrl": "https://explorer.solana.com/tx/qPAeFEHEuhi7kHyVnzuuhBLumG4j4RmAEmFu4LuiN4hroUgMkMM5S2PNRQVZtJe7K1CApjo5zZHyTsPc3C2pZnN"
+    }
+  ],
+  "explorerUrl": "https://explorer.solana.com/address/87CcUxpyR72ZyfaZirj86mqkbk5uuU2EfnwTegVMLJL5",
+  "rpcUrl": "https://solana-rpc.publicnode.com/",
+  "genesisHash": "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+  "fetchedAt": "2026-10-07T07:59:51.335Z",
+  "capabilities": {
+    "activityInspection": true,
+    "nativeTransfer": false,
+    "copyTradingSwaps": false
+  },
+  "historyComplete": false,
+  "historyLabel": "Latest 3 confirmed signatures; pagination and swap classification are not provided"
+}

@@ -1,0 +1,1807 @@
+{
+  "completedAt": "2026-10-07T08:09:39.439Z",
+  "assertions": {
+    "realDefaultModelTurnSucceeded": true,
+    "discoveryToolUsed": true,
+    "typedGraphToolUsed": true,
+    "exactSolSource": true,
+    "exactBtcSource": true,
+    "booleanOrRoot": true,
+    "realSourceProvenance": true,
+    "realNoopExecution": true,
+    "completeSourceEvidence": true,
+    "rootVerdictInspected": true,
+    "noChainMutation": true,
+    "noAgentPresentationTools": true,
+    "transportPublishesCompletedCaption": true
+  },
+  "turn": {
+    "id": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365",
+    "threadId": "01a11568-6576-7202-b15a-4cb7d1995170",
+    "text": "Discover live Solana and Bitcoin exchange prices and our deployed grant vault. Compose this policy: if SOL is below $1 OR BTC is below $1, pause grant-vault spending. Keep both exact Coinbase markets and use compose_graph. Run that frozen revision once, then inspect get_run until completed evidence is available. Do not activate monitoring. Briefly report the actual root verdict, each source identity and whether any transaction was sent.",
+    "summary": "Composed and ran revision 1 once: the OR root was **false**, using exact Coinbase SOL-USD ($118.58) and BTC-USD ($84,017.05) sources. The local EVM rehearsal completed with **no transaction sent**; the grant vault was already paused, and no monitoring was activated.",
+    "startedAt": "2026-10-07T08:08:45.270Z",
+    "completedAt": "2026-10-07T08:09:39.431Z",
+    "durationMs": 54161,
+    "tools": [
+      {
+        "name": "discover_objects",
+        "server": "woga",
+        "arguments": {
+          "objects": [
+            "price",
+            "vault"
+          ],
+          "tokens": [
+            "coinbase:SOL-USD",
+            "coinbase:BTC-USD"
+          ],
+          "operationId": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365-discover"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Discovered SOL / USD: $118.58 (Coinbase Exchange, observed 2026-10-07T08:08:57.910821Z); BTC / USD: $84030.43 (Coinbase Exchange, observed 2026-10-07T08:08:54.611452Z); Grant vault.",
+          "seq": 3,
+          "revision": 0
+        },
+        "at": "2026-10-07T08:08:58.950Z"
+      },
+      {
+        "name": "compose_graph",
+        "server": "woga",
+        "arguments": {
+          "expectedRevision": 0,
+          "operationId": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365-compose",
+          "graph": {
+            "nodes": [
+              {
+                "id": "sol",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "SOL-USD"
+                }
+              },
+              {
+                "id": "btc",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "BTC-USD"
+                }
+              },
+              {
+                "id": "sol-low",
+                "kind": "compare",
+                "input": "sol",
+                "op": "<",
+                "value": 1
+              },
+              {
+                "id": "btc-low",
+                "kind": "compare",
+                "input": "btc",
+                "op": "<",
+                "value": 1
+              },
+              {
+                "id": "either-low",
+                "kind": "or",
+                "inputs": [
+                  "sol-low",
+                  "btc-low"
+                ]
+              }
+            ],
+            "root": "either-low",
+            "action": {
+              "type": "pause-vault"
+            }
+          }
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Revision 1. Pause spending when (Coinbase SOL-USD trade < $1 or Coinbase BTC-USD trade < $1). Execution fetches Coinbase SOL-USD trade and Coinbase BTC-USD trade.",
+          "seq": 5,
+          "revision": 1
+        },
+        "at": "2026-10-07T08:09:05.933Z"
+      },
+      {
+        "name": "run_workflow",
+        "server": "woga",
+        "arguments": {
+          "expectedRevision": 1,
+          "operationId": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365-run"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Run run-027c2ff2-8d27-4b9d-b237-a4a23964547a started against immutable revision 1.",
+          "runId": "run-027c2ff2-8d27-4b9d-b237-a4a23964547a",
+          "seq": 6,
+          "revision": 1
+        },
+        "at": "2026-10-07T08:09:10.201Z"
+      },
+      {
+        "name": "get_run",
+        "server": "woga",
+        "arguments": {
+          "runId": "run-027c2ff2-8d27-4b9d-b237-a4a23964547a"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Run revision 1: no-op. The policy condition was not met.",
+          "runId": "run-027c2ff2-8d27-4b9d-b237-a4a23964547a",
+          "seq": 23,
+          "revision": 1
+        },
+        "at": "2026-10-07T08:09:18.742Z"
+      },
+      {
+        "name": "get_run",
+        "server": "woga",
+        "arguments": {
+          "runId": "run-027c2ff2-8d27-4b9d-b237-a4a23964547a"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Run revision 1: no-op. The policy condition was not met.",
+          "runId": "run-027c2ff2-8d27-4b9d-b237-a4a23964547a",
+          "seq": 24,
+          "revision": 1
+        },
+        "at": "2026-10-07T08:09:27.919Z"
+      },
+      {
+        "name": "inspect_object",
+        "server": "woga",
+        "arguments": {
+          "reference": "vault:grant",
+          "refresh": true,
+          "operationId": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365-inspect"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Grant vault: paused, 1.2049 ETH. Actual local contract · Anvil.",
+          "seq": 27,
+          "revision": 1
+        },
+        "at": "2026-10-07T08:09:27.930Z"
+      }
+    ],
+    "ok": true
+  },
+  "requests": [
+    "set_activity",
+    "set_activity",
+    "discover_objects",
+    "set_activity",
+    "compose_graph",
+    "run_workflow",
+    "set_activity",
+    "set_activity",
+    "get_run",
+    "get_run",
+    "set_activity",
+    "set_activity",
+    "inspect_object",
+    "submit_utterance",
+    "set_activity"
+  ],
+  "state": {
+    "stateVersion": 2,
+    "sessionId": "57cd5aea-7a4c-4295-9ec2-688ff2e19340",
+    "seq": 29,
+    "mode": "run",
+    "focus": {
+      "objectId": "vault:grant",
+      "label": "Grant vault"
+    },
+    "previousFocus": [
+      "workflow:treasury",
+      "run:run-027c2ff2-8d27-4b9d-b237-a4a23964547a"
+    ],
+    "references": [
+      {
+        "name": "Treasury policy",
+        "objectId": "workflow:treasury",
+        "at": "2026-10-07T08:09:05.929Z"
+      },
+      {
+        "name": "Execution v01",
+        "objectId": "run:run-027c2ff2-8d27-4b9d-b237-a4a23964547a",
+        "at": "2026-10-07T08:09:10.195Z"
+      },
+      {
+        "name": "Execution v01",
+        "objectId": "run:run-027c2ff2-8d27-4b9d-b237-a4a23964547a",
+        "at": "2026-10-07T08:09:18.737Z"
+      },
+      {
+        "name": "Execution v01",
+        "objectId": "run:run-027c2ff2-8d27-4b9d-b237-a4a23964547a",
+        "at": "2026-10-07T08:09:27.914Z"
+      },
+      {
+        "name": "Grant vault",
+        "objectId": "vault:grant",
+        "at": "2026-10-07T08:09:27.927Z"
+      }
+    ],
+    "objects": [
+      {
+        "id": "source:price:sol-usd",
+        "kind": "source",
+        "label": "SOL · Coinbase Exchange",
+        "data": {
+          "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+          "token": "coinbase:SOL-USD",
+          "priceObjectId": "price:sol-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+          "observedAt": "2026-10-07T08:08:57.910821Z",
+          "fetchedAt": "2026-10-07T08:08:58.944Z",
+          "kind": "live",
+          "label": "Live exchange trade · source timestamp"
+        },
+        "visible": false,
+        "pinned": false
+      },
+      {
+        "id": "price:sol-usd",
+        "kind": "price",
+        "label": "SOL / USD",
+        "visible": true,
+        "pinned": false,
+        "data": {
+          "price": 118.58,
+          "unit": "USD",
+          "symbol": "SOL",
+          "name": "Solana",
+          "token": "coinbase:SOL-USD",
+          "productId": "SOL-USD",
+          "history": [
+            {
+              "price": 118.5,
+              "observedAt": "2026-10-07T08:06:29.174353Z"
+            },
+            {
+              "price": 118.5,
+              "observedAt": "2026-10-07T08:06:30.211198Z"
+            },
+            {
+              "price": 118.52,
+              "observedAt": "2026-10-07T08:06:33.225936Z"
+            },
+            {
+              "price": 118.54,
+              "observedAt": "2026-10-07T08:06:33.920902Z"
+            },
+            {
+              "price": 118.56,
+              "observedAt": "2026-10-07T08:06:34.493036Z"
+            },
+            {
+              "price": 118.57,
+              "observedAt": "2026-10-07T08:06:34.493036Z"
+            },
+            {
+              "price": 118.55,
+              "observedAt": "2026-10-07T08:06:35.237403Z"
+            },
+            {
+              "price": 118.55,
+              "observedAt": "2026-10-07T08:06:35.246332Z"
+            },
+            {
+              "price": 118.57,
+              "observedAt": "2026-10-07T08:06:37.509193Z"
+            },
+            {
+              "price": 118.57,
+              "observedAt": "2026-10-07T08:06:37.970381Z"
+            },
+            {
+              "price": 118.56,
+              "observedAt": "2026-10-07T08:06:46.734470Z"
+            },
+            {
+              "price": 118.54,
+              "observedAt": "2026-10-07T08:06:47.812981Z"
+            },
+            {
+              "price": 118.52,
+              "observedAt": "2026-10-07T08:06:49.932748Z"
+            },
+            {
+              "price": 118.53,
+              "observedAt": "2026-10-07T08:06:50.598804Z"
+            },
+            {
+              "price": 118.54,
+              "observedAt": "2026-10-07T08:06:51.597465Z"
+            },
+            {
+              "price": 118.54,
+              "observedAt": "2026-10-07T08:06:55.952635Z"
+            },
+            {
+              "price": 118.52,
+              "observedAt": "2026-10-07T08:06:57.101868Z"
+            },
+            {
+              "price": 118.53,
+              "observedAt": "2026-10-07T08:06:57.199909Z"
+            },
+            {
+              "price": 118.53,
+              "observedAt": "2026-10-07T08:07:00.174361Z"
+            },
+            {
+              "price": 118.52,
+              "observedAt": "2026-10-07T08:07:02.212368Z"
+            },
+            {
+              "price": 118.52,
+              "observedAt": "2026-10-07T08:07:02.413482Z"
+            },
+            {
+              "price": 118.5,
+              "observedAt": "2026-10-07T08:07:03.439050Z"
+            },
+            {
+              "price": 118.5,
+              "observedAt": "2026-10-07T08:07:04.645319Z"
+            },
+            {
+              "price": 118.49,
+              "observedAt": "2026-10-07T08:07:08.757244Z"
+            },
+            {
+              "price": 118.49,
+              "observedAt": "2026-10-07T08:07:09.957505Z"
+            },
+            {
+              "price": 118.5,
+              "observedAt": "2026-10-07T08:07:09.957505Z"
+            },
+            {
+              "price": 118.49,
+              "observedAt": "2026-10-07T08:07:10.258893Z"
+            },
+            {
+              "price": 118.5,
+              "observedAt": "2026-10-07T08:07:10.258893Z"
+            },
+            {
+              "price": 118.5,
+              "observedAt": "2026-10-07T08:07:14.285155Z"
+            },
+            {
+              "price": 118.49,
+              "observedAt": "2026-10-07T08:07:16.187874Z"
+            },
+            {
+              "price": 118.49,
+              "observedAt": "2026-10-07T08:07:16.208575Z"
+            },
+            {
+              "price": 118.5,
+              "observedAt": "2026-10-07T08:07:16.537392Z"
+            },
+            {
+              "price": 118.51,
+              "observedAt": "2026-10-07T08:07:16.579749Z"
+            },
+            {
+              "price": 118.51,
+              "observedAt": "2026-10-07T08:07:16.692154Z"
+            },
+            {
+              "price": 118.52,
+              "observedAt": "2026-10-07T08:07:16.697048Z"
+            },
+            {
+              "price": 118.52,
+              "observedAt": "2026-10-07T08:07:16.697319Z"
+            },
+            {
+              "price": 118.51,
+              "observedAt": "2026-10-07T08:07:16.755032Z"
+            },
+            {
+              "price": 118.52,
+              "observedAt": "2026-10-07T08:07:19.651275Z"
+            },
+            {
+              "price": 118.53,
+              "observedAt": "2026-10-07T08:07:20.089584Z"
+            },
+            {
+              "price": 118.53,
+              "observedAt": "2026-10-07T08:07:21.163617Z"
+            },
+            {
+              "price": 118.53,
+              "observedAt": "2026-10-07T08:07:24.571919Z"
+            },
+            {
+              "price": 118.53,
+              "observedAt": "2026-10-07T08:07:26.147069Z"
+            },
+            {
+              "price": 118.54,
+              "observedAt": "2026-10-07T08:07:29.819673Z"
+            },
+            {
+              "price": 118.54,
+              "observedAt": "2026-10-07T08:07:32.344033Z"
+            },
+            {
+              "price": 118.56,
+              "observedAt": "2026-10-07T08:07:32.809494Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:07:33.076043Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:07:34.173690Z"
+            },
+            {
+              "price": 118.59,
+              "observedAt": "2026-10-07T08:07:37.667022Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:07:39.171194Z"
+            },
+            {
+              "price": 118.59,
+              "observedAt": "2026-10-07T08:07:40.622855Z"
+            },
+            {
+              "price": 118.59,
+              "observedAt": "2026-10-07T08:07:41.445294Z"
+            },
+            {
+              "price": 118.6,
+              "observedAt": "2026-10-07T08:07:41.445294Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:07:46.712074Z"
+            },
+            {
+              "price": 118.59,
+              "observedAt": "2026-10-07T08:07:52.412211Z"
+            },
+            {
+              "price": 118.61,
+              "observedAt": "2026-10-07T08:07:53.262202Z"
+            },
+            {
+              "price": 118.6,
+              "observedAt": "2026-10-07T08:08:00.245928Z"
+            },
+            {
+              "price": 118.59,
+              "observedAt": "2026-10-07T08:08:03.498727Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:08:05.230339Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:08:07.173807Z"
+            },
+            {
+              "price": 118.59,
+              "observedAt": "2026-10-07T08:08:08.159149Z"
+            },
+            {
+              "price": 118.59,
+              "observedAt": "2026-10-07T08:08:08.646317Z"
+            },
+            {
+              "price": 118.59,
+              "observedAt": "2026-10-07T08:08:10.031567Z"
+            },
+            {
+              "price": 118.62,
+              "observedAt": "2026-10-07T08:08:12.617401Z"
+            },
+            {
+              "price": 118.63,
+              "observedAt": "2026-10-07T08:08:12.617401Z"
+            },
+            {
+              "price": 118.62,
+              "observedAt": "2026-10-07T08:08:12.976068Z"
+            },
+            {
+              "price": 118.62,
+              "observedAt": "2026-10-07T08:08:14.237220Z"
+            },
+            {
+              "price": 118.62,
+              "observedAt": "2026-10-07T08:08:15.220067Z"
+            },
+            {
+              "price": 118.62,
+              "observedAt": "2026-10-07T08:08:15.230424Z"
+            },
+            {
+              "price": 118.62,
+              "observedAt": "2026-10-07T08:08:18.267292Z"
+            },
+            {
+              "price": 118.63,
+              "observedAt": "2026-10-07T08:08:21.465242Z"
+            },
+            {
+              "price": 118.64,
+              "observedAt": "2026-10-07T08:08:21.465242Z"
+            },
+            {
+              "price": 118.62,
+              "observedAt": "2026-10-07T08:08:23.889418Z"
+            },
+            {
+              "price": 118.62,
+              "observedAt": "2026-10-07T08:08:28.387572Z"
+            },
+            {
+              "price": 118.61,
+              "observedAt": "2026-10-07T08:08:31.801998Z"
+            },
+            {
+              "price": 118.6,
+              "observedAt": "2026-10-07T08:08:32.308865Z"
+            },
+            {
+              "price": 118.6,
+              "observedAt": "2026-10-07T08:08:35.829352Z"
+            },
+            {
+              "price": 118.62,
+              "observedAt": "2026-10-07T08:08:43.071114Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:08:49.280981Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:08:49.285551Z"
+            },
+            {
+              "price": 118.57,
+              "observedAt": "2026-10-07T08:08:49.920765Z"
+            },
+            {
+              "price": 118.57,
+              "observedAt": "2026-10-07T08:08:54.672401Z"
+            },
+            {
+              "price": 118.57,
+              "observedAt": "2026-10-07T08:08:55.179661Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:08:56.005338Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:08:57.910821Z"
+            },
+            {
+              "price": 118.58,
+              "observedAt": "2026-10-07T08:09:08.162909049Z"
+            }
+          ],
+          "historyLabel": "Actual exchange observations · latest 100",
+          "sourceObjectId": "source:price:sol-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/SOL-USD/ticker",
+          "observedAt": "2026-10-07T08:09:08.162909049Z",
+          "fetchedAt": "2026-10-07T08:09:10.386Z",
+          "kind": "live",
+          "label": "Live exchange observation · execution input"
+        }
+      },
+      {
+        "id": "source:price:btc-usd",
+        "kind": "source",
+        "label": "BTC · Coinbase Exchange",
+        "data": {
+          "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+          "token": "coinbase:BTC-USD",
+          "priceObjectId": "price:btc-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100",
+          "observedAt": "2026-10-07T08:08:54.611452Z",
+          "fetchedAt": "2026-10-07T08:08:58.943Z",
+          "kind": "live",
+          "label": "Live exchange trade · source timestamp"
+        },
+        "visible": false,
+        "pinned": false
+      },
+      {
+        "id": "price:btc-usd",
+        "kind": "price",
+        "label": "BTC / USD",
+        "visible": true,
+        "pinned": false,
+        "data": {
+          "price": 84017.05,
+          "unit": "USD",
+          "symbol": "BTC",
+          "name": "Bitcoin",
+          "token": "coinbase:BTC-USD",
+          "productId": "BTC-USD",
+          "history": [
+            {
+              "price": 84025.6,
+              "observedAt": "2026-10-07T08:08:11.866423Z"
+            },
+            {
+              "price": 84025.61,
+              "observedAt": "2026-10-07T08:08:11.866423Z"
+            },
+            {
+              "price": 84035.59,
+              "observedAt": "2026-10-07T08:08:12.107781Z"
+            },
+            {
+              "price": 84044.28,
+              "observedAt": "2026-10-07T08:08:12.323394Z"
+            },
+            {
+              "price": 84044.29,
+              "observedAt": "2026-10-07T08:08:12.403352Z"
+            },
+            {
+              "price": 84044.28,
+              "observedAt": "2026-10-07T08:08:13.445998Z"
+            },
+            {
+              "price": 84044.29,
+              "observedAt": "2026-10-07T08:08:13.889839Z"
+            },
+            {
+              "price": 84044.29,
+              "observedAt": "2026-10-07T08:08:14.220349Z"
+            },
+            {
+              "price": 84044.28,
+              "observedAt": "2026-10-07T08:08:15.476020Z"
+            },
+            {
+              "price": 84044.28,
+              "observedAt": "2026-10-07T08:08:15.485440Z"
+            },
+            {
+              "price": 84044.29,
+              "observedAt": "2026-10-07T08:08:15.723254Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:16.150982Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:16.340090Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:17.080655Z"
+            },
+            {
+              "price": 84049.07,
+              "observedAt": "2026-10-07T08:08:17.174646Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:17.618019Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:17.771016Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:18.382777Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:20.237209Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:22.782045Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:23.886973Z"
+            },
+            {
+              "price": 84049.07,
+              "observedAt": "2026-10-07T08:08:24.160567Z"
+            },
+            {
+              "price": 84047.38,
+              "observedAt": "2026-10-07T08:08:24.160567Z"
+            },
+            {
+              "price": 84049.07,
+              "observedAt": "2026-10-07T08:08:24.702165Z"
+            },
+            {
+              "price": 84040.62,
+              "observedAt": "2026-10-07T08:08:25.346866Z"
+            },
+            {
+              "price": 84040.63,
+              "observedAt": "2026-10-07T08:08:30.398206Z"
+            },
+            {
+              "price": 84040.63,
+              "observedAt": "2026-10-07T08:08:31.451621Z"
+            },
+            {
+              "price": 84040.63,
+              "observedAt": "2026-10-07T08:08:32.362704Z"
+            },
+            {
+              "price": 84040.63,
+              "observedAt": "2026-10-07T08:08:32.568527Z"
+            },
+            {
+              "price": 84040.63,
+              "observedAt": "2026-10-07T08:08:34.704686Z"
+            },
+            {
+              "price": 84042.6,
+              "observedAt": "2026-10-07T08:08:35.230376Z"
+            },
+            {
+              "price": 84043.64,
+              "observedAt": "2026-10-07T08:08:35.818302Z"
+            },
+            {
+              "price": 84046,
+              "observedAt": "2026-10-07T08:08:36.015228Z"
+            },
+            {
+              "price": 84048.05,
+              "observedAt": "2026-10-07T08:08:37.138464Z"
+            },
+            {
+              "price": 84049.08,
+              "observedAt": "2026-10-07T08:08:37.773428Z"
+            },
+            {
+              "price": 84049.1,
+              "observedAt": "2026-10-07T08:08:37.773428Z"
+            },
+            {
+              "price": 84049.1,
+              "observedAt": "2026-10-07T08:08:37.778032Z"
+            },
+            {
+              "price": 84054.79,
+              "observedAt": "2026-10-07T08:08:37.979786Z"
+            },
+            {
+              "price": 84054.79,
+              "observedAt": "2026-10-07T08:08:38.315951Z"
+            },
+            {
+              "price": 84054.79,
+              "observedAt": "2026-10-07T08:08:39.091654Z"
+            },
+            {
+              "price": 84054.79,
+              "observedAt": "2026-10-07T08:08:39.462916Z"
+            },
+            {
+              "price": 84054.79,
+              "observedAt": "2026-10-07T08:08:40.260420Z"
+            },
+            {
+              "price": 84054.79,
+              "observedAt": "2026-10-07T08:08:40.272065Z"
+            },
+            {
+              "price": 84054.79,
+              "observedAt": "2026-10-07T08:08:40.354027Z"
+            },
+            {
+              "price": 84054.79,
+              "observedAt": "2026-10-07T08:08:40.681126Z"
+            },
+            {
+              "price": 84054.79,
+              "observedAt": "2026-10-07T08:08:41.044989Z"
+            },
+            {
+              "price": 84052.99,
+              "observedAt": "2026-10-07T08:08:42.827847Z"
+            },
+            {
+              "price": 84052.99,
+              "observedAt": "2026-10-07T08:08:42.952233Z"
+            },
+            {
+              "price": 84053,
+              "observedAt": "2026-10-07T08:08:43.240680Z"
+            },
+            {
+              "price": 84052.99,
+              "observedAt": "2026-10-07T08:08:44.156217Z"
+            },
+            {
+              "price": 84040.62,
+              "observedAt": "2026-10-07T08:08:45.050273Z"
+            },
+            {
+              "price": 84040.62,
+              "observedAt": "2026-10-07T08:08:45.124790Z"
+            },
+            {
+              "price": 84040.61,
+              "observedAt": "2026-10-07T08:08:45.159933Z"
+            },
+            {
+              "price": 84040.61,
+              "observedAt": "2026-10-07T08:08:45.362414Z"
+            },
+            {
+              "price": 84040.61,
+              "observedAt": "2026-10-07T08:08:45.494188Z"
+            },
+            {
+              "price": 84040.61,
+              "observedAt": "2026-10-07T08:08:45.566340Z"
+            },
+            {
+              "price": 84027.25,
+              "observedAt": "2026-10-07T08:08:45.905537Z"
+            },
+            {
+              "price": 84026.25,
+              "observedAt": "2026-10-07T08:08:46.110465Z"
+            },
+            {
+              "price": 84026.24,
+              "observedAt": "2026-10-07T08:08:47.120701Z"
+            },
+            {
+              "price": 84026.25,
+              "observedAt": "2026-10-07T08:08:47.762372Z"
+            },
+            {
+              "price": 84026.25,
+              "observedAt": "2026-10-07T08:08:49.702280Z"
+            },
+            {
+              "price": 84026.25,
+              "observedAt": "2026-10-07T08:08:49.781304Z"
+            },
+            {
+              "price": 84027.25,
+              "observedAt": "2026-10-07T08:08:49.781304Z"
+            },
+            {
+              "price": 84027.94,
+              "observedAt": "2026-10-07T08:08:49.781304Z"
+            },
+            {
+              "price": 84030.43,
+              "observedAt": "2026-10-07T08:08:49.983635Z"
+            },
+            {
+              "price": 84030.44,
+              "observedAt": "2026-10-07T08:08:50.204556Z"
+            },
+            {
+              "price": 84030.44,
+              "observedAt": "2026-10-07T08:08:50.401194Z"
+            },
+            {
+              "price": 84030.44,
+              "observedAt": "2026-10-07T08:08:50.910877Z"
+            },
+            {
+              "price": 84030.43,
+              "observedAt": "2026-10-07T08:08:51.140471Z"
+            },
+            {
+              "price": 84030.44,
+              "observedAt": "2026-10-07T08:08:51.917036Z"
+            },
+            {
+              "price": 84030.43,
+              "observedAt": "2026-10-07T08:08:52.374312Z"
+            },
+            {
+              "price": 84030.44,
+              "observedAt": "2026-10-07T08:08:52.711720Z"
+            },
+            {
+              "price": 84030.43,
+              "observedAt": "2026-10-07T08:08:53.470096Z"
+            },
+            {
+              "price": 84030.43,
+              "observedAt": "2026-10-07T08:08:54.611452Z"
+            },
+            {
+              "price": 84017.05,
+              "observedAt": "2026-10-07T08:09:09.401181741Z"
+            }
+          ],
+          "historyLabel": "Actual exchange observations · latest 100",
+          "sourceObjectId": "source:price:btc-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/BTC-USD/ticker",
+          "observedAt": "2026-10-07T08:09:09.401181741Z",
+          "fetchedAt": "2026-10-07T08:09:10.272Z",
+          "kind": "live",
+          "label": "Live exchange observation · execution input"
+        }
+      },
+      {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "visible": true,
+        "pinned": false,
+        "data": {
+          "paused": true,
+          "balance": "1.2049",
+          "balanceEth": 1.2049,
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "chainId": 31337,
+          "blockNumber": "11",
+          "fixture": false,
+          "network": "Local Anvil"
+        },
+        "provenance": {
+          "source": "Anvil contract read",
+          "observedAt": "2026-10-07T08:06:17.000Z",
+          "fetchedAt": "2026-10-07T08:09:27.927Z",
+          "kind": "chain",
+          "chainId": 31337,
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "label": "Actual local contract · Anvil"
+        }
+      },
+      {
+        "id": "condition:sol-low",
+        "kind": "condition",
+        "label": "Coinbase SOL-USD trade < $1",
+        "data": {
+          "id": "sol-low",
+          "kind": "compare",
+          "input": "sol",
+          "op": "<",
+          "value": 1,
+          "source": "Coinbase SOL-USD trade"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T08:09:05.917Z",
+          "fetchedAt": "2026-10-07T08:09:05.917Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:btc-low",
+        "kind": "condition",
+        "label": "Coinbase BTC-USD trade < $1",
+        "data": {
+          "id": "btc-low",
+          "kind": "compare",
+          "input": "btc",
+          "op": "<",
+          "value": 1,
+          "source": "Coinbase BTC-USD trade"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T08:09:05.917Z",
+          "fetchedAt": "2026-10-07T08:09:05.917Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:either-low",
+        "kind": "condition",
+        "label": "OR",
+        "data": {
+          "id": "either-low",
+          "kind": "or",
+          "inputs": [
+            "sol-low",
+            "btc-low"
+          ],
+          "source": "OR"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T08:09:05.917Z",
+          "fetchedAt": "2026-10-07T08:09:05.917Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "action:pause",
+        "kind": "action",
+        "label": "Pause spending",
+        "data": {
+          "target": "vault:grant"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T08:09:05.917Z",
+          "fetchedAt": "2026-10-07T08:09:05.917Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "source-sol",
+        "from": "source:price:sol-usd",
+        "to": "price:sol-usd",
+        "label": "observes"
+      },
+      {
+        "id": "source-btc",
+        "from": "source:price:btc-usd",
+        "to": "price:btc-usd",
+        "label": "observes"
+      },
+      {
+        "id": "in-sol-low-sol",
+        "from": "price:sol-usd",
+        "to": "condition:sol-low",
+        "label": "compare"
+      },
+      {
+        "id": "in-btc-low-btc",
+        "from": "price:btc-usd",
+        "to": "condition:btc-low",
+        "label": "compare"
+      },
+      {
+        "id": "in-either-low-sol-low",
+        "from": "condition:sol-low",
+        "to": "condition:either-low",
+        "label": "or"
+      },
+      {
+        "id": "in-either-low-btc-low",
+        "from": "condition:btc-low",
+        "to": "condition:either-low",
+        "label": "or"
+      },
+      {
+        "id": "root-action",
+        "from": "condition:either-low",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "e-act",
+        "from": "action:pause",
+        "to": "vault:grant",
+        "label": "pauses"
+      }
+    ],
+    "workflow": {
+      "id": "workflow:treasury",
+      "revision": 1,
+      "threshold": 3000,
+      "maxAgeSeconds": null,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T08:09:05.916Z",
+      "reason": "Composed condition graph",
+      "graph": {
+        "nodes": [
+          {
+            "id": "sol",
+            "kind": "price",
+            "source": {
+              "type": "exchange-trade",
+              "pair": "SOL-USD"
+            }
+          },
+          {
+            "id": "btc",
+            "kind": "price",
+            "source": {
+              "type": "exchange-trade",
+              "pair": "BTC-USD"
+            }
+          },
+          {
+            "id": "sol-low",
+            "kind": "compare",
+            "input": "sol",
+            "op": "<",
+            "value": 1
+          },
+          {
+            "id": "btc-low",
+            "kind": "compare",
+            "input": "btc",
+            "op": "<",
+            "value": 1
+          },
+          {
+            "id": "either-low",
+            "kind": "or",
+            "inputs": [
+              "sol-low",
+              "btc-low"
+            ]
+          }
+        ],
+        "root": "either-low",
+        "action": {
+          "type": "pause-vault"
+        }
+      },
+      "policyHash": "0x1309513c8b292af437682f4cb6993a83d832f49e95c9a154d842ca39fbdb2ebf",
+      "summary": "Pause spending when (Coinbase SOL-USD trade < $1 or Coinbase BTC-USD trade < $1).",
+      "revisions": [
+        {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T08:09:05.916Z",
+          "reason": "Composed condition graph",
+          "graph": {
+            "nodes": [
+              {
+                "id": "sol",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "SOL-USD"
+                }
+              },
+              {
+                "id": "btc",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "BTC-USD"
+                }
+              },
+              {
+                "id": "sol-low",
+                "kind": "compare",
+                "input": "sol",
+                "op": "<",
+                "value": 1
+              },
+              {
+                "id": "btc-low",
+                "kind": "compare",
+                "input": "btc",
+                "op": "<",
+                "value": 1
+              },
+              {
+                "id": "either-low",
+                "kind": "or",
+                "inputs": [
+                  "sol-low",
+                  "btc-low"
+                ]
+              }
+            ],
+            "root": "either-low",
+            "action": {
+              "type": "pause-vault"
+            }
+          },
+          "policyHash": "0x1309513c8b292af437682f4cb6993a83d832f49e95c9a154d842ca39fbdb2ebf"
+        }
+      ],
+      "created": true
+    },
+    "runs": [
+      {
+        "id": "run-027c2ff2-8d27-4b9d-b237-a4a23964547a",
+        "revision": 1,
+        "snapshot": {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T08:09:05.916Z",
+          "reason": "Composed condition graph",
+          "graph": {
+            "nodes": [
+              {
+                "id": "sol",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "SOL-USD"
+                }
+              },
+              {
+                "id": "btc",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "BTC-USD"
+                }
+              },
+              {
+                "id": "sol-low",
+                "kind": "compare",
+                "input": "sol",
+                "op": "<",
+                "value": 1
+              },
+              {
+                "id": "btc-low",
+                "kind": "compare",
+                "input": "btc",
+                "op": "<",
+                "value": 1
+              },
+              {
+                "id": "either-low",
+                "kind": "or",
+                "inputs": [
+                  "sol-low",
+                  "btc-low"
+                ]
+              }
+            ],
+            "root": "either-low",
+            "action": {
+              "type": "pause-vault"
+            }
+          },
+          "policyHash": "0x1309513c8b292af437682f4cb6993a83d832f49e95c9a154d842ca39fbdb2ebf"
+        },
+        "policyHash": "0x1309513c8b292af437682f4cb6993a83d832f49e95c9a154d842ca39fbdb2ebf",
+        "target": {
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "chainId": 31337
+        },
+        "action": "pause-vault",
+        "status": "no-op",
+        "startedAt": "2026-10-07T08:09:10.195Z",
+        "executionMode": "Local EVM rehearsal · no CRE consensus",
+        "decisions": [
+          {
+            "id": "threshold",
+            "label": "threshold",
+            "passed": false,
+            "detail": "Coinbase SOL-USD trade $118.58 < $1.00",
+            "nodeId": "sol-low",
+            "role": "node"
+          },
+          {
+            "id": "threshold",
+            "label": "threshold",
+            "passed": false,
+            "detail": "Coinbase BTC-USD trade $84,017.05 < $1.00",
+            "nodeId": "btc-low",
+            "role": "node"
+          },
+          {
+            "id": "or",
+            "label": "or",
+            "passed": false,
+            "detail": "sol-low OR btc-low → false",
+            "nodeId": "either-low",
+            "role": "node"
+          },
+          {
+            "id": "composed-policy",
+            "label": "composed-policy",
+            "passed": false,
+            "detail": "Policy root \"either-low\" evaluated false",
+            "nodeId": "guard:root",
+            "role": "root"
+          },
+          {
+            "id": "source-freshness",
+            "label": "source-freshness",
+            "passed": true,
+            "detail": "Coinbase SOL-USD trade observed 2.2s ago; limit 60s",
+            "nodeId": "guard:source:exchange-trade:SOL-USD",
+            "role": "guard"
+          },
+          {
+            "id": "source-freshness",
+            "label": "source-freshness",
+            "passed": true,
+            "detail": "Coinbase BTC-USD trade observed 1.0s ago; limit 60s",
+            "nodeId": "guard:source:exchange-trade:BTC-USD",
+            "role": "guard"
+          },
+          {
+            "id": "vault-state",
+            "label": "vault-state",
+            "passed": false,
+            "detail": "Vault already paused; no second pause needed",
+            "nodeId": "guard:vault-active",
+            "role": "guard"
+          }
+        ],
+        "logs": [
+          {
+            "at": "2026-10-07T08:09:10.195Z",
+            "stage": "queued",
+            "message": "Frozen draft revision 1"
+          },
+          {
+            "at": "2026-10-07T08:09:10.206Z",
+            "stage": "fetching",
+            "message": "Fetching fresh execution inputs"
+          },
+          {
+            "at": "2026-10-07T08:09:10.211Z",
+            "stage": "evaluating",
+            "message": "Local EVM rehearsal · shared graph evaluator · no CRE/DON claim"
+          },
+          {
+            "at": "2026-10-07T08:09:10.215Z",
+            "stage": "fetching",
+            "message": "Read vault paused on chain 31337"
+          },
+          {
+            "at": "2026-10-07T08:09:10.215Z",
+            "stage": "fetching",
+            "message": "Fetching Coinbase SOL-USD trade"
+          },
+          {
+            "at": "2026-10-07T08:09:10.216Z",
+            "stage": "fetching",
+            "message": "Fetching Coinbase BTC-USD trade"
+          },
+          {
+            "at": "2026-10-07T08:09:10.387Z",
+            "stage": "evaluating",
+            "message": "STOP sol-low: Coinbase SOL-USD trade $118.58 < $1.00"
+          },
+          {
+            "at": "2026-10-07T08:09:10.387Z",
+            "stage": "evaluating",
+            "message": "STOP btc-low: Coinbase BTC-USD trade $84,017.05 < $1.00"
+          },
+          {
+            "at": "2026-10-07T08:09:10.388Z",
+            "stage": "evaluating",
+            "message": "STOP either-low: sol-low OR btc-low → false"
+          },
+          {
+            "at": "2026-10-07T08:09:10.388Z",
+            "stage": "evaluating",
+            "message": "STOP root: Policy root \"either-low\" evaluated false"
+          },
+          {
+            "at": "2026-10-07T08:09:10.388Z",
+            "stage": "evaluating",
+            "message": "PASS source:exchange-trade:SOL-USD: Coinbase SOL-USD trade observed 2.2s ago; limit 60s"
+          },
+          {
+            "at": "2026-10-07T08:09:10.389Z",
+            "stage": "evaluating",
+            "message": "PASS source:exchange-trade:BTC-USD: Coinbase BTC-USD trade observed 1.0s ago; limit 60s"
+          },
+          {
+            "at": "2026-10-07T08:09:10.389Z",
+            "stage": "evaluating",
+            "message": "STOP vault-active: Vault already paused; no second pause needed"
+          },
+          {
+            "at": "2026-10-07T08:09:10.389Z",
+            "stage": "evaluating",
+            "message": "No action. The policy condition was not met."
+          }
+        ],
+        "observations": [
+          {
+            "key": "exchange-trade:SOL-USD",
+            "provider": "coinbase",
+            "label": "Coinbase SOL-USD trade",
+            "url": "https://api.exchange.coinbase.com/products/SOL-USD/ticker",
+            "usd": 118.58,
+            "raw": "118.58",
+            "observedAt": "2026-10-07T08:09:08.162909049Z",
+            "fetchedAt": "2026-10-07T08:09:10.386Z"
+          },
+          {
+            "key": "exchange-trade:BTC-USD",
+            "provider": "coinbase",
+            "label": "Coinbase BTC-USD trade",
+            "url": "https://api.exchange.coinbase.com/products/BTC-USD/ticker",
+            "usd": 84017.05,
+            "raw": "84017.05",
+            "observedAt": "2026-10-07T08:09:09.401181741Z",
+            "fetchedAt": "2026-10-07T08:09:10.272Z"
+          }
+        ],
+        "noopReason": "The policy condition was not met.",
+        "inputs": {
+          "price": {
+            "id": "price:sol-usd",
+            "kind": "price",
+            "label": "SOL / USD",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "price": 118.58,
+              "unit": "USD",
+              "symbol": "SOL",
+              "history": [
+                {
+                  "price": 118.58,
+                  "observedAt": "2026-10-07T08:09:08.162909049Z"
+                }
+              ],
+              "historyLabel": "Actual execution observation"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/SOL-USD/ticker",
+              "observedAt": "2026-10-07T08:09:08.162909049Z",
+              "fetchedAt": "2026-10-07T08:09:10.386Z",
+              "kind": "live",
+              "label": "Live exchange observation · execution input"
+            }
+          },
+          "vault": {
+            "id": "vault:grant",
+            "kind": "vault",
+            "label": "Grant vault",
+            "visible": true,
+            "pinned": false,
+            "data": {
+              "paused": true,
+              "balance": "1.2049",
+              "balanceEth": 1.2049,
+              "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+              "chainId": 31337,
+              "blockNumber": "11",
+              "fixture": false,
+              "network": "Local Anvil",
+              "balanceWei": "1204900000000000000"
+            },
+            "provenance": {
+              "source": "Anvil contract read",
+              "observedAt": "2026-10-07T08:06:17.000Z",
+              "fetchedAt": "2026-10-07T08:09:10.391Z",
+              "kind": "chain",
+              "chainId": 31337,
+              "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+              "label": "Actual local contract · Anvil"
+            }
+          }
+        },
+        "completedAt": "2026-10-07T08:09:10.391Z"
+      }
+    ],
+    "conversation": [
+      {
+        "id": "7ca5b1a8-ca13-4328-89e9-b441136f334c",
+        "role": "assistant",
+        "text": "Discovered SOL / USD: $118.58 (Coinbase Exchange, observed 2026-10-07T08:08:57.910821Z); BTC / USD: $84030.43 (Coinbase Exchange, observed 2026-10-07T08:08:54.611452Z); Grant vault.",
+        "at": "2026-10-07T08:08:58.944Z",
+        "source": "mcp"
+      },
+      {
+        "id": "7f841a65-d5e3-44cb-959d-f86f7a079678",
+        "role": "assistant",
+        "text": "Revision 1. Pause spending when (Coinbase SOL-USD trade < $1 or Coinbase BTC-USD trade < $1). Execution fetches Coinbase SOL-USD trade and Coinbase BTC-USD trade.",
+        "at": "2026-10-07T08:09:05.929Z",
+        "source": "mcp"
+      },
+      {
+        "id": "4ff47486-9189-437b-924d-5ff8f3940252",
+        "role": "assistant",
+        "text": "Run run-027c2ff2-8d27-4b9d-b237-a4a23964547a started against immutable revision 1.",
+        "at": "2026-10-07T08:09:10.195Z",
+        "source": "mcp"
+      },
+      {
+        "id": "cb71391f-6535-49ac-8c92-c1cf605ae363",
+        "role": "assistant",
+        "text": "Revision 1: no action. The policy condition was not met.",
+        "at": "2026-10-07T08:09:10.391Z",
+        "source": "mcp"
+      },
+      {
+        "id": "1ce19e84-9cb9-4b37-8e81-ba69b4d00a4d",
+        "role": "assistant",
+        "text": "Run revision 1: no-op. The policy condition was not met.",
+        "at": "2026-10-07T08:09:18.737Z",
+        "source": "mcp"
+      },
+      {
+        "id": "5b2294a2-48ae-4ebb-b615-50d5cbb4020c",
+        "role": "assistant",
+        "text": "Run revision 1: no-op. The policy condition was not met.",
+        "at": "2026-10-07T08:09:27.914Z",
+        "source": "mcp"
+      },
+      {
+        "id": "96030e77-e8c9-4156-ab4d-31494fecd747",
+        "role": "assistant",
+        "text": "Grant vault: paused, 1.2049 ETH. Actual local contract · Anvil.",
+        "at": "2026-10-07T08:09:27.927Z",
+        "source": "mcp"
+      },
+      {
+        "id": "ac9908f4-bb75-42f4-adb1-5a9b1554d97a",
+        "role": "user",
+        "text": "Discover live Solana and Bitcoin exchange prices and our deployed grant vault. Compose this policy: if SOL is below $1 OR BTC is below $1, pause grant-vault spending. Keep both exact Coinbase markets and use compose_graph. Run that frozen revision once, then inspect get_run until completed evidence is available. Do not activate monitoring. Briefly report the actual root verdict, each source identity and whether any transaction was sent.",
+        "at": "2026-10-07T08:09:39.433Z",
+        "source": "codex-cli-rehearsal"
+      }
+    ],
+    "activity": {
+      "status": "idle",
+      "prompt": "Discover live Solana and Bitcoin exchange prices and our deployed grant vault. Compose this policy: if SOL is below $1 OR BTC is below $1, pause grant-vault spending. Keep both exact Coinbase markets and use compose_graph. Run that frozen revision once, then inspect get_run until completed evidence is available. Do not activate monitoring. Briefly report the actual root verdict, each source identity and whether any transaction was sent.",
+      "summary": "Composed and ran revision 1 once: the OR root was **false**, using exact Coinbase SOL-USD ($118.58) and BTC-USD ($84,017.05) sources. The local EVM rehearsal completed with **no transaction sent**; the grant vault was already paused, and no monitoring was activated."
+    },
+    "latency": [
+      {
+        "operationId": "agent-activity-f244747a-0ce8-4580-ac42-892391c4f25a",
+        "tool": "set_activity",
+        "receivedAt": "2026-10-07T08:08:45.282Z",
+        "committedAt": "2026-10-07T08:08:45.283Z",
+        "commitMs": 0.14
+      },
+      {
+        "operationId": "agent-activity-8a3f9cf0-4911-4e8b-b205-dba5f523a964",
+        "tool": "set_activity",
+        "receivedAt": "2026-10-07T08:08:58.686Z",
+        "committedAt": "2026-10-07T08:08:58.686Z",
+        "commitMs": 0.21
+      },
+      {
+        "operationId": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365-discover",
+        "tool": "discover_objects",
+        "receivedAt": "2026-10-07T08:08:58.702Z",
+        "committedAt": "2026-10-07T08:08:58.944Z",
+        "commitMs": 241.61
+      },
+      {
+        "operationId": "agent-activity-6b867116-afc5-4b11-90ed-3ec3484714f4",
+        "tool": "set_activity",
+        "receivedAt": "2026-10-07T08:09:05.914Z",
+        "committedAt": "2026-10-07T08:09:05.914Z",
+        "commitMs": 0.12
+      },
+      {
+        "operationId": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365-compose",
+        "tool": "compose_graph",
+        "receivedAt": "2026-10-07T08:09:05.916Z",
+        "committedAt": "2026-10-07T08:09:05.929Z",
+        "commitMs": 13.17
+      },
+      {
+        "operationId": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365-run",
+        "tool": "run_workflow",
+        "receivedAt": "2026-10-07T08:09:10.194Z",
+        "committedAt": "2026-10-07T08:09:10.195Z",
+        "commitMs": 1.08
+      },
+      {
+        "operationId": "agent-activity-4179cbf1-ceb7-41ea-a0f0-c2bf8de76eba",
+        "tool": "set_activity",
+        "receivedAt": "2026-10-07T08:09:10.196Z",
+        "committedAt": "2026-10-07T08:09:10.196Z",
+        "commitMs": 0.03
+      },
+      {
+        "operationId": "agent-activity-1b5f371d-38ff-4106-a280-393cb36061bf",
+        "tool": "set_activity",
+        "receivedAt": "2026-10-07T08:09:18.735Z",
+        "committedAt": "2026-10-07T08:09:18.735Z",
+        "commitMs": 0.09
+      },
+      {
+        "operationId": "a18a4ce2-e930-4c19-ad4c-ff61d6d9b2cc",
+        "tool": "get_run",
+        "receivedAt": "2026-10-07T08:09:18.737Z",
+        "committedAt": "2026-10-07T08:09:18.737Z",
+        "commitMs": 0.25
+      },
+      {
+        "operationId": "c9466707-922f-4c78-8ac9-29e197f8a386",
+        "tool": "get_run",
+        "receivedAt": "2026-10-07T08:09:27.914Z",
+        "committedAt": "2026-10-07T08:09:27.914Z",
+        "commitMs": 0.18
+      },
+      {
+        "operationId": "agent-activity-64d6b82c-3d18-4714-bb78-4b03e1a10a30",
+        "tool": "set_activity",
+        "receivedAt": "2026-10-07T08:09:27.916Z",
+        "committedAt": "2026-10-07T08:09:27.916Z",
+        "commitMs": 0.04
+      },
+      {
+        "operationId": "agent-activity-a9d32373-48b6-43a5-bed9-7bdd295f8ad8",
+        "tool": "set_activity",
+        "receivedAt": "2026-10-07T08:09:27.920Z",
+        "committedAt": "2026-10-07T08:09:27.920Z",
+        "commitMs": 0.05
+      },
+      {
+        "operationId": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365-inspect",
+        "tool": "inspect_object",
+        "receivedAt": "2026-10-07T08:09:27.922Z",
+        "committedAt": "2026-10-07T08:09:27.927Z",
+        "commitMs": 4.94
+      },
+      {
+        "operationId": "agent-b8e5075c-3d3d-4a26-8b99-1c8c4c73f365-utterance",
+        "tool": "submit_utterance",
+        "receivedAt": "2026-10-07T08:09:39.433Z",
+        "committedAt": "2026-10-07T08:09:39.433Z",
+        "commitMs": 0.17
+      },
+      {
+        "operationId": "agent-activity-4ba4cdbe-4874-4d00-85a5-7a449823610d",
+        "tool": "set_activity",
+        "receivedAt": "2026-10-07T08:09:39.436Z",
+        "committedAt": "2026-10-07T08:09:39.436Z",
+        "commitMs": 0.04
+      }
+    ],
+    "capabilities": {
+      "price": "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
+      "vault": "Actual local contract · Anvil",
+      "execution": "Local EVM rehearsal · no CRE consensus",
+      "voice": "Planned utterances · actual desktop voice unverified",
+      "mcp": "Semantic tools · official MCP stdio transport",
+      "supported": {
+        "sources": [
+          {
+            "type": "exchange-trade",
+            "provider": "Coinbase",
+            "market": "exact online SYMBOL-USD"
+          },
+          {
+            "type": "chainlink-feed",
+            "provider": "Chainlink",
+            "market": "configured USD feed on explicitly selected Ethereum mainnet or Sepolia",
+            "freshness": "Mandatory 26-hour feed age cap; optional graph freshness nodes may tighten it"
+          }
+        ],
+        "nodes": [
+          "price",
+          "compare",
+          "freshness",
+          "vault-paused",
+          "and",
+          "or",
+          "not"
+        ],
+        "comparators": [
+          "<",
+          "<=",
+          ">",
+          ">="
+        ],
+        "actions": [
+          {
+            "type": "pause-vault",
+            "effect": "Pause spending on the configured GrantVault via a verified transaction"
+          }
+        ],
+        "utilities": [
+          {
+            "name": "inspect_solana_wallet",
+            "network": "devnet default; mainnet-beta read-only",
+            "effect": "Live wallet balance and signature history"
+          },
+          {
+            "name": "get_solana_devnet_wallet",
+            "network": "devnet",
+            "effect": "Generated wallet public address and live balance"
+          },
+          {
+            "name": "transfer_solana_devnet",
+            "network": "devnet",
+            "effect": "Real confirmed SOL transfer to an explicit recipient; direct utility, not a graph action"
+          }
+        ],
+        "limits": {
+          "nodes": 40,
+          "booleanInputs": 8,
+          "sourcesPerDiscovery": 12,
+          "thresholdMaxUsd": 10000000,
+          "executionSources": 5,
+          "exchangeMaxAgeSeconds": 120,
+          "feedMaxAgeSeconds": 93600
+        },
+        "triggers": "run_workflow evaluates once; activate_policy explicitly polls a frozen graph on the live backend until one verified vault pause. Restarts pause monitoring; no automatic resumption.",
+        "monitoring": {
+          "activate": "activate_policy",
+          "deactivate": "deactivate_policy",
+          "inspect": "get_monitors",
+          "reconcile": "reconcile_policy",
+          "maxActiveMonitors": 8,
+          "maxConsecutiveObservationFailures": 5,
+          "defaultIntervalSeconds": 30,
+          "minIntervalSeconds": 15,
+          "maxIntervalSeconds": 3600,
+          "survivesRestart": "Persisted status and evidence; paused or uncertain jobs require explicit reactivation"
+        },
+        "safeguards": [
+          "Mandatory provider-specific freshness gates apply to every source",
+          "Already-paused vault returns no action",
+          "Immutable run revision",
+          "Operation-id deduplication"
+        ],
+        "receiver": "Every pause requires version 2 and binds run, revision, policy hash, target vault and chain",
+        "unsupported": [
+          "copy-trading",
+          "buy",
+          "sell",
+          "swap",
+          "mainnet transfer signing",
+          "conditional transfers",
+          "arbitrary code",
+          "unconfigured chain/feed",
+          "monitoring while backend is offline"
+        ]
+      }
+    },
+    "monitors": [],
+    "inspectedRunId": "run-027c2ff2-8d27-4b9d-b237-a4a23964547a",
+    "canvasView": {
+      "action": "focus",
+      "sequence": 3
+    },
+    "canUndoClear": false
+  }
+}

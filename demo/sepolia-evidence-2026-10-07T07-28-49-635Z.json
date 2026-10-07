@@ -1,0 +1,561 @@
+{
+  "claim": "CRE local simulation with real Sepolia broadcast through the CRE MockForwarder. Not deployed-DON execution.",
+  "chainId": 11155111,
+  "vault": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+  "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+  "label": "cre-simulation-sepolia-broadcast",
+  "startedAt": "2026-10-07T07:28:14.654Z",
+  "completedAt": "2026-10-07T07:28:49.615Z",
+  "feedNetwork": "ethereum-mainnet",
+  "cases": {
+    "falseCondition": {
+      "policy": "Pause spending when (Coinbase ETH-USD trade < $1 and Chainlink BTC/USD (mainnet) > $1).",
+      "spec": {
+        "version": 2,
+        "runId": "prove-false-muxscw1q",
+        "revision": 1,
+        "graph": {
+          "nodes": [
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "ETH-USD"
+              }
+            },
+            {
+              "id": "btc",
+              "kind": "price",
+              "source": {
+                "type": "chainlink-feed",
+                "symbol": "BTC",
+                "network": "ethereum-mainnet"
+              }
+            },
+            {
+              "id": "ethBelow",
+              "kind": "compare",
+              "input": "eth",
+              "op": "<",
+              "value": 1
+            },
+            {
+              "id": "btcLive",
+              "kind": "compare",
+              "input": "btc",
+              "op": ">",
+              "value": 1
+            },
+            {
+              "id": "both",
+              "kind": "and",
+              "inputs": [
+                "ethBelow",
+                "btcLive"
+              ]
+            }
+          ],
+          "root": "both",
+          "action": {
+            "type": "pause-vault"
+          }
+        },
+        "policyHash": "0x022dc33e60c1a230b8beb5f3947148fa77572cef79529bd6b6ac63db9b3737d1",
+        "maxAgeSeconds": 60,
+        "broadcast": true
+      },
+      "evidence": {
+        "runId": "prove-false-muxscw1q",
+        "revision": 1,
+        "policyHash": "0x022dc33e60c1a230b8beb5f3947148fa77572cef79529bd6b6ac63db9b3737d1",
+        "mode": "cre-local-simulation",
+        "observations": [
+          {
+            "key": "exchange-trade:ETH-USD",
+            "provider": "coinbase",
+            "label": "Coinbase ETH-USD trade",
+            "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+            "usd": 2617.33,
+            "raw": "2617.33",
+            "observedAt": "2026-10-07T07:28:21.849Z",
+            "fetchedAt": "2026-10-07T07:28:23.745Z"
+          },
+          {
+            "key": "chainlink-feed:ethereum-mainnet:BTC",
+            "provider": "chainlink",
+            "label": "Chainlink BTC/USD (mainnet)",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
+            "decimals": 8,
+            "usd": 84189.91,
+            "raw": "8418991000000",
+            "roundId": "129127208515966886233",
+            "observedAt": "2026-10-07T07:04:11.000Z",
+            "fetchedAt": "2026-10-07T07:28:23.745Z"
+          }
+        ],
+        "vault": {
+          "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+          "chainId": 11155111,
+          "paused": false,
+          "balanceWei": "0",
+          "reportVersion": 2
+        },
+        "conditions": [
+          {
+            "nodeId": "ethBelow",
+            "kind": "threshold",
+            "role": "node",
+            "passed": false,
+            "detail": "Coinbase ETH-USD trade $2617.33 < $1"
+          },
+          {
+            "nodeId": "btcLive",
+            "kind": "threshold",
+            "role": "node",
+            "passed": true,
+            "detail": "Chainlink BTC/USD (mainnet) $84189.91 > $1"
+          },
+          {
+            "nodeId": "both",
+            "kind": "and",
+            "role": "node",
+            "passed": false,
+            "detail": "ethBelow AND btcLive → false"
+          },
+          {
+            "nodeId": "guard:root",
+            "kind": "composed-policy",
+            "role": "root",
+            "passed": false,
+            "detail": "Policy root \"both\" evaluated false"
+          },
+          {
+            "nodeId": "guard:source:exchange-trade:ETH-USD",
+            "kind": "source-freshness",
+            "role": "guard",
+            "passed": true,
+            "detail": "Coinbase ETH-USD trade observed 2.3s ago; limit 60s"
+          },
+          {
+            "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:BTC",
+            "kind": "source-freshness",
+            "role": "guard",
+            "passed": true,
+            "detail": "Chainlink BTC/USD (mainnet) observed 1453.1s ago; limit 93600s"
+          },
+          {
+            "nodeId": "guard:vault-active",
+            "kind": "vault-state",
+            "role": "guard",
+            "passed": true,
+            "detail": "Vault spending active"
+          }
+        ],
+        "root": false,
+        "decision": "noop",
+        "action": "pause-vault",
+        "decidedAt": "2026-10-07T07:28:24.108Z",
+        "logs": [
+          "ORIGINS_SOURCE Reading Coinbase ETH-USD trade",
+          "ORIGINS_SOURCE Reading Chainlink BTC/USD (mainnet) at 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
+        ],
+        "noopReason": "The policy condition was not met."
+      }
+    },
+    "trueCondition": {
+      "policy": "Pause spending when (Coinbase ETH-USD trade < $2,880 and Chainlink BTC/USD (mainnet) > $1).",
+      "spec": {
+        "version": 2,
+        "runId": "prove-true-muxscw1q",
+        "revision": 2,
+        "graph": {
+          "nodes": [
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "ETH-USD"
+              }
+            },
+            {
+              "id": "btc",
+              "kind": "price",
+              "source": {
+                "type": "chainlink-feed",
+                "symbol": "BTC",
+                "network": "ethereum-mainnet"
+              }
+            },
+            {
+              "id": "ethBelow",
+              "kind": "compare",
+              "input": "eth",
+              "op": "<",
+              "value": 2880
+            },
+            {
+              "id": "btcLive",
+              "kind": "compare",
+              "input": "btc",
+              "op": ">",
+              "value": 1
+            },
+            {
+              "id": "both",
+              "kind": "and",
+              "inputs": [
+                "ethBelow",
+                "btcLive"
+              ]
+            }
+          ],
+          "root": "both",
+          "action": {
+            "type": "pause-vault"
+          }
+        },
+        "policyHash": "0x5355a0bef5875316eed62fdcfc1d0b24620d6d50bf3754ccea25ad4686abb825",
+        "maxAgeSeconds": 60,
+        "broadcast": true
+      },
+      "evidence": {
+        "runId": "prove-true-muxscw1q",
+        "revision": 2,
+        "policyHash": "0x5355a0bef5875316eed62fdcfc1d0b24620d6d50bf3754ccea25ad4686abb825",
+        "mode": "cre-local-simulation",
+        "observations": [
+          {
+            "key": "exchange-trade:ETH-USD",
+            "provider": "coinbase",
+            "label": "Coinbase ETH-USD trade",
+            "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+            "usd": 2617.32,
+            "raw": "2617.32",
+            "observedAt": "2026-10-07T07:28:30.060Z",
+            "fetchedAt": "2026-10-07T07:28:31.239Z"
+          },
+          {
+            "key": "chainlink-feed:ethereum-mainnet:BTC",
+            "provider": "chainlink",
+            "label": "Chainlink BTC/USD (mainnet)",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
+            "decimals": 8,
+            "usd": 84189.91,
+            "raw": "8418991000000",
+            "roundId": "129127208515966886233",
+            "observedAt": "2026-10-07T07:04:11.000Z",
+            "fetchedAt": "2026-10-07T07:28:31.239Z"
+          }
+        ],
+        "vault": {
+          "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+          "chainId": 11155111,
+          "paused": false,
+          "balanceWei": "0",
+          "reportVersion": 2
+        },
+        "conditions": [
+          {
+            "nodeId": "ethBelow",
+            "kind": "threshold",
+            "role": "node",
+            "passed": true,
+            "detail": "Coinbase ETH-USD trade $2617.32 < $2880"
+          },
+          {
+            "nodeId": "btcLive",
+            "kind": "threshold",
+            "role": "node",
+            "passed": true,
+            "detail": "Chainlink BTC/USD (mainnet) $84189.91 > $1"
+          },
+          {
+            "nodeId": "both",
+            "kind": "and",
+            "role": "node",
+            "passed": true,
+            "detail": "ethBelow AND btcLive → true"
+          },
+          {
+            "nodeId": "guard:root",
+            "kind": "composed-policy",
+            "role": "root",
+            "passed": true,
+            "detail": "Policy root \"both\" evaluated true"
+          },
+          {
+            "nodeId": "guard:source:exchange-trade:ETH-USD",
+            "kind": "source-freshness",
+            "role": "guard",
+            "passed": true,
+            "detail": "Coinbase ETH-USD trade observed 1.5s ago; limit 60s"
+          },
+          {
+            "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:BTC",
+            "kind": "source-freshness",
+            "role": "guard",
+            "passed": true,
+            "detail": "Chainlink BTC/USD (mainnet) observed 1460.5s ago; limit 93600s"
+          },
+          {
+            "nodeId": "guard:vault-active",
+            "kind": "vault-state",
+            "role": "guard",
+            "passed": true,
+            "detail": "Vault spending active"
+          }
+        ],
+        "root": true,
+        "decision": "act",
+        "action": "pause-vault",
+        "decidedAt": "2026-10-07T07:28:31.541Z",
+        "logs": [
+          "ORIGINS_SOURCE Reading Coinbase ETH-USD trade",
+          "ORIGINS_SOURCE Reading Chainlink BTC/USD (mainnet) at 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
+        ],
+        "transaction": {
+          "hash": "0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec",
+          "blockNumber": 11861492,
+          "status": "success",
+          "receiverConfirmed": true,
+          "pausedAfter": true
+        }
+      }
+    },
+    "duplicate": {
+      "replayReturnedSameHash": true,
+      "newRunOnPausedVault": {
+        "policy": "Pause spending when (Coinbase ETH-USD trade < $2,880 and Chainlink BTC/USD (mainnet) > $1).",
+        "spec": {
+          "version": 2,
+          "runId": "prove-again-muxscw1q",
+          "revision": 2,
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "ETH-USD"
+                }
+              },
+              {
+                "id": "btc",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "BTC",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "ethBelow",
+                "kind": "compare",
+                "input": "eth",
+                "op": "<",
+                "value": 2880
+              },
+              {
+                "id": "btcLive",
+                "kind": "compare",
+                "input": "btc",
+                "op": ">",
+                "value": 1
+              },
+              {
+                "id": "both",
+                "kind": "and",
+                "inputs": [
+                  "ethBelow",
+                  "btcLive"
+                ]
+              }
+            ],
+            "root": "both",
+            "action": {
+              "type": "pause-vault"
+            }
+          },
+          "policyHash": "0x5355a0bef5875316eed62fdcfc1d0b24620d6d50bf3754ccea25ad4686abb825",
+          "maxAgeSeconds": 60,
+          "broadcast": true
+        },
+        "evidence": {
+          "runId": "prove-again-muxscw1q",
+          "revision": 2,
+          "policyHash": "0x5355a0bef5875316eed62fdcfc1d0b24620d6d50bf3754ccea25ad4686abb825",
+          "mode": "cre-local-simulation",
+          "observations": [
+            {
+              "key": "exchange-trade:ETH-USD",
+              "provider": "coinbase",
+              "label": "Coinbase ETH-USD trade",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+              "usd": 2616.77,
+              "raw": "2616.77",
+              "observedAt": "2026-10-07T07:28:42.653Z",
+              "fetchedAt": "2026-10-07T07:28:43.536Z"
+            },
+            {
+              "key": "chainlink-feed:ethereum-mainnet:BTC",
+              "provider": "chainlink",
+              "label": "Chainlink BTC/USD (mainnet)",
+              "network": "ethereum-mainnet",
+              "chainId": 1,
+              "address": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
+              "decimals": 8,
+              "usd": 84189.91,
+              "raw": "8418991000000",
+              "roundId": "129127208515966886233",
+              "observedAt": "2026-10-07T07:04:11.000Z",
+              "fetchedAt": "2026-10-07T07:28:43.536Z"
+            }
+          ],
+          "vault": {
+            "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+            "chainId": 11155111,
+            "paused": true,
+            "balanceWei": "0",
+            "reportVersion": 2
+          },
+          "conditions": [
+            {
+              "nodeId": "ethBelow",
+              "kind": "threshold",
+              "role": "node",
+              "passed": true,
+              "detail": "Coinbase ETH-USD trade $2616.77 < $2880"
+            },
+            {
+              "nodeId": "btcLive",
+              "kind": "threshold",
+              "role": "node",
+              "passed": true,
+              "detail": "Chainlink BTC/USD (mainnet) $84189.91 > $1"
+            },
+            {
+              "nodeId": "both",
+              "kind": "and",
+              "role": "node",
+              "passed": true,
+              "detail": "ethBelow AND btcLive → true"
+            },
+            {
+              "nodeId": "guard:root",
+              "kind": "composed-policy",
+              "role": "root",
+              "passed": true,
+              "detail": "Policy root \"both\" evaluated true"
+            },
+            {
+              "nodeId": "guard:source:exchange-trade:ETH-USD",
+              "kind": "source-freshness",
+              "role": "guard",
+              "passed": true,
+              "detail": "Coinbase ETH-USD trade observed 1.6s ago; limit 60s"
+            },
+            {
+              "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:BTC",
+              "kind": "source-freshness",
+              "role": "guard",
+              "passed": true,
+              "detail": "Chainlink BTC/USD (mainnet) observed 1473.2s ago; limit 93600s"
+            },
+            {
+              "nodeId": "guard:vault-active",
+              "kind": "vault-state",
+              "role": "guard",
+              "passed": false,
+              "detail": "Vault already paused; no second pause needed"
+            }
+          ],
+          "root": true,
+          "decision": "noop",
+          "action": "pause-vault",
+          "decidedAt": "2026-10-07T07:28:44.237Z",
+          "logs": [
+            "ORIGINS_SOURCE Reading Coinbase ETH-USD trade",
+            "ORIGINS_SOURCE Reading Chainlink BTC/USD (mainnet) at 0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
+          ],
+          "noopReason": "The vault was already paused, so no second pause was sent."
+        }
+      }
+    },
+    "unsupportedAction": {
+      "spec": {
+        "version": 2,
+        "runId": "prove-sell-muxscw1q",
+        "revision": 3,
+        "graph": {
+          "nodes": [
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "ETH-USD"
+              }
+            },
+            {
+              "id": "btc",
+              "kind": "price",
+              "source": {
+                "type": "chainlink-feed",
+                "symbol": "BTC",
+                "network": "ethereum-mainnet"
+              }
+            },
+            {
+              "id": "ethBelow",
+              "kind": "compare",
+              "input": "eth",
+              "op": "<",
+              "value": 2880
+            },
+            {
+              "id": "btcLive",
+              "kind": "compare",
+              "input": "btc",
+              "op": ">",
+              "value": 1
+            },
+            {
+              "id": "both",
+              "kind": "and",
+              "inputs": [
+                "ethBelow",
+                "btcLive"
+              ]
+            }
+          ],
+          "root": "both",
+          "action": {
+            "type": "sell",
+            "symbol": "ETH",
+            "amount": 1,
+            "venue": "mock-venue"
+          }
+        },
+        "policyHash": "0x3d5837305abdce061381bd93e28b1cdbe785c023a88eca23524eaed0ecb2811a",
+        "maxAgeSeconds": 60,
+        "broadcast": true
+      },
+      "refused": "Simulated sells run only in local rehearsal; CRE delivers only pause-vault reports. Nothing was submitted."
+    }
+  },
+  "pause": {
+    "transactionHash": "0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec",
+    "blockNumber": 11861492,
+    "policyHash": "0x5355a0bef5875316eed62fdcfc1d0b24620d6d50bf3754ccea25ad4686abb825",
+    "runId": "prove-true-muxscw1q",
+    "revision": 2
+  },
+  "resumeTransactionHash": "0xab07133c181e8c0cd3ebad890e7cfa28f306980be22b3b060d39f3540757e294"
+}

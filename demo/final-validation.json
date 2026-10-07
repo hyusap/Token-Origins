@@ -1,0 +1,48 @@
+{
+  "verifiedAt": "2026-10-07T09:28:02.807Z",
+  "verified": true,
+  "scope": "Automated regression/type/build checks; real CRE executions recorded separately",
+  "checks": [
+    {
+      "command": "bun test",
+      "exitCode": 0,
+      "passed": 266,
+      "failed": 0,
+      "assertions": 1664,
+      "files": 35,
+      "includesResearchUnitModules": true
+    },
+    {
+      "command": "bun run check",
+      "exitCode": 0
+    },
+    {
+      "command": "bun run build",
+      "exitCode": 0,
+      "modules": 2375,
+      "jsBytesApprox": 546140,
+      "gzipJsBytesApprox": 169450,
+      "warning": "Vite advisory: main JS chunk exceeds 500 kB"
+    },
+    {
+      "command": "bun run --cwd cre typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "forge test --root contracts",
+      "exitCode": 0,
+      "passed": 12,
+      "failed": 0,
+      "productGrantVaultTests": 10,
+      "historicalResearchTokenTests": 2
+    }
+  ],
+  "noWorkflowCliInvoked": true,
+  "noPrimaryStateMutation": true,
+  "currentPublicProof": "demo/sepolia-current-proof-verification.json",
+  "alternatePublicProof": "demo/sepolia-current-alternate-rpc-verification.json",
+  "browserCreProof": "demo/browser-cre-broadcast-verification.json",
+  "browserCreIndependentChecks": 15,
+  "recordedCreSourceEvidence": "demo/browser-cre-recorded-evidence.json",
+  "browserCreRecovery": "Read-only receipt recovery; no resubmission. Structured progress and durable submission regressions now pass."
+}

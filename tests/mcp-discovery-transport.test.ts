@@ -23,7 +23,20 @@ test("official MCP stdio schema and HTTP forwarding preserve tokens and refuse o
   const client = new Client({ name: "discovery-regression", version: "1" });
   try {
     await client.connect(transport);
-    const definition = (await client.listTools()).tools.find(tool => tool.name === "discover_objects")!;
+    const definitions = (await client.listTools()).tools;
+    expect(definitions.some(tool => tool.name === "get_capabilities")).toBe(true);
+    expect(definitions.some(tool => tool.name === "activate_policy")).toBe(true);
+    expect(definitions.some(tool => tool.name === "reconcile_policy")).toBe(true);
+    expect(definitions.find(tool => tool.name === "read_price_feed")!.inputSchema.properties).toHaveProperty("network");
+    expect(definitions.some(tool => tool.name === "inspect_solana_wallet")).toBe(false);
+    expect(definitions.some(tool => tool.name === "transfer_solana_devnet")).toBe(false);
+    expect(definitions.some(tool => tool.name === "copy_evm_swap")).toBe(false);
+    expect(definitions.some(tool => tool.name === "activate_evm_trade_watch")).toBe(false);
+    const graphSchema = definitions.find(tool => tool.name === "compose_graph")!.inputSchema.properties?.graph as Record<string, any>;
+    expect(graphSchema.properties.nodes.items).toHaveProperty("anyOf");
+    expect(JSON.stringify(graphSchema)).not.toContain("mock-venue");
+    expect(JSON.stringify(graphSchema)).not.toContain("solana-transfer");
+    const definition = definitions.find(tool => tool.name === "discover_objects")!;
     expect(definition.inputSchema.properties).toHaveProperty("tokens");
     const rejected = await client.callTool({ name: "discover_objects", arguments: { objects: ["price"], tokens: ["Solana", "Bitcoin"], operationId: "old" } });
     expect(rejected.isError).toBe(true);
@@ -34,6 +47,9 @@ test("official MCP stdio schema and HTTP forwarding preserve tokens and refuse o
       const args = { objects: ["price"], ...(tokens ? { tokens } : {}), operationId: crypto.randomUUID() };
       const result = await client.callTool({ name: "discover_objects", arguments: args });
       expect(result.isError).toBe(false);
+      const textResult = JSON.parse((result.content as Array<{ type: string; text: string }>)[0]!.text);
+      expect(textResult.state.workflow.revision).toBe(0);
+      expect(textResult).toEqual(result.structuredContent);
       expect(forwarded.at(-1)).toEqual(args);
     }
   } finally {

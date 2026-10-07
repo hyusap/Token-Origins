@@ -1,4 +1,8 @@
 staging-settings:
   rpcs:
+    # The vault and its reports live on Sepolia.
     - chain-name: ethereum-testnet-sepolia
       url: https://ethereum-sepolia-rpc.publicnode.com
+    # Read-only: Chainlink mainnet feeds, so CRE reads the same aggregator the canvas shows.
+    - chain-name: ethereum-mainnet
+      url: https://ethereum-rpc.publicnode.com

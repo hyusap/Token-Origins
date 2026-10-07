@@ -13,11 +13,13 @@ import {
   CornerDownLeft,
   Mic,
   MicOff,
-  RotateCcw,
   Eraser,
   Plus,
   Minus,
   Maximize2,
+  Command,
+  ChevronRight,
+  LoaderCircle,
 } from "lucide-react";
 import type {
   CanvasState,
@@ -25,15 +27,21 @@ import type {
   ExecutionRun,
   PolicyGraph,
 } from "../shared/types";
-import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, Handle, Position, useReactFlow, useNodesInitialized, useNodesState, type NodeProps, type Viewport } from "@xyflow/react";
-import { canvasFlow, type InstrumentFlowNode } from "./flow-model";
+import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, ControlButton, Handle, Position, useReactFlow, useNodesInitialized, useNodesState, type NodeProps, type Viewport } from "@xyflow/react";
+import { canvasFlow, reconcileCanvasNodes, type InstrumentFlowNode } from "./flow-model";
 import "@xyflow/react/dist/style.css";
 import "./brand.css";
 import "./style.css";
 import "./app-layout.css";
 import { microphoneLevels, type MicrophoneSnapshot } from "./microphone";
 import { useMicrophone } from "./use-microphone";
+import { useVoice, type VoiceStatus } from "./voice";
 import { displayReply } from "./display-reply";
+import { compactReply, replyBlocks } from "./reply-format";
+import { observationOnlyForVault } from "../shared/policy-capabilities";
+import { policyExpression, describeSource, actionObjectId, formatSol, describeAction } from "./policy-language";
+import { policyView, frozenGraph, runOutcome, runProvenance, isEvaluationOnly, missingDecisionLabel, decisionRole, settledExecutionReply, vaultStateLabel } from "./policy-view";
+import { useCreReadiness, creReadinessLabel } from "./cre-readiness";
 
 const money = (n: number | undefined) =>
   typeof n === "number" && Number.isFinite(n)
@@ -59,46 +67,29 @@ const api = async (path: string, body?: unknown) => {
   return data;
 };
 
-function settledExecutionReply(state: CanvasState, summary: string) {
-  const run = state.runs[0];
-  const prompt = state.conversation.filter((c) => c.role === "user").at(-1);
-  if (
-    !run ||
-    !prompt ||
-    Date.parse(run.startedAt) < Date.parse(prompt.at) ||
-    !/queued|preparing|no result yet/i.test(summary)
-  )
-    return null;
-  if (run.status === "confirmed")
-    return `Execution v${run.revision.toString().padStart(2, "0")} confirmed at block ${run.evidence?.blockNumber}. The receiver event and fresh vault read verify spending is paused.`;
-  if (run.status === "failed")
-    return `Execution blocked: ${run.error || "The run could not be verified."}`;
-  if (run.status === "no-op") {
-    const failed = run.decisions.find((d) => !d.passed);
-    return `No report sent. ${failed?.id === "vault-state" ? "The vault is already paused." : failed?.id === "freshness" ? "The source observation did not pass the freshness check." : failed?.id === "threshold" ? "The fetched price did not meet this version’s threshold." : "This run required no further action."}`;
-  }
-  return null;
-}
-
 function InlineSummary({ text }: { text: string }) {
   return <>{text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) =>
     part.startsWith("**") ? <strong key={index}>{part.slice(2, -2)}</strong> :
     part.startsWith("`") ? <code key={index}>{part.slice(1, -1)}</code> : part
   )}</>;
 }
+function ResponsePanel({ text, close }: { text: string; close: () => void }) {
+  return <aside className="response-panel" aria-label="Full response">
+    <div className="capability-head mono">Latest response<button onClick={close} aria-label="Close response"><X size={16} /></button></div>
+    <div className="response-content">{replyBlocks(text).map((block, index) => block.kind === "table" ? <div className="response-table" key={index}><table><thead><tr>{block.headers.map((header, column) => <th key={column}><InlineSummary text={header} /></th>)}</tr></thead><tbody>{block.rows.map((row, rowIndex) => <tr key={rowIndex}>{block.headers.map((_, column) => <td key={column}><InlineSummary text={row[column] || ""} /></td>)}</tr>)}</tbody></table></div> : <p key={index}><InlineSummary text={block.text} /></p>)}</div>
+  </aside>;
+}
 
 function useCanvas() {
   const [state, setState] = useState<CanvasState | null>(null);
   const [connected, setConnected] = useState(false);
+  const applyState = (next: CanvasState) => setState(previous => !previous || next.seq >= previous.seq ? next : previous);
   const acknowledged = useRef(new Set<string>());
   useEffect(() => {
     let active = true,
       ws: WebSocket,
       timer: ReturnType<typeof setTimeout>;
     const connect = () => {
-      api("/api/state")
-        .then((s) => active && setState(s))
-        .catch(() => {});
       ws = new WebSocket(
         `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`,
       );
@@ -108,7 +99,8 @@ function useCanvas() {
           const msg = JSON.parse(e.data);
           const next = msg.state || msg;
           if (next.sessionId) {
-            setState(next);
+            if (!active) return;
+            applyState(next);
             requestAnimationFrame(() => {
               const operationId = next.latency?.at(-1)?.operationId;
               if (!operationId || acknowledged.current.has(operationId)) return;
@@ -137,7 +129,7 @@ function useCanvas() {
       ws?.close();
     };
   }, []);
-  return { state, connected };
+  return { state, connected, applyState };
 }
 
 function BrandMark() {
@@ -163,13 +155,14 @@ function BrandMark() {
 }
 
 type SignalMode = "ready" | "working" | "running" | "speaking" | "typing" | "offline" | "blocked";
-function LiveSignal({ mode, microphone }: { mode: SignalMode; microphone: MicrophoneSnapshot }) {
+function LiveSignal({ mode, microphone, voiceStatus }: { mode: SignalMode; microphone: MicrophoneSnapshot; voiceStatus: VoiceStatus }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const input = useRef(microphone);
   useEffect(() => { input.current = microphone; }, [microphone]);
   useEffect(() => {
     const el = canvas.current!;
-    const ctx = el.getContext("2d")!;
+    const ctx = el.getContext("2d");
+    if (!ctx) return;
     let frame = 0;
     let disposed = false;
     let samples = new Float32Array(2048);
@@ -209,10 +202,10 @@ function LiveSignal({ mode, microphone }: { mode: SignalMode; microphone: Microp
     frame = requestAnimationFrame(draw);
     return () => { disposed = true; cancelAnimationFrame(frame); };
   }, []);
-  const label = mode === "working" ? "Working" : mode === "running" ? "Executing" : mode === "blocked" ? "Error" : mode.charAt(0).toUpperCase() + mode.slice(1);
-  return <div className={`live-signal signal-${mode} ${microphone.status === "live" ? "mic-live" : ""}`} role="status" aria-label={`${microphone.status === "live" ? "Microphone live" : "Microphone off"}; agent ${label.toLowerCase()}`}>
+  const listening = voiceStatus === "listening";
+  return <div className={`live-signal signal-${mode} ${microphone.status === "live" ? "mic-live" : ""}`} role="status" aria-label={listening ? "Voice dictation listening" : voiceStatus === "requesting" ? "Starting voice dictation" : "Voice dictation off"}>
     <canvas ref={canvas} aria-hidden="true" />
-    <span className="signal-caption mono" data-state={label}><i />{microphone.status === "live" ? "Mic live" : microphone.status === "requesting" ? "Mic permission…" : "Mic off"}<span className="signal-agent-state">{label}</span></span>
+    <span className="signal-caption mono" data-state={listening ? "Listening" : voiceStatus === "requesting" ? "Starting voice" : mode === "running" ? "Executing" : mode === "working" ? "Composing" : ""}><i />{listening ? "Listening" : voiceStatus === "requesting" ? "Voice permission…" : "Mic off"}</span>
   </div>;
 }
 function NodeHeader({
@@ -247,14 +240,14 @@ function NodeFooter({ object }: { object: GraphObject }) {
       <span
         className={
           object.kind === "feed"
-            ? Number(object.data.ageSeconds) > 3600
+            ? Number(object.data.ageSeconds) > 26 * 3600
               ? "oracle-age is-stale"
               : "oracle-age"
             : undefined
         }
       >
         {object.kind === "feed"
-          ? object.data.ageLabel
+          ? object.data.ageLabel || (object.provenance.observedAt ? clock(object.provenance.observedAt) : "Not fetched")
           : clock(
               object.provenance.kind === "chain"
                 ? object.provenance.fetchedAt
@@ -270,7 +263,8 @@ function PriceChart({ object }: { object: GraphObject }) {
     .map((p: any) => Number(p.price ?? p.value ?? p))
     .filter(Number.isFinite);
   const price = Number(object.data.price ?? object.data.value);
-  if (!points.length && price) points.push(price);
+  if (!points.length && Number.isFinite(price) && price > 0) points.push(price);
+  if (!points.length) return <div className="chart-empty mono">No price observations available</div>;
   const low = Math.min(...points) * 0.9995,
     high = Math.max(...points) * 1.0005;
   const path = points
@@ -347,9 +341,9 @@ function PriceNode({
         type={object.kind === "feed" ? "Chainlink Data Feed" : "Market observation"}
         extra={
           object.kind === "feed" ? (
-            <span className="oracle-badge">ON-CHAIN ORACLE</span>
+            <span className="oracle-badge">{object.provenance.observedAt ? "ON-CHAIN ORACLE" : "ORACLE INPUT"}</span>
           ) : (
-            <span className="live-label">Observed</span>
+            <span className="live-label">{object.provenance.observedAt ? "Observed" : "Not fetched"}</span>
           )
         }
       />
@@ -381,6 +375,11 @@ function PriceNode({
           {money(Number(object.data.price ?? object.data.value))}
         </div>
         <PriceChart object={object} />
+        <p className="policy-restriction">
+          {observationOnlyForVault(object)
+            ? "Market observation only. Choose an exact USD source for an executable rule."
+            : object.kind === "feed" ? "Timestamped USD readings published by Chainlink." : "Live USD trade observations from Coinbase."}
+        </p>
       </div>
       <NodeFooter object={object} />
     </article>
@@ -389,11 +388,14 @@ function PriceNode({
 function VaultNode({
   object,
   focused,
+  spendingLabel,
 }: {
   object: GraphObject;
   focused: boolean;
+  spendingLabel: string;
 }) {
   const paused = !!object.data.paused;
+  const balance = object.data.balanceEth ?? object.data.balance;
   return (
     <article
       className={`graph-node vault-node ${focused ? "focused" : ""}`}
@@ -433,13 +435,11 @@ function VaultNode({
           </svg>
         </div>
         <div className="vault-balance">
-          {Number(object.data.balanceEth ?? object.data.balance ?? 0).toFixed(
-            3,
-          )}
+          {balance !== undefined && Number.isFinite(Number(balance)) ? Number(balance).toFixed(3) : "—"}
           <span>ETH</span>
         </div>
         <div className="vault-state">
-          <span className="mono">Spending</span>
+          <span className="mono">{spendingLabel}</span>
           <span className={paused ? "signal" : ""}>
             {paused ? (
               <>
@@ -460,207 +460,63 @@ function VaultNode({
     </article>
   );
 }
-type GraphNodeLike = Record<string, any>;
-/** Mirrors isLegacyShape in cre/graph.ts, kept local to avoid bundling zod. */
-function isLegacyPolicy(graph: PolicyGraph | undefined): boolean {
-  if (!graph || graph.nodes.length !== 2) return true;
-  const nodes = graph.nodes as GraphNodeLike[];
-  const compare = nodes.find((n) => n.kind === "compare");
-  const price = nodes.find((n) => n.kind === "price");
-  return Boolean(
-    compare && price && compare.input === price.id && compare.op === "<" &&
-      graph.root === compare.id && price.source?.type === "exchange-trade",
-  );
+function PolicyCondition({ state, node, focused }: {state:CanvasState; node:PolicyGraph["nodes"][number]; focused:boolean}) {
+  const view = policyView(state);
+  const input = "input" in node ? view.graph.nodes.find(n => n.id === node.input) : undefined;
+  const result = view.run?.decisions.find(d => d.nodeId === node.id);
+  const label = input?.kind === "price" ? describeSource(input.source) : "Condition";
+  const title = node.kind === "compare" ? `${label} ${node.op} ${money(node.value)}` :
+    node.kind === "freshness" ? `${label} within ${node.maxAgeSeconds}s` :
+    node.kind === "vault-paused" ? `Vault is ${node.equals ? "paused" : "active"}` :
+    node.kind.toUpperCase();
+  const root = node.id === view.graph.root;
+  return <article className={`graph-node condition-node ${focused ? "focused" : ""}`} data-object-id={`condition:${node.id}`}>
+    <NodeHeader index="03" type={root ? "Policy root" : "Intermediate condition"} extra={<span className="mono">{node.kind.toUpperCase()}</span>} />
+    <div className="node-body"><h3>{title}</h3>
+      {(node.kind === "and" || node.kind === "or") && <p>{node.kind === "and" ? "Every input must be true." : "Any input can be true."}</p>}
+      {node.kind === "not" && <p>Invert the connected condition.</p>}
+      {result && <p className={root && !result.passed ? "execution-error" : "condition-value"}>
+        {result.passed ? "TRUE" : "FALSE"} · {root ? "root expression" : "intermediate result"}
+      </p>}
+    </div>
+    <div className="node-foot mono">{root ? "Freshness and action safeguards also apply" : "Evaluated from the connected inputs"}</div>
+  </article>;
 }
-/** Source naming duplicated from cre/graph.ts so the bundle stays zod-free. */
-function sourceLabel(node: GraphNodeLike | undefined): string {
-  const source = node?.source;
-  if (!source) return "input";
-  return source.type === "chainlink-feed"
-    ? `Chainlink ${source.symbol}/USD`
-    : `Coinbase ${source.pair}`;
-}
-function conditionRows(graph: PolicyGraph) {
-  const byId = new Map<string, GraphNodeLike>(
-    (graph.nodes as GraphNodeLike[]).map((n) => [n.id, n]),
-  );
-  const rows: { nodeId: string; symbol: string; label: string; value: string; oracle: boolean }[] = [];
-  for (const node of graph.nodes as GraphNodeLike[]) {
-    const input = byId.get(node.input);
-    const oracle = input?.source?.type === "chainlink-feed";
-    if (node.kind === "compare")
-      rows.push({ nodeId: node.id, symbol: node.op, label: sourceLabel(input), value: money(Number(node.value)), oracle });
-    else if (node.kind === "freshness")
-      rows.push({ nodeId: node.id, symbol: "~", label: `${sourceLabel(input)} freshness`, value: `Within ${node.maxAgeSeconds}s`, oracle });
-    else if (node.kind === "vault-paused")
-      rows.push({ nodeId: node.id, symbol: "=", label: "Vault state", value: node.equals ? "Paused" : "Active", oracle: false });
-  }
-  const root = byId.get(graph.root);
-  const connective = root?.kind === "or" ? "OR" : root?.kind === "not" ? "NOT" : "AND";
-  return { rows, connective };
-}
-/** Renders a composed graph: real operators, real sources, real connective. */
-function ComposedConditions({
-  state,
-  focused,
-}: {
-  state: CanvasState;
-  focused: string | null;
-}) {
-  const w = state.workflow;
-  const latest = state.runs[0];
-  const { rows, connective } = conditionRows(w.graph);
-  const current = latest?.revision === w.revision ? latest : undefined;
-  return (
-    <article
-      className={`graph-node condition-node ${focused?.startsWith("condition:") ? "focused" : ""}`}
-    >
-      <NodeHeader index="03" type="Composed policy" extra={<span className="mono">{connective}</span>} />
-      <div className="conditions">
-        {rows.map((row, index) => {
-          const result = current?.decisions.find((d) => d.nodeId === row.nodeId);
-          return (
-            <div
-              key={row.nodeId}
-              className={`condition-row ${focused === `condition:${row.nodeId}` ? "condition-focus" : ""}`}
-              data-object-id={`condition:${row.nodeId}`}
-            >
-              <span className="condition-symbol">{row.symbol}</span>
-              <div>
-                <span>
-                  {row.label}
-                  {row.oracle && <span className="oracle-badge"> · ORACLE</span>}
-                </span>
-                <strong>{row.value}</strong>
-              </div>
-              <span className="condition-state">
-                {result ? (result.passed ? <Check size={14} /> : <span>—</span>) : <span>{String(index + 1).padStart(2, "0")}</span>}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="condition-bottom mono">
-        {rows.length} predicate{rows.length === 1 ? "" : "s"} · combined with {connective}
-        <span className="receiver-guards">
-          Fresh data and active spending still gate execution.
-        </span>
-      </div>
-    </article>
-  );
-}
-function Conditions({
-  state,
-  focused,
-}: {
-  state: CanvasState;
-  focused: string | null;
-}) {
-  const w = state.workflow;
-  const latest = state.runs[0];
-  return (
-    <article
-      className={`graph-node condition-node ${focused?.startsWith("condition:") ? "focused" : ""}`}
-    >
-      <NodeHeader
-        index="03"
-        type="Policy conditions"
-        extra={<span className="mono">AND</span>}
-      />
-      <div className="conditions">
-        <div
-          className={`condition-row ${focused === "condition:threshold" ? "condition-focus" : ""}`}
-          data-object-id="condition:threshold"
-        >
-          <span className="condition-symbol">&lt;</span>
-          <div>
-            <span>Price below threshold</span>
-            <strong>{money(w.threshold)}</strong>
-          </div>
-          <span className="condition-state">
-            {latest?.revision === w.revision ? (
-              latest.decisions.find(
-                (d) => d.id.includes("threshold") || d.id.includes("price"),
-              )?.passed ? (
-                <Check size={14} />
-              ) : (
-                <span>—</span>
-              )
-            ) : (
-              <span>01</span>
-            )}
-          </span>
-        </div>
-        {w.maxAgeSeconds !== null && (
-          <div
-            className={`condition-row ${focused === "condition:freshness" ? "condition-focus" : ""}`}
-            data-object-id="condition:freshness"
-          >
-            <span className="condition-symbol">
-              <Activity size={17} />
-            </span>
-            <div>
-              <span>Fresh observation</span>
-              <strong>Within {w.maxAgeSeconds} seconds</strong>
-            </div>
-            <span className="condition-state">02</span>
-          </div>
-        )}
-        {w.skipPaused && (
-          <div
-            className={`condition-row ${focused === "condition:unpaused" ? "condition-focus" : ""}`}
-            data-object-id="condition:unpaused"
-          >
-            <span className="condition-symbol">
-              <ShieldCheck size={17} />
-            </span>
-            <div>
-              <span>Vault is active</span>
-              <strong>Skip if already paused</strong>
-            </div>
-            <span className="condition-state">03</span>
-          </div>
-        )}
-      </div>
-      <div className="condition-bottom mono">
-        {1 + Number(w.maxAgeSeconds !== null) + Number(w.skipPaused)} predicates
-        · all must pass
-        {(w.maxAgeSeconds === null || !w.skipPaused) && (
-          <span className="receiver-guards">
-            Fresh data and active spending still gate execution.
-          </span>
-        )}
-      </div>
-    </article>
-  );
-}
-function ActionNode({ focused }: { focused: boolean }) {
+function ActionNode({ state, focused }: { state: CanvasState; focused: boolean }) {
+  const view = policyView(state);
+  const transfer = view.graph.action.type === "solana-transfer" ? view.graph.action : undefined;
+  const sender = view.run?.target?.kind === "solana-wallet" ? view.run.target.sender : undefined;
   return (
     <article
       className={`graph-node action-node ${focused ? "focused" : ""}`}
-      data-object-id="action:pause"
+      data-object-id={actionObjectId(view.graph.action)}
     >
-      <NodeHeader index="04" type="Report action" />
+      <NodeHeader index="04" type={transfer ? view.run ? "Archived action" : "Unavailable action" : "CRE action"} />
       <div className="node-body">
         <div className="action-icon">
-          <LockKeyhole size={26} strokeWidth={1} />
+          {transfer ? <ArrowUpRight size={26} strokeWidth={1} /> : <LockKeyhole size={26} strokeWidth={1} />}
         </div>
-        <h3>Pause spending.</h3>
-        <p>
-          Send a verified report
-          <br />
-          to the grant vault.
-        </p>
+        <h3>{transfer ? `Transfer ${formatSol(transfer.amountLamports)} SOL.` : "Pause spending."}</h3>
+        {transfer ? <><p>{view.run ? "Archived direct transfer. This path did not use CRE." : "Solana execution is unavailable in this workspace’s CRE workflow."}</p><dl className="action-addresses"><dt>Recipient</dt><dd className="mono" title={transfer.recipient}>{short(transfer.recipient, 7)}</dd>{sender && <><dt>Frozen sender</dt><dd className="mono" title={sender}>{short(sender, 7)}</dd></>}</dl></> : <p>Deliver a CRE report<br />to the grant vault.</p>}
         <div className="action-call mono">
-          onReport(bytes, bytes) <ArrowRight size={13} />
+          {transfer ? view.run ? "Historical evidence" : "CRE execution required" : "Report → verified receipt"} <ArrowRight size={13} />
         </div>
       </div>
       <div className="node-foot">
-        <span>Receiver-authorized</span>
+        <span>{transfer ? "Requires a supported CRE target" : "Vault permissions enforced"}</span>
         <ShieldCheck size={13} />
       </div>
     </article>
   );
+}
+function SolanaReceipt({ run }: { run: ExecutionRun }) {
+  const receipt = run.evidence?.solanaTransfer;
+  if (!receipt) return run.evidence?.submittedSignature ? <div className="receipt"><span className="mono" title={run.evidence.submittedSignature}>{short(run.evidence.submittedSignature, 8)}</span><span>Signature awaiting verification</span></div> : null;
+  return <div className="solana-receipt">
+    <a className="receipt-link mono" href={receipt.explorerUrl} target="_blank" rel="noopener noreferrer" title={receipt.signature}>{short(receipt.signature, 8)} <ArrowUpRight size={11} /></a>
+    <dl><dt>Network</dt><dd>Solana {receipt.network}</dd><dt>Transfer</dt><dd>{formatSol(receipt.lamports)} SOL</dd><dt>Sender</dt><dd className="mono" title={receipt.sender}>{receipt.sender}</dd><dt>Recipient</dt><dd className="mono" title={receipt.recipient}>{receipt.recipient}</dd><dt>Confirmed slot</dt><dd className="mono">{receipt.slot}</dd><dt>Fee</dt><dd>{formatSol(receipt.feeLamports)} SOL</dd><dt>Recipient balance before</dt><dd>{formatSol(receipt.recipientBalanceBefore)} SOL</dd><dt>Recipient balance after</dt><dd>{formatSol(receipt.recipientBalanceAfter)} SOL</dd></dl>
+    {receipt.replayed && <p>Existing confirmed receipt reused; no second transfer.</p>}
+  </div>;
 }
 function SourceNode({ object }: { object: GraphObject }) {
   return (
@@ -669,12 +525,30 @@ function SourceNode({ object }: { object: GraphObject }) {
       <div className="node-body">
         <h3>{object.label}</h3>
         <p>
-          Timestamped {object.data.token || "ETH/USD"} observations.
+          Timestamped {object.data.token || object.label} observations.
         </p>
         <span className="mono">{object.provenance.source}</span>
       </div>
     </article>
   );
+}
+function ObservationAge({ observedAt }: { observedAt: string }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  const age = (now - Date.parse(observedAt)) / 1000;
+  return <span className="mono">{!Number.isFinite(age) ? "Age unavailable" : age < 0 ? `Observed ${Math.ceil(-age)}s ahead` : `Observed ${Math.floor(age)}s ago`}</span>;
+}
+function RunObservations({ run }: { run: ExecutionRun }) {
+  if (!run.observations?.length) return null;
+  return <div className="archived-observations">{run.observations.map(observation => <details className="archived-observation" key={observation.key} data-source-key={observation.key}>
+    <summary><span>{observation.label}</span><strong>{money(observation.usd)}</strong><ChevronRight size={12} /></summary>
+    <div><span>{observation.provider}{observation.network ? ` · ${observation.network}` : ""}{observation.chainId ? ` · chain ${observation.chainId}` : ""}</span>
+      <span className="mono">{observation.observedAt}</span><ObservationAge observedAt={observation.observedAt} />
+      <span className="mono">Fetched {observation.fetchedAt}</span>
+      {observation.address && <span className="mono observation-address">{observation.address}</span>}
+      <span className="mono">Raw {observation.raw}{observation.roundId ? ` · round ${observation.roundId}` : ""}</span>
+    </div>
+  </details>)}</div>;
 }
 function RunEvidence({
   run,
@@ -686,7 +560,7 @@ function RunEvidence({
   const done = ["confirmed", "no-op", "failed"].includes(run.status);
   return (
     <section
-      className={`run-evidence ${done ? "settled" : ""}`}
+      className={`run-evidence nowheel nopan ${done ? "settled" : ""}`}
       aria-label="Execution evidence"
       data-object-id={`run:${run.id}`}
     >
@@ -700,7 +574,7 @@ function RunEvidence({
               <Check size={13} /> Confirmed
             </>
           ) : run.status === "no-op" ? (
-            "No action required"
+            isEvaluationOnly(run) ? "Evaluated · no report" : "No action required"
           ) : run.status === "failed" ? (
             "Execution blocked"
           ) : (
@@ -712,13 +586,17 @@ function RunEvidence({
         </span>
       </div>
       <div className="frozen-rule">
-        <span className="mono">Frozen threshold</span>
-        <strong>{money(run.snapshot.threshold)}</strong>
+        <span className="mono">Frozen policy</span>
+        <span className="frozen-action">{describeAction(frozenGraph(run).action)}</span>
+        <strong className="frozen-expression">{policyExpression(frozenGraph(run))}</strong>
       </div>
-      {run.inputs && (
+      <p className="run-outcome">{runOutcome(run)}</p>
+      <div className="run-provenance"><span className="mono">Execution provenance</span><strong>{runProvenance(run).label}</strong><p>{runProvenance(run).detail}</p></div>
+      <RunObservations run={run} />
+      {!run.observations?.length && run.inputs?.price && (
         <div className="execution-inputs">
-          <span className="mono">Fetched ETH / USD</span>
-          <strong>{money(Number(run.inputs.price.data.price))}</strong>
+          <span className="mono">{run.inputs.price.label}</span>
+          <strong>{money(Number(run.inputs.price.data.price ?? run.inputs.price.data.value))}</strong>
           <span className="mono">Source observation</span>
           <span className="mono">
             {clock(run.inputs.price.provenance.observedAt)}
@@ -726,28 +604,24 @@ function RunEvidence({
         </div>
       )}
       <div className="evidence-details">
-        {run.decisions.map((d) => (
-          <div className="decision" key={d.id}>
-            <span className={d.passed ? "pass" : "fail"}>
-              {d.passed ? <Check size={12} /> : <X size={12} />}
+        {run.decisions.map((d, index) => (
+          <div className={`decision decision-${decisionRole(d)}`} data-result-role={decisionRole(d)} key={`${d.nodeId || d.id}:${index}`}>
+            <span className={d.passed ? "pass" : decisionRole(d) === "node" ? "intermediate-false" : "fail"}>
+              {d.passed ? <Check size={12} /> : decisionRole(d) === "node" ? <Circle size={12} /> : <X size={12} />}
             </span>
             <span title={d.detail}>
-              {d.label === "threshold"
-                ? "Price below threshold"
-                : d.label === "freshness"
-                  ? "Fresh observation"
-                  : d.label === "vault-state"
-                    ? "Vault spending active"
-                    : d.label}
+              <span className="result-role mono">{decisionRole(d) === "root" ? "Policy verdict" : decisionRole(d) === "guard" ? "Mandatory check" : "Intermediate"}</span>
+              {d.detail || d.label}
             </span>
-            <span className="mono">{d.passed ? "PASS" : "FALSE"}</span>
+            <span className="mono">{d.passed ? "TRUE" : "FALSE"}</span>
           </div>
         ))}
-        {!run.decisions.length && <p>Fetching fresh execution inputs.</p>}
+        {!run.decisions.length && <p>{missingDecisionLabel(run)}</p>}
       </div>
-      {run.evidence?.transactionHash && (
+      <SolanaReceipt run={run} />
+      {!run.evidence?.simulatedOrder && run.evidence?.transactionHash && (
         <div className="receipt">
-          <span className="mono">{short(run.evidence.transactionHash, 9)}</span>
+          {run.evidence.explorerUrl ? <a className="receipt-link mono" href={run.evidence.explorerUrl} target="_blank" rel="noopener noreferrer" title="View confirmed transaction">{short(run.evidence.transactionHash, 9)} <ArrowUpRight size={11} /></a> : <span className="mono" title={run.evidence.transactionHash}>{short(run.evidence.transactionHash, 9)}</span>}
           <span>
             {run.evidence.pausedAfter
               ? "Vault pause verified"
@@ -755,7 +629,7 @@ function RunEvidence({
           </span>
         </div>
       )}
-      {!run.evidence?.transactionHash &&
+      {frozenGraph(run).action.type === "pause-vault" && !run.evidence?.transactionHash &&
         previousPause?.evidence?.transactionHash && (
           <div className="prior-receipt">
             <span className="mono">Earlier pause verified</span>
@@ -765,6 +639,7 @@ function RunEvidence({
           </div>
         )}
       {run.error && <p className="execution-error">{run.error}</p>}
+      {run.policyHash && <div className="policy-hash mono" title={run.policyHash}>Policy {short(run.policyHash, 8)}</div>}
       <div className="evidence-footer mono">
         {run.executionMode}
         <span>{clock(run.startedAt)}</span>
@@ -774,37 +649,36 @@ function RunEvidence({
 }
 
 function Instrument({ data }: NodeProps<InstrumentFlowNode>) {
-  const { kind, state, focused, object, run } = data;
-  return <div className={`flow-instrument ${focused ? "in-focus" : ""}`}>
+  const { kind, state, focused, object, run, graphNode } = data;
+  if (kind === "section") return <div className="flow-section mono">{data.title}</div>;
+  return <div className={`flow-instrument ${focused ? "in-focus" : ""} ${data.lane === "markets" && state.workflow.created ? "market-observation" : ""}`}>
     {kind === "price" && object && <PriceNode object={object} focused={focused} />}
-    {kind === "vault" && object && <VaultNode object={object} focused={focused} />}
+    {kind === "vault" && object && <VaultNode object={object} focused={focused} spendingLabel={vaultStateLabel(state, object)} />}
     {kind === "source" && object && <SourceNode object={object} />}
-    {kind === "conditions" && (isLegacyPolicy(state.workflow.graph)
-      ? <Conditions state={state} focused={state.focus.objectId} />
-      : <ComposedConditions state={state} focused={state.focus.objectId} />)}
-    {kind === "action" && <ActionNode focused={focused} />}
+    {kind === "conditions" && graphNode && <PolicyCondition state={state} node={graphNode} focused={focused} />}
+    {kind === "action" && <ActionNode state={state} focused={focused} />}
     {kind === "run" && run && <RunEvidence run={run} previousPause={state.runs.find(r => r.status === "confirmed" && r.evidence?.transactionHash)} />}
     {kind === "conditions" ? <>
-      <Handle type="target" position={Position.Left} id="threshold" style={{ top: 80 }} isConnectable={false} />
-      {state.workflow.maxAgeSeconds !== null && <Handle type="target" position={Position.Left} id="freshness" style={{ top: 150 }} isConnectable={false} />}
-      {state.workflow.skipPaused && <Handle type="target" position={Position.Top} id="unpaused" isConnectable={false} />}
-      <Handle type="source" position={Position.Left} id="out" style={{ top: "85%" }} isConnectable={false} />
+      <Handle type="target" position={Position.Left} id="in" style={{ top: 110 }} isConnectable={false} />
+      <Handle type="source" position={Position.Right} id="out" style={{ top: 110 }} isConnectable={false} />
     </> : kind === "action" ? <>
-      <Handle type="target" position={Position.Right} id="in" isConnectable={false} />
-      <Handle type="source" position={Position.Top} id="report" isConnectable={false} />
-      <Handle type="source" position={Position.Left} id="evidence" isConnectable={false} />
+      <Handle type="target" position={Position.Left} id="in" style={{ top: 110 }} isConnectable={false} />
+      <Handle type="source" position={Position.Right} id="report" style={{ top: 110 }} isConnectable={false} />
+      <Handle type="source" position={Position.Bottom} id="evidence" isConnectable={false} />
     </> : kind === "vault" ? <>
       <Handle type="target" position={Position.Left} id="in" isConnectable={false} />
-      <Handle type="target" position={Position.Bottom} id="report-in" style={{ left: "20%" }} isConnectable={false} />
+      <Handle type="target" position={Position.Left} id="report-in" style={{ top: 110 }} isConnectable={false} />
+      <Handle type="source" position={Position.Bottom} id="state" isConnectable={false} />
       <Handle type="source" position={Position.Bottom} id="out" style={{ left: "70%" }} isConnectable={false} />
     </> : <>
-      <Handle type="target" position={kind === "run" ? Position.Right : Position.Left} id="in" isConnectable={false} />
-      <Handle type="source" position={Position.Right} id="out" isConnectable={false} />
+      <Handle type="target" position={kind === "run" ? Position.Top : Position.Left} id="in" isConnectable={false} />
+      <Handle type="source" position={Position.Right} id="out" style={{ top: 110 }} isConnectable={false} />
     </>}
   </div>;
 }
 const NODE_TYPES = { instrument: Instrument };
-const FLOW_FIT = { padding: .1, maxZoom: 1, duration: 450 };
+const FLOW_FIT = { padding: .08, minZoom: .2, maxZoom: 1, duration: 450 };
+const motionDuration = (duration: number) => window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : duration;
 function FlowCanvas({ state, signalMode, microphone }: { state: CanvasState; signalMode: SignalMode; microphone: MicrophoneSnapshot }) {
   const graph = useMemo(() => canvasFlow(state), [state]);
   const [nodes, setNodes, onNodesChange] = useNodesState<InstrumentFlowNode>(graph.nodes);
@@ -812,78 +686,152 @@ function FlowCanvas({ state, signalMode, microphone }: { state: CanvasState; sig
   const initialized = useNodesInitialized();
   const wrap = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
+  const [viewSize, setViewSize] = useState({ width: 0, height: 0 });
+  const [selectedObject, setSelectedObject] = useState("");
+  const lastSize = useRef("");
+  const lastFrozenRun = useRef<string | undefined>(undefined);
   const lastView = useRef("");
+  const lastNodeIds = useRef<Set<string> | null>(null);
   const lastSession = useRef(state.sessionId);
   const currentState = useRef(state);
   currentState.current = state;
   useEffect(() => {
+    if (!wrap.current) return;
+    const observer = new ResizeObserver(entries => {
+      const rectangle = entries[0]?.contentRect;
+      if (!rectangle || !rectangle.width || !rectangle.height) return;
+      setViewSize(previous => Math.abs(previous.width - rectangle.width) > 1 || Math.abs(previous.height - rectangle.height) > 1 ? { width: rectangle.width, height: rectangle.height } : previous);
+    });
+    observer.observe(wrap.current);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
     if (lastSession.current !== state.sessionId) {
       lastSession.current = state.sessionId; lastView.current = "";
+      lastNodeIds.current = null;
       flow.setViewport({ x: 0, y: 0, zoom: 1 });
     }
-    setNodes(previous => graph.nodes.map(node => ({ ...node, position: previous.find(p => p.id === node.id)?.position || node.position })));
+    setNodes(previous => reconcileCanvasNodes(previous, graph.nodes));
   }, [graph, setNodes, flow, state.sessionId]);
-  const fit = () => flow.fitView(FLOW_FIT);
+  const fit = (markets = false) => {
+    setSelectedObject("");
+    const lane = markets ? "markets" : state.workflow.created ? "policy" : null;
+    return flow.fitView({ ...FLOW_FIT, duration: motionDuration(FLOW_FIT.duration), nodes: nodes.filter(node => !lane || node.data.lane === lane).map(node => ({ id: node.id })) });
+  };
+  const inspectObject = (id: string) => {
+    if (!id) { void fit(); return; }
+    setSelectedObject(id);
+    void flow.fitView({ nodes: [{ id }], padding: .14, minZoom: .65, maxZoom: 1.1, duration: motionDuration(400) });
+  };
+  const objectLabel = (node: InstrumentFlowNode) => {
+    if (node.data.object) return node.data.object.label;
+    if (node.data.kind === "run") return `Execution evidence · v${node.data.run?.revision}`;
+    if (node.data.kind === "action") { const action = policyView(state).graph.action; return action.type === "pause-vault" ? "Pause spending" : `Transfer ${formatSol(action.amountLamports)} SOL · devnet`; }
+    const condition = node.data.graphNode;
+    if (!condition) return node.id;
+    if (condition.kind === "compare" || condition.kind === "freshness") {
+      const source = policyView(state).graph.nodes.find(input => input.id === condition.input);
+      const name = source?.kind === "price" ? source.source.type === "exchange-trade" ? source.source.pair : `Chainlink ${source.source.symbol}/USD` : "Input";
+      return condition.kind === "compare" ? `${name} ${condition.op} ${money(condition.value)}` : `${name} freshness`;
+    }
+    if (condition.kind === "vault-paused") return condition.equals ? "Vault is paused" : "Vault is active";
+    return `${condition.kind.toUpperCase()}${condition.id === policyView(state).graph.root ? " · policy root" : " · condition"}`;
+  };
   const navigate = (action: string) => {
     if (action === "fit") { void fit(); return; }
-    if (action === "zoom_in") { void flow.zoomIn({ duration: 250 }); return; }
-    if (action === "zoom_out") { void flow.zoomOut({ duration: 250 }); return; }
+    if (action === "zoom_in") { void flow.zoomIn({ duration: motionDuration(250) }); return; }
+    if (action === "zoom_out") { void flow.zoomOut({ duration: motionDuration(250) }); return; }
     const viewport = flow.getViewport();
     const delta = 160;
-    void flow.setViewport({ ...viewport, x: viewport.x + (action === "pan_left" ? delta : action === "pan_right" ? -delta : 0), y: viewport.y + (action === "pan_up" ? delta : action === "pan_down" ? -delta : 0) }, { duration: 250 });
+    void flow.setViewport({ ...viewport, x: viewport.x + (action === "pan_left" ? delta : action === "pan_right" ? -delta : 0), y: viewport.y + (action === "pan_up" ? delta : action === "pan_down" ? -delta : 0) }, { duration: motionDuration(250) });
   };
   useEffect(() => {
-    if (!initialized || !nodes.length) return;
-    const key = `${state.sessionId}:${state.canvasView?.sequence || 0}:${state.focus.objectId}:${nodes.map(node => node.id).join(",")}`;
+    // State arrives before the controlled nodes are reconciled. Do not consume
+    // navigation until React Flow has the current layout and measured cards.
+    if (!initialized || !nodes.length || nodes.some(node => node.data.state !== state)) return;
+    const cards = nodes.filter(node => node.data.kind !== "section");
+    const added = lastNodeIds.current ? cards.filter(node => !lastNodeIds.current!.has(node.id)) : [];
+    lastNodeIds.current = new Set(cards.map(node => node.id));
+    const frozen = policyView(state).run?.id;
+    const sizeKey = `${Math.round(viewSize.width)}:${Math.round(viewSize.height)}`;
+    const resized = !!lastSize.current && lastSize.current !== sizeKey;
+    const frozenChanged = lastFrozenRun.current !== frozen;
+    lastSize.current = sizeKey; lastFrozenRun.current = frozen;
+    const key = `${state.sessionId}:${state.canvasView?.sequence || 0}:${state.focus.objectId}:${state.workflow.created}:${frozen || "draft"}:${sizeKey}:${cards.map(node => node.id).join(",")}`;
     if (lastView.current === key) return;
     lastView.current = key;
+    if (resized || frozenChanged) { void fit(); return; }
+    // New content should be visible even when discovery leaves semantic focus
+    // and the navigation sequence unchanged. Frame new cards after measurement.
+    if (added.length) {
+      if (added.some(node => node.data.kind === "conditions" || node.data.kind === "action")) void fit();
+      else void flow.fitView({ ...FLOW_FIT, duration: motionDuration(FLOW_FIT.duration), nodes: added.map(node => ({ id: node.id })) });
+      return;
+    }
     const action = state.canvasView?.action || "fit";
     if (action !== "focus") { navigate(action); return; }
-    const id = state.focus.objectId?.startsWith("condition:") ? "conditions:and" : state.focus.objectId;
+    const id = state.focus.objectId;
     const node = id ? flow.getNode(id) : null;
     if (!node || state.focus.objectId?.startsWith("workflow")) { void fit(); return; }
     const w = wrap.current?.clientWidth || 1000;
     const scale = Math.min(1.1, Math.max(.65, w / 1100));
     const width = node.measured?.width || Number(node.style?.width) || 330;
     const height = node.measured?.height || 240;
-    void flow.setCenter(node.position.x + width / 2, node.position.y + height / 2, { zoom: scale, duration: 500 });
-  }, [initialized, state.canvasView?.sequence, state.sessionId, state.focus.objectId, nodes.length]);
+    void flow.setCenter(node.position.x + width / 2, node.position.y + height / 2, { zoom: scale, duration: motionDuration(500) });
+  }, [initialized, state, nodes, viewSize]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if ((event.target as HTMLElement)?.closest("input, textarea, .inspector") || event.metaKey || event.ctrlKey) return;
+      if ((event.target as HTMLElement)?.closest("input, textarea, button, a, summary, .inspector, .capability-panel") || event.metaKey || event.ctrlKey) return;
       const action: Record<string, string> = { "+": "zoom_in", "=": "zoom_in", "-": "zoom_out", "0": "fit", ArrowLeft: "pan_left", ArrowRight: "pan_right", ArrowUp: "pan_up", ArrowDown: "pan_down" };
       if (action[event.key]) { event.preventDefault(); navigate(action[event.key]); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [flow]);
-  const empty = !graph.nodes.length;
   return <div className="observatory flow-canvas" ref={wrap} aria-label="Spatial workflow canvas" data-zoom={zoom.toFixed(3)}>
     <ReactFlow nodes={nodes} edges={graph.edges} nodeTypes={NODE_TYPES} onNodesChange={onNodesChange} fitView fitViewOptions={FLOW_FIT}
       minZoom={.2} maxZoom={2} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} nodesFocusable={false} edgesFocusable={false}
       deleteKeyCode={null} panOnDrag panOnScroll zoomOnPinch zoomOnScroll={false} colorMode="dark" onMove={(_, viewport) => setZoom(viewport.zoom)}
       defaultEdgeOptions={{ type: "smoothstep" }}>
       <Background variant={BackgroundVariant.Dots} gap={28} size={1} color="var(--bab-line)" />
-      <Controls showInteractive={false} position="bottom-left" fitViewOptions={FLOW_FIT} />
+      <Controls showInteractive={false} showFitView={false} position="bottom-left">
+        <ControlButton onClick={() => void fit()} title={state.workflow.created ? "Fit active policy" : "Fit canvas"} aria-label={state.workflow.created ? "Fit active policy" : "Fit canvas"}><Maximize2 /></ControlButton>
+      </Controls>
     </ReactFlow>
-    <div className="flow-metadata mono"><span>Treasury</span><span>{state.focus.objectId ? `Focused: ${state.focus.label}` : "No focus"}</span></div>
-    <span className="flow-zoom mono">{Math.round(zoom * 100)}% · + − zoom · 0 fit</span>
-    {empty && <div className="empty-caption"><p>Show me ETH’s price<br />and our grant vault.</p><span className="mono">/ Prompt · Space Demo</span></div>}
+    {nodes.some(node => node.data.kind !== "section") && <div className="mobile-object-picker"><select aria-label="Inspect canvas object" value={nodes.some(node => node.id === selectedObject) ? selectedObject : ""} onChange={event => inspectObject(event.target.value)}><option value="">Policy overview</option>{nodes.filter(node => node.data.kind !== "section").map(node => <option key={node.id} value={node.id}>{objectLabel(node)}</option>)}</select><ChevronRight size={12} /></div>}
+    <div className="flow-metadata mono"><span>Live canvas</span><div className="flow-view-actions">
+      {state.workflow.created && <button onClick={() => void fit()}>Active policy</button>}
+      {nodes.some(node => node.data.lane === "markets") && <button onClick={() => void fit(true)}>Market observations</button>}
+      <span>{state.focus.objectId ? `Focused: ${state.focus.label}` : "No focus"}</span>
+    </div></div>
+    <span className="flow-zoom mono">{Math.round(zoom * 100)}% · <span className="desktop-zoom-hint">+ − zoom · 0 fit</span><span className="mobile-zoom-hint">pinch to zoom · drag to explore</span></span>
     {state.clarification && <div className="clarification"><span className="mono">Clarify</span><h3>{state.clarification.question}</h3><div>{state.clarification.candidates.map(id => <span key={id}>{state.objects.find(o => o.id === id)?.label || id}</span>)}</div></div>}
   </div>;
 }
 function Observatory(props: { state: CanvasState; signalMode: SignalMode; microphone: MicrophoneSnapshot }) {
   return <ReactFlowProvider><FlowCanvas {...props} /></ReactFlowProvider>;
 }
-function PolicyStrip({ state }: { state: CanvasState }) {
-  const w = state.workflow;
-  if (!w.created) return null;
+function PolicyStrip({ state, watch, watching }: { state: CanvasState; watch: () => void; watching: boolean }) {
+  const view = policyView(state);
+  if (!state.workflow.created && !view.run) return null;
   return <div className="policy-line">
-    <span className="mono">Rule / v{w.revision.toString().padStart(2, "0")}</span>
-    <p>If ETH falls below <strong>{money(w.threshold)}</strong>
-      {w.maxAgeSeconds !== null ? <> with an observation under {w.maxAgeSeconds}s old</> : null}
-      {w.skipPaused ? <> and the vault is active</> : null}, <em>pause grant spending.</em>
-    </p>
+    <span className="mono">{view.run ? "Frozen run" : "Draft rule"} / v{view.revision.toString().padStart(2, "0")}</span>
+    <p title={view.summary}>{view.summary}</p>
+    {!view.run && view.graph.action.type === "pause-vault" && <button className="watch-rule" onClick={watch} disabled={watching || state.monitors?.some(monitor => ["active", "checking", "uncertain"].includes(monitor.status))} title="Freeze this revision and check every 30 seconds while the backend runs. Stop after one verified action."><Activity size={12} />{watching ? "Starting…" : "Watch rule"}</button>}
+  </div>;
+}
+function CreReadinessDetails() {
+  const { readiness, loading, error, refresh } = useCreReadiness();
+  return <div className="cre-readiness" aria-live="polite">
+    <strong>{loading ? "Checking CRE availability…" : error ? "CRE availability unverified" : readiness ? creReadinessLabel(readiness) : "CRE availability unverified"}</strong>
+    {error ? <p>{error}</p> : readiness && <>
+      <p>{readiness.reason}</p>
+      <span>CRE local simulation{readiness.donDeployed ? "" : " · no deployed DON"}</span>
+      <span>{readiness.broadcastConfigured ? "Broadcast configured" : "Broadcast not configured"}{readiness.fundingVerified ? " · funding verified" : " · funding unverified"}</span>
+      {readiness.receiver && <span className="mono" title={readiness.receiver.address}>Receiver {short(readiness.receiver.address, 6)} · chain {readiness.receiver.chainId}</span>}
+      <span className="mono">Checked {clock(readiness.checkedAt)}</span>
+    </>}
+    <button type="button" disabled={loading} onClick={refresh}>{loading ? "Checking…" : "Recheck CRE"}</button>
   </div>;
 }
 function Inspector({
@@ -897,7 +845,7 @@ function Inspector({
   useEffect(() => {
     panel.current?.focus({ preventScroll: true });
   }, []);
-  const item = state.objects.find((o) => o.id === state.focus.objectId);
+  const item = policyView(state).objects.find((o) => o.id === state.focus.objectId);
   const focusedRun = state.runs.find(
     (r) =>
       `run:${r.id}` === state.focus.objectId || r.id === state.inspectedRunId,
@@ -920,6 +868,7 @@ function Inspector({
         Provenance & proof <ShieldCheck size={14} />
       </div>
       <dl>
+        <dt>Live CRE readiness</dt><dd><CreReadinessDetails /></dd>
         <dt>Focused object</dt>
         <dd>{state.focus.label || "None"}</dd>
         <dt>Source</dt>
@@ -951,28 +900,29 @@ function Inspector({
               v{focusedRun.revision.toString().padStart(2, "0")} /{" "}
               {short(focusedRun.id, 5)}
             </dd>
-            <dt>Frozen threshold</dt>
-            <dd>{money(focusedRun.snapshot.threshold)}</dd>
-            {focusedRun.inputs && (
+            <dt>Frozen policy</dt>
+            <dd>{describeAction(frozenGraph(focusedRun).action)}</dd>
+            <dd>{policyExpression(frozenGraph(focusedRun))}</dd>
+            <dt>Outcome</dt><dd>{runOutcome(focusedRun)}</dd>
+            <dt>Execution provenance</dt><dd>{runProvenance(focusedRun).label}<p>{runProvenance(focusedRun).detail}</p></dd>
+            <dt>Archived observations</dt><dd><RunObservations run={focusedRun} /></dd>
+            {focusedRun.policyHash && <><dt>Policy hash</dt><dd className="mono" title={focusedRun.policyHash}>{short(focusedRun.policyHash, 8)}</dd></>}
+            {focusedRun.inputs?.price && (
               <>
                 <dt>Execution price</dt>
-                <dd>{money(Number(focusedRun.inputs.price.data.price))}</dd>
+                <dd>{money(Number(focusedRun.inputs.price.data.price ?? focusedRun.inputs.price.data.value))}</dd>
                 <dt>Input observation</dt>
                 <dd className="mono">
                   {new Date(
                     focusedRun.inputs.price.provenance.observedAt,
                   ).toISOString()}
                 </dd>
-                <dt>Vault before execution</dt>
-                <dd>
-                  {focusedRun.inputs.vault.data.paused
-                    ? "Already paused"
-                    : "Spending active"}
-                </dd>
               </>
             )}
+            {focusedRun.inputs?.vault && <><dt>Vault before execution</dt><dd>{focusedRun.inputs.vault.data.paused ? "Already paused" : "Spending active"}</dd></>}
             <dt>Receipt</dt>
             <dd>{focusedRun.evidence?.receiptStatus || focusedRun.status}</dd>
+            {focusedRun.evidence?.solanaTransfer && <><dt>Verified Solana transfer</dt><dd><SolanaReceipt run={focusedRun} /></dd></>}
             {focusedRun.evidence?.blockNumber && (
               <>
                 <dt>Block</dt>
@@ -981,10 +931,11 @@ function Inspector({
             )}
             {focusedRun.evidence?.verification && (
               <>
-                <dt>Receiver verification</dt>
+                <dt>Execution verification</dt>
                 <dd>{focusedRun.evidence.verification}</dd>
               </>
             )}
+            {focusedRun.evidence?.explorerUrl && <><dt>Transaction</dt><dd><a className="receipt-link" href={focusedRun.evidence.explorerUrl} target="_blank" rel="noopener noreferrer">View on explorer <ArrowUpRight size={12} /></a></dd></>}
           </>
         )}
         {pinnedSource && (
@@ -1028,23 +979,79 @@ function Inspector({
     </div>
   );
 }
+function Capabilities({ state, close, stopMonitor, stopping, voiceProvider }: { state: CanvasState; close: () => void; stopMonitor: (id: string) => void; stopping: string | null; voiceProvider?: string }) {
+  const supported = state.capabilities.supported;
+  const [proof, setProof] = useState<{ kind: string; executionMode?: string; provenance?: string; evidence: { verifiedAt: string; transactionHash: string; blockNumber: string; status: string }; explorerUrl: string } | null>(null);
+  useEffect(() => { let active = true; api("/api/proof").then(result => { if (active && result.kind === "saved-public-proof" && result.evidence?.status === "success") setProof(result); }).catch(() => {}); return () => { active = false; }; }, []);
+  return <aside className="capability-panel" aria-label="Available capabilities">
+    <div className="capability-head mono">Connected capabilities<button onClick={close} aria-label="Close capabilities"><X size={16} /></button></div>
+    <h2>Real inputs.<br />Verifiable outcomes.</h2>
+    <dl>
+      <dt>Market observations</dt><dd>{state.capabilities.price}</dd>
+      <dt>Vault</dt><dd>{state.capabilities.vault}</dd>
+      <dt>CRE execution</dt><dd>{state.capabilities.execution}</dd>
+      <dt>Live CRE readiness</dt><dd><CreReadinessDetails /></dd>
+      <dt>Composition</dt><dd>Combine price comparisons, freshness and vault state with AND, OR and NOT. Execution checks source validity and the selected action’s safeguards.</dd>
+      <dt>Execution trigger</dt><dd>{state.monitors || supported?.monitoring ? "Run a frozen policy once, or explicitly watch it while the backend runs. Watching stops after one verified action. Backend restarts pause monitoring." : supported?.triggers || "Run a frozen policy once."}</dd>
+      {state.monitors?.length ? <><dt>Policy monitors</dt><dd className="monitor-list">{state.monitors.map(monitor => <section className="monitor-card" key={monitor.id}>
+        <div className="monitor-title"><strong>Frozen v{monitor.spec.revision}</strong><span className={`monitor-status monitor-${monitor.status}`}>{monitor.status}</span></div>
+        <p>{policyExpression(monitor.spec.graph)}</p>
+        <p className="monitor-action">{describeAction(monitor.spec.graph.action)}</p>
+        <span className="mono">{monitor.target.kind === "solana-wallet" ? "Solana devnet" : monitor.target.chainId === 11155111 ? "Sepolia" : "Local Anvil"} · {short(monitor.target.kind === "solana-wallet" ? monitor.target.sender : monitor.target.address, 5)}</span>
+        <span className="mono">{monitor.checks} checks · every {monitor.intervalSeconds}s</span>
+        {monitor.nextCheckAt && <span className="mono">Next check {clock(monitor.nextCheckAt)}</span>}
+        <span className="mono">Updated {clock(monitor.updatedAt)}</span>
+        {(monitor.lastError || monitor.stopReason) && <p className="monitor-note">{monitor.lastError || monitor.stopReason}</p>}
+        {["active", "checking"].includes(monitor.status) && <button onClick={() => stopMonitor(monitor.id)} disabled={!!stopping}>{stopping === monitor.id ? "Stopping…" : "Stop watching"}<X size={11} /></button>}
+      </section>)}</dd></> : null}
+      <dt>Voice</dt><dd>{voiceProvider === "local" ? "Mic records one command and sends it to this workspace’s local Whisper speech engine." : voiceProvider === "checking" ? "Checking availability of the workspace’s local speech engine." : "Mic dictates one command through your browser’s speech recognition service, which may process audio remotely."} Recognized final speech uses the same agent bridge as typed commands. Microphone permission is required; typing remains available.</dd>
+      {proof && <><dt>Saved Sepolia proof</dt><dd>{proof.executionMode === "cre-local-simulation" && proof.provenance && <p>{proof.provenance}</p>}<p>A treasury pause was independently verified at block {proof.evidence.blockNumber}. This is a historical public-chain receipt.</p><a className="receipt-link" href={proof.explorerUrl} target="_blank" rel="noopener noreferrer">View verified transaction <ArrowUpRight size={12} /></a><p className="mono proof-verified-at">Verified {new Date(proof.evidence.verifiedAt).toLocaleString()}</p></dd></>}
+    </dl>
+    <p className="capability-note">Actions require the supported CRE workflow. A local CRE simulation and a public transaction receipt are distinct evidence; each run identifies its execution path.</p>
+  </aside>;
+}
 function App() {
-  const { state, connected } = useCanvas();
+  const { state, connected, applyState } = useCanvas();
   const [text, setText] = useState("");
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [proofOpen, setProofOpen] = useState(false);
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
+  const [responseOpen, setResponseOpen] = useState(false);
+  const [showDraft, setShowDraft] = useState(false);
+  const [watching, setWatching] = useState(false);
+  const [stoppingMonitor, setStoppingMonitor] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [rehearsal, setRehearsal] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const submitLocked = useRef(false);
   const microphone = useMicrophone();
-  const [speak, setSpeak] = useState(false);
-  const [narrating, setNarrating] = useState(false);
-  const narratedPrompt = useRef("");
-  const narratedResponse = useRef("");
   const input = useRef<HTMLInputElement>(null);
+  const dockInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { setShowDraft(false); }, [state?.sessionId, state?.inspectedRunId]);
+  const watchPolicy = async () => {
+    if (!state || watching) return;
+    setWatching(true); setError("");
+    try {
+      const result = await api("/api/tools/activate_policy", { expectedRevision: state.workflow.revision, intervalSeconds: 30, operationId: crypto.randomUUID() });
+      if (!result.ok) throw new Error(result.error || result.summary || "Monitoring could not start");
+      applyState(result.state); setCapabilitiesOpen(true); setProofOpen(false);
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setWatching(false); }
+  };
+  const stopMonitor = async (monitorId: string) => {
+    if (stoppingMonitor) return;
+    setStoppingMonitor(monitorId); setError("");
+    try {
+      const result = await api("/api/tools/deactivate_policy", { monitorId, operationId: crypto.randomUUID() });
+      if (!result.ok) throw new Error(result.error || result.summary || "Monitor could not stop");
+      applyState(result.state);
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setStoppingMonitor(null); }
+  };
   const submit = async (command: string) => {
-    if (!command.trim()) return;
+    if (!command.trim() || submitLocked.current || clearing || !connected) return false;
+    submitLocked.current = true;
     setBusy(true);
     setError("");
     setConsoleOpen(false);
@@ -1054,19 +1061,48 @@ function App() {
         throw new Error(result.error || result.summary || "Agent turn failed");
       setText("");
       setConsoleOpen(false);
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
+      submitLocked.current = false;
       setBusy(false);
     }
   };
-  const clearCanvas = async (restore = false) => {
+  const voice = useVoice({
+    canStart: () => connected && !submitLocked.current && !clearing,
+    onCommand: async command => {
+      const accepted = await submit(command);
+      if (!accepted) setText(command);
+      return accepted;
+    },
+  });
+  const dictating = ["requesting", "listening"].includes(voice.status);
+  const transcribing = voice.status === "transcribing";
+  const captureSnapshot: MicrophoneSnapshot = voice.provider === "local" ? { status: voice.status === "listening" ? "live" : voice.status === "requesting" ? "requesting" : "off", analyser: voice.analyser || null, error: "" } : microphone;
+  const voiceError = voice.status === "error" ? voice.error : "";
+  const toggleVoice = () => {
+    if (dictating || transcribing) { voice.stop(); microphone.stop(); return; }
+    if (voice.status === "checking") return;
+    if (!voice.supported || !connected || submitLocked.current || clearing || voice.status === "submitting") { voice.start(); return; }
+    voice.start();
+    // The waveform is real local capture, started by the same explicit gesture.
+    if (voice.provider !== "local") microphone.toggle();
+  };
+  useEffect(() => {
+    if (voice.provider === "local" || !["requesting", "listening"].includes(voice.status)) microphone.stop();
+    if (voice.status === "error" && voice.finalTranscript) setText(previous => previous || voice.finalTranscript);
+  }, [voice.status, voice.provider]);
+  const clearCanvas = async () => {
     if (!state || clearing) return;
     setClearing(true); setError("");
+    voice.stop(); microphone.stop();
     try {
-      await api(restore ? "/api/canvas/restore" : "/api/canvas/clear", {
+      const result = await api("/api/canvas/clear", {
         operationId: crypto.randomUUID(), expectedSessionId: state.sessionId,
       });
+      applyState(result.state);
       setText(""); setConsoleOpen(false); setProofOpen(false);
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     } catch (e) { setError((e as Error).message); }
@@ -1104,15 +1140,19 @@ function App() {
   }, []);
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
-      const typing = (e.target as HTMLElement)?.tagName === "INPUT";
+      const typing = !!(e.target as HTMLElement)?.closest("input, textarea, select, button, a, summary, [contenteditable=true]");
       if (e.key === "Escape") {
         setConsoleOpen(false);
+        setProofOpen(false);
+        setCapabilitiesOpen(false);
+        setResponseOpen(false);
         if ("speechSynthesis" in window) window.speechSynthesis.cancel();
         stop();
         microphone.stop();
+        voice.stop();
       }
       if (typing) return;
-      if (e.key.toLowerCase() === "m" && !e.ctrlKey && !e.metaKey) microphone.toggle();
+      if (e.key.toLowerCase() === "m" && !e.ctrlKey && !e.metaKey) toggleVoice();
       if (e.key === "Backspace" && e.shiftKey && (e.metaKey || e.ctrlKey)) { e.preventDefault(); clearCanvas(); }
       if (e.code === "Space") {
         e.preventDefault();
@@ -1124,117 +1164,92 @@ function App() {
         setTimeout(() => input.current?.focus(), 0);
       }
       if (e.key.toLowerCase() === "i") setProofOpen((v) => !v);
-      if (e.key.toLowerCase() === "v") setSpeak((v) => !v);
     };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, [rehearsal, state?.sessionId, clearing, microphone.status]);
-  useEffect(() => {
-    if (!("speechSynthesis" in window)) return;
-    if (!speak) {
-      window.speechSynthesis.cancel();
-      setNarrating(false);
-      return;
-    }
-    if (!state) return;
-    const prompt = state.conversation.filter((c) => c.role === "user").at(-1);
-    let narration = "";
-    if (
-      ["thinking", "executing"].includes(state.activity.status) &&
-      prompt &&
-      narratedPrompt.current !== prompt.id
-    ) {
-      narratedPrompt.current = prompt.id;
-      narration = prompt.text;
-    } else if (
-      ["idle", "error"].includes(state.activity.status) &&
-      state.activity.summary
-    ) {
-      const narrationSummary =
-        settledExecutionReply(state, state.activity.summary) ||
-        displayReply(state.activity.summary);
-      const responseKey = `${prompt?.id}:${narrationSummary}`;
-      if (narratedResponse.current !== responseKey) {
-        narratedResponse.current = responseKey;
-        narration = narrationSummary;
-      }
-    }
-    if (!narration) return;
-    const utterance = new SpeechSynthesisUtterance(narration);
-    utterance.lang = "en-US";
-    utterance.rate = 0.98;
-    window.speechSynthesis.cancel();
-    utterance.onstart = () => setNarrating(true);
-    utterance.onend = utterance.onerror = () => setNarrating(false);
-    window.speechSynthesis.speak(utterance);
-  }, [
-    state?.conversation.length,
-    state?.activity.status,
-    state?.activity.summary,
-    state?.runs[0]?.status,
-    speak,
-  ]);
+  }, [rehearsal, state?.sessionId, clearing, voice.status, connected]);
   if (!state)
     return (
       <div className="connecting">
         <BrandMark />
-        <h1>Sotto.</h1>
+        <h1>Woga.</h1>
         <span className="mono">Connecting…</span>
         <p>
           Start the workspace with <code>bun run dev</code>.
         </p>
       </div>
     );
-  const current = state.conversation.filter((c) => c.role === "user").at(-1);
-  const response =
-    state.activity.summary ||
-    state.conversation.filter((c) => c.role === "assistant").at(-1)?.text;
-  const settledReply = response ? settledExecutionReply(state, response) : null;
   const executingRun = state.runs.some(run => !["confirmed", "failed", "no-op"].includes(run.status));
-  const signalMode: SignalMode = !connected ? "offline" : error || state.activity.status === "error" ? "blocked" : narrating ? "speaking" : executingRun ? "running" : busy || ["thinking", "executing"].includes(state.activity.status) ? "working" : consoleOpen ? "typing" : "ready";
+  const signalMode: SignalMode = !connected ? "offline" : error || voiceError || microphone.error ? "blocked" : executingRun ? "running" : busy || transcribing ? "working" : dictating ? "speaking" : consoleOpen ? "typing" : "ready";
   const running = rehearsal?.running || rehearsal?.status === "running";
+  const activeMonitors = state.monitors?.filter(monitor => ["active", "checking"].includes(monitor.status)) || [];
+  const activeWatchCount = activeMonitors.length;
+  const frozenRun = policyView(state).run;
+  const presentedState = showDraft && frozenRun ? { ...state, inspectedRunId: undefined, focus: { objectId: null, label: "Draft policy" } } : state;
+  const prompt = state.conversation.filter(entry => entry.role === "user").at(-1)?.text;
+  const reply = settledExecutionReply(state, state.activity.summary) || displayReply(state.activity.summary || state.conversation.filter(entry => entry.role === "assistant").at(-1)?.text || "");
+  const caption = compactReply(reply);
+  const empty = !state.objects.some(object => object.visible) && !state.workflow.created;
+  const composeExample = (value: string) => { setText(value); setConsoleOpen(false); requestAnimationFrame(() => dockInput.current?.focus()); };
   return (
     <div className="workbench-shell">
       <header className="appbar">
-        <div className="app-brand"><BrandMark /><span>Sotto.</span></div>
-        <div className="app-mode mono">{state.mode} <span>/</span> v{state.workflow.revision.toString().padStart(2, "0")}</div>
+        <div className="app-brand"><BrandMark /><span>Woga.</span></div>
+        <div className="app-mode mono">{policyView(presentedState).run ? "frozen run" : state.mode} <span>/</span> v{policyView(presentedState).revision.toString().padStart(2, "0")}</div>
         <div className="appbar-actions">
-          <div className="header-signal"><LiveSignal mode={signalMode} microphone={microphone} /></div>
-          <button className={`mic-control ${microphone.status === "live" ? "on" : ""}`} onClick={microphone.toggle} aria-pressed={microphone.status === "live"} title="Microphone waveform · local audio only · M">
-            {microphone.status === "live" ? <Mic size={15} /> : <MicOff size={15} />}
-            <span>{microphone.status === "live" ? "Mic on" : microphone.status === "requesting" ? "Cancel mic" : "Mic"}</span>
+          {activeWatchCount > 0 && <button className="monitor-indicator mono" aria-label={`Watching ${activeWatchCount}`} title={`${activeWatchCount} active policy monitor${activeWatchCount === 1 ? "" : "s"}`} onClick={() => { setCapabilitiesOpen(true); setProofOpen(false); }}><Activity size={12} /><span className="monitor-label">Watching</span><span>{activeWatchCount}</span></button>}
+          {frozenRun && <button className="draft-control" onClick={() => setShowDraft(value => !value)} aria-label={showDraft ? "Show frozen execution policy" : "Show current draft policy"} title={showDraft ? "Show frozen execution policy" : "Show current draft policy"}><span className="desktop-control-label">{showDraft ? "Frozen run" : "Draft policy"}</span><span className="mobile-control-label">{showDraft ? "Frozen" : "Draft"}</span></button>}
+          <div className="header-signal"><LiveSignal mode={signalMode} microphone={captureSnapshot} voiceStatus={voice.status} /></div>
+          <button className="proof-control" onClick={() => { setProofOpen(value => !value); setCapabilitiesOpen(false); setResponseOpen(false); }} aria-label="Proof" aria-pressed={proofOpen} title="Provenance and execution proof · I"><ShieldCheck size={14} /><span>Proof</span></button>
+          <button className={`mic-control ${dictating || transcribing ? "on" : ""}`} onClick={toggleVoice} aria-pressed={dictating || transcribing} disabled={voice.status === "checking" || voice.status === "submitting" || !voice.supported} title={voice.supported ? voice.provider === "local" ? "Dictate one command · audio processed by local Whisper · M" : "Dictate one command · your browser speech service may receive audio · M" : voice.error || "Checking voice availability"} aria-label={dictating || transcribing ? "Stop voice dictation" : "Start voice dictation"}>
+            {dictating || transcribing ? <Mic size={15} /> : <MicOff size={15} />}
+            <span>{transcribing ? "Transcribing" : dictating ? "Listening" : "Mic"}</span>
           </button>
-          {state.canUndoClear ? <button className="clear-control" onClick={() => clearCanvas(true)} disabled={clearing || busy || running} title="Restore the last cleared canvas"><RotateCcw size={14} /><span>Undo clear</span></button> : <button className="clear-control" onClick={() => clearCanvas()} disabled={clearing || busy || running || executingRun || !state.objects.length && !state.conversation.some(c => c.role === "user")} title="Clear canvas · contract state is unchanged"><Eraser size={14} /><span>Clear</span></button>}
+          <button className="clear-control" onClick={() => clearCanvas()} aria-label="Clear canvas" disabled={clearing || busy || running || executingRun || activeWatchCount > 0 || !state.objects.length && !state.conversation.some(c => c.role === "user")} title={activeWatchCount ? "Stop watching before clearing the canvas" : "Clear canvas · contract state is unchanged"}><Eraser size={14} /><span>{clearing ? "Clearing…" : "Clear"}</span></button>
           <span className="app-connection mono"><i className={connected ? "on" : ""} />{connected ? "Connected" : "Reconnecting"}</span>
-          <button className="demo-control" onClick={running ? stop : start} disabled={!connected}>{running ? "Stop demo" : "Run demo"}<ArrowRight size={14} /></button>
+          <button className="demo-control" aria-label={running ? "Stop demo" : "Run demo"} onClick={running ? stop : start} disabled={!connected}><span className="desktop-control-label">{running ? "Stop demo" : "Run demo"}</span><span className="mobile-control-label">{running ? "Stop" : "Demo"}</span><ArrowRight size={14} /></button>
         </div>
       </header>
       <main className={`workbench ${proofOpen ? "proof-open" : ""}`}>
-        <Observatory state={state} signalMode={signalMode} microphone={microphone} />
-        {proofOpen && <Inspector state={state} agentStatus={rehearsal} />}
-        <section className="command-center" aria-label="Agent activity">
-          <div className="command-transcript" aria-live="polite">
-            {current && <p key={current.id}>{current.text}</p>}
-            <div className="command-response"><InlineSummary text={displayReply(error || microphone.error || (["working", "running"].includes(signalMode) ? "" : settledReply || response || ""))} /></div>
+        <Observatory state={presentedState} signalMode={signalMode} microphone={captureSnapshot} />
+        {empty && <section className="canvas-welcome" aria-label="Start composing">
+          <span className="mono welcome-eyebrow">Observe / compose / verify</span>
+          <h1>Intent, made<br /><em>executable.</em></h1>
+          <p>Bring live markets onto your canvas.<br />Compose an action. Follow the evidence on chain.</p>
+          <div className="welcome-examples">
+            <button onClick={() => composeExample("Show ETH and SOL prices")}>Explore markets<ChevronRight size={14} /></button>
+            <button onClick={() => composeExample("Show the grant vault")}>Inspect the vault<ChevronRight size={14} /></button>
           </div>
-          {running && <span className="cue-progress mono">Demo · prompt {rehearsal?.cueIndex ?? "—"}</span>}
-        </section>
-      </main>
-      <PolicyStrip state={state} />
-      <footer className="app-footer">
-        <span className="mono">{state.capabilities.vault.toLowerCase().includes("anvil") ? "Local EVM / Anvil" : state.capabilities.vault}</span>
-        <div className="app-shortcuts">
-          <span><kbd>/</kbd> Prompt</span>
-          <span><kbd>SPACE</kbd> Demo</span>
-          <span><kbd>M</kbd> Mic</span>
-          <span><kbd>I</kbd> Proof</span>
-          <span><kbd>V</kbd> {speak ? "Audio on" : "Audio"}</span>
-          <span><kbd>ESC</kbd> Stop</span>
+          <span className="mono welcome-note">Actual sources. Explicit execution.</span>
+        </section>}
+        {proofOpen && <Inspector state={state} agentStatus={rehearsal} />}
+        {capabilitiesOpen && <Capabilities state={state} close={() => setCapabilitiesOpen(false)} stopMonitor={stopMonitor} stopping={stoppingMonitor} voiceProvider={voice.provider} />}
+        {responseOpen && <ResponsePanel text={reply} close={() => setResponseOpen(false)} />}
+        <div className="command-center">
+          {(error || voiceError || microphone.error) ? <div className="command-feedback is-error" role="alert"><span>{error || voiceError || microphone.error}</span><button onClick={() => { setError(""); voice.stop(); microphone.stop(); }} aria-label="Dismiss error"><X size={14} /></button></div> : <div className="command-feedback" role="status" aria-live="polite">
+            {(dictating || transcribing || voice.status === "submitting") ? <><p className="last-intent">{voice.interimTranscript || voice.finalTranscript || (transcribing ? "Transcribing command…" : voice.status === "requesting" ? "Starting dictation…" : "Speak a command…")}</p><div className="voice-notice">{voice.status === "submitting" ? "Submitting recognized command" : voice.provider === "local" ? "Local Whisper · recorded audio processed by this workspace" : "Browser speech recognition · audio may be processed remotely"}</div></> : <>{prompt && <p className="last-intent" title={prompt}>{prompt}</p>}{reply && <><div className="command-response"><InlineSummary text={caption} /></div><button className="response-read" onClick={() => { setResponseOpen(value => !value); setProofOpen(false); setCapabilitiesOpen(false); }} aria-expanded={responseOpen}>Read response <ArrowUpRight size={10} /></button></>}</>}
+          </div>}
+          <form className={`command-dock ${busy || executingRun ? "is-working" : ""}`} onSubmit={event => { event.preventDefault(); void submit(text); }}>
+            <Command size={16} className="command-symbol" />
+            <input ref={dockInput} value={text} onChange={event => setText(event.target.value)} placeholder="Describe what you want to compose…" aria-label="Compose an instruction" disabled={!connected || busy || clearing} />
+            <button type="submit" aria-label="Send instruction" disabled={!connected || busy || clearing || !text.trim()}>{busy ? <LoaderCircle className="loading-spinner" size={17} /> : <ArrowRight size={18} />}</button>
+          </form>
+          <div className="command-hints mono"><span>{busy ? "Interpreting instruction" : executingRun ? "Verifying execution" : transcribing ? "Transcribing voice" : voice.status === "checking" ? "Checking voice" : !voice.supported ? "Voice unavailable · type a command" : "Live canvas"}</span><button onClick={() => { setConsoleOpen(true); requestAnimationFrame(() => input.current?.focus()); }}>Expand prompt <kbd>/</kbd></button></div>
         </div>
+      </main>
+      <PolicyStrip state={presentedState} watch={watchPolicy} watching={watching} />
+      <footer className="app-footer">
+        <button className="capabilities-control mono" onClick={() => { setCapabilitiesOpen(value => !value); setProofOpen(false); setResponseOpen(false); }} aria-expanded={capabilitiesOpen}>{state.capabilities.vault.toLowerCase().includes("anvil") ? "Local EVM / Anvil" : state.capabilities.vault}<ArrowUpRight size={11} /></button>
         <span className="mono">{state.objects.filter(o => o.visible).length} objects / {state.runs.length} runs</span>
       </footer>
       {consoleOpen && (
-        <div className="prompt-overlay">
+        <div className="prompt-overlay" role="dialog" aria-modal="true" aria-label="Compose a prompt" onClick={event => { if (event.target === event.currentTarget) { setConsoleOpen(false); dockInput.current?.focus(); } }} onKeyDown={event => {
+          if (event.key !== "Tab") return;
+          const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)"));
+          const first = focusable[0], last = focusable.at(-1);
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }}>
           <form
             className="prompt-panel"
             onSubmit={(e) => {
@@ -1243,19 +1258,19 @@ function App() {
             }}
           >
             <div className="mono prompt-label">
-              Prompt <span>ESC to close</span>
+              Compose a prompt <button type="button" onClick={() => setConsoleOpen(false)} aria-label="Close prompt"><X size={16} /></button>
             </div>
             <input
               ref={input}
               autoFocus
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Focus on the vault…"
+              placeholder="What should happen, and when?"
               aria-label="Prompt"
               disabled={busy}
             />
             <div className="prompt-instructions">
-              <span>Codex / MCP</span>
+              <span>Live sources · composable policies · verified transactions</span>
               <button disabled={busy || !text.trim()} type="submit">
                 {busy ? "Working…" : "Send"}
                 <CornerDownLeft size={15} />

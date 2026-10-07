@@ -1,23 +1,30 @@
-import {executeCreRun} from '../cre/runner';
-import {createPublicClient,createWalletClient,http,parseAbi} from 'viem';
-import {privateKeyToAccount} from 'viem/accounts';
-import {foundry} from 'viem/chains';
-const deployment=await Bun.file('contracts/deployment.local.json').json();
-const client=createPublicClient({chain:foundry,transport:http(deployment.rpcUrl)});
-const wallet=createWalletClient({chain:foundry,transport:http(deployment.rpcUrl),account:privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')});
-const abi=parseAbi(['function paused() view returns (bool)','function resume()']);
-if(await client.getChainId()!==31337) throw new Error('Only localhost Anvil allowed');
-if(await client.readContract({address:deployment.address,abi,functionName:'paused'})) await client.waitForTransactionReceipt({hash:await wallet.writeContract({address:deployment.address,abi,functionName:'resume'})});
-const runSuffix=Date.now().toString();
-const falseResult=await executeCreRun({runId:`verify-false-${runSuffix}`,revision:1,thresholdUsd:1,maxAgeSeconds:120,requireFresh:true,skipIfPaused:true,broadcast:true});
-if(falseResult.decision!=='noop'||falseResult.transaction) throw new Error('False condition sent a transaction');
-const trueResult=await executeCreRun({runId:`verify-true-${runSuffix}`,revision:2,thresholdUsd:Math.ceil(falseResult.price.usd*1.1),maxAgeSeconds:120,requireFresh:true,skipIfPaused:true,broadcast:true});
-if(!trueResult.transaction?.receiverConfirmed||!trueResult.transaction.pausedAfter||trueResult.transaction.status!=='success') throw new Error('True condition did not pause');
-const noopResult=await executeCreRun({runId:`verify-paused-${runSuffix}`,revision:2,thresholdUsd:Math.ceil(falseResult.price.usd*1.1),maxAgeSeconds:120,requireFresh:true,skipIfPaused:true,broadcast:true});
-if(noopResult.decision!=='noop'||noopResult.transaction) throw new Error('Already paused vault sent report');
-const replay=await executeCreRun({runId:`verify-true-${runSuffix}`,revision:2,thresholdUsd:Math.ceil(falseResult.price.usd*1.1),maxAgeSeconds:120,requireFresh:true,skipIfPaused:true,broadcast:true});
-if(replay.transaction?.hash!==trueResult.transaction.hash) throw new Error('Run replay did not return immutable evidence');
-await Bun.write('contracts/evidence.local.json',JSON.stringify({verifiedAt:new Date().toISOString(),falseResult,trueResult,noopResult,replaySameHash:true},null,2));
-const resetHash=await wallet.writeContract({address:deployment.address,abi,functionName:'resume'});
-await client.waitForTransactionReceipt({hash:resetHash});
-console.log(JSON.stringify({verified:true,mode:trueResult.mode,pauseHash:trueResult.transaction.hash,block:trueResult.transaction.blockNumber,sourceObservedAt:trueResult.price.observedAt,priceUsd:trueResult.price.usd,falseNoAction:true,pausedNoAction:true,replaySameHash:true,readyForDemo:true,resetHash},null,2));
+// Real local Anvil sequence: false → verified pause → no duplicate → sell refused to write.
+// Run with the dev chain up (bun run dev), outside an active demo. Leaves the vault active.
+import { createPublicClient, createWalletClient, http, parseAbi, type Address } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { foundry } from "viem/chains";
+import { executeCreRun, loadLocalDeployment } from "../cre/runner";
+import { fetchFeedPrice, feedObservation } from "../server/chainlink";
+import { proveSequence } from "./prove-execution";
+
+if (process.env.ORIGINS_EXECUTION_MODE === "cre") throw new Error("verify-local proves the local Anvil path; use scripts/prove-sepolia.ts for CRE.");
+const deployment = await loadLocalDeployment();
+const client = createPublicClient({ chain: foundry, transport: http(deployment.rpcUrl) });
+if ((await client.getChainId()) !== 31337) throw new Error("Only localhost Anvil allowed");
+const wallet = createWalletClient({ chain: foundry, transport: http(deployment.rpcUrl), account: privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80") });
+const abi = parseAbi(["function paused() view returns (bool)", "function resume()"]);
+const address = deployment.address as Address;
+
+const proof = await proveSequence({
+  label: "local-anvil",
+  feedNetwork: "ethereum-mainnet",
+  execute: (spec) => executeCreRun(spec, undefined, { deployment, resolveFeed: async (source) => feedObservation(await fetchFeedPrice(source.symbol, source.network), source) }),
+  isPaused: () => client.readContract({ address, abi, functionName: "paused" }),
+  resume: async () => {
+    const hash = await wallet.writeContract({ address, abi, functionName: "resume" });
+    await client.waitForTransactionReceipt({ hash });
+    return hash;
+  },
+});
+await Bun.write("contracts/evidence.local.json", JSON.stringify({ verifiedAt: new Date().toISOString(), chainId: 31337, vault: address, ...proof }, null, 2));
+console.log(JSON.stringify({ verified: true, pause: proof.pause, resumeHash: proof.resumeTransactionHash, evidence: "contracts/evidence.local.json" }, null, 2));

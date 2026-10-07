@@ -1,103 +1,47 @@
 import { createPublicClient, http, type Address } from "viem";
-import { mainnet } from "viem/chains";
+import { mainnet, sepolia } from "viem/chains";
 import type { GraphObject } from "../shared/types";
+import {
+  FEED_REGISTRY,
+  FEED_SYMBOLS,
+  FEED_DECIMALS,
+  NETWORKS,
+  DEFAULT_FEED_NETWORK,
+  sourceIdentity,
+  type FeedSource,
+  type FeedSymbol,
+  type Network,
+  type Observation,
+} from "../cre/graph";
 
 /**
  * Chainlink Data Feeds are plain on-chain aggregator proxies, so reading them
  * needs an RPC endpoint and nothing else. No Chainlink account or API key is
  * involved; that applies to Data Streams, which this does not use.
  *
- * Every address below was verified against mainnet by calling description()
- * and comparing it to the expected pair. Candidates whose description did not
- * match, or that failed to answer, were dropped rather than guessed at.
+ * Addresses live once, in cre/graph.ts, so the canvas, the policy hash, the
+ * local runner and the CRE workflow all name the same aggregator.
  */
 export interface FeedDefinition {
   symbol: string;
   name: string;
   address: Address;
 }
-export const CHAINLINK_FEEDS: Record<string, FeedDefinition> = {
-  ETH: {
-    symbol: "ETH",
-    name: "Ethereum",
-    address: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
-  },
-  BTC: {
-    symbol: "BTC",
-    name: "Bitcoin",
-    address: "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
-  },
-  LINK: {
-    symbol: "LINK",
-    name: "Chainlink",
-    address: "0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c",
-  },
-  SOL: {
-    symbol: "SOL",
-    name: "Solana",
-    address: "0x4ffC43a60e009B551865A93d232E33Fce9f01507",
-  },
-  BNB: {
-    symbol: "BNB",
-    name: "BNB",
-    address: "0x14e613AC84a31f709eadbdF89C6CC390fDc9540A",
-  },
-  AVAX: {
-    symbol: "AVAX",
-    name: "Avalanche",
-    address: "0xFF3EEb22B5E3dE6e705b44749C2559d704923FD7",
-  },
-  MATIC: {
-    symbol: "MATIC",
-    name: "Polygon",
-    address: "0x7bAC85A8a13A4BcD8abb3eB7d6b4d632c5a57676",
-  },
-  AAVE: {
-    symbol: "AAVE",
-    name: "Aave",
-    address: "0x547a514d5e3769680Ce22B2361c10Ea13619e8a9",
-  },
-  UNI: {
-    symbol: "UNI",
-    name: "Uniswap",
-    address: "0x553303d460EE0afB37EdFf9bE42922D8FF63220e",
-  },
-  COMP: {
-    symbol: "COMP",
-    name: "Compound",
-    address: "0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5",
-  },
-  MKR: {
-    symbol: "MKR",
-    name: "Maker",
-    address: "0xec1D1B3b0443256cc3860e24a46F108e699484Aa",
-  },
-  SNX: {
-    symbol: "SNX",
-    name: "Synthetix",
-    address: "0xDC3EA94CD0AC27d9A86C180091e7f78C683d3699",
-  },
-  CRV: {
-    symbol: "CRV",
-    name: "Curve DAO",
-    address: "0xCd627aA160A6fA45Eb793D19Ef54f5062F20f33f",
-  },
-  USDC: {
-    symbol: "USDC",
-    name: "USD Coin",
-    address: "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6",
-  },
-  USDT: {
-    symbol: "USDT",
-    name: "Tether",
-    address: "0x3E7d1eAB13ad0104d2750B8863b489D65364e32D",
-  },
-  DAI: {
-    symbol: "DAI",
-    name: "Dai",
-    address: "0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9",
-  },
+const NAMES: Record<FeedSymbol, string> = {
+  ETH: "Ethereum", BTC: "Bitcoin", LINK: "Chainlink", SOL: "Solana", BNB: "BNB",
+  AVAX: "Avalanche", MATIC: "Polygon", AAVE: "Aave", UNI: "Uniswap", COMP: "Compound",
+  MKR: "Maker", SNX: "Synthetix", CRV: "Curve DAO", USDC: "USD Coin", USDT: "Tether", DAI: "Dai",
 };
+const definitions = (network: Network): Record<string, FeedDefinition> =>
+  Object.fromEntries(
+    FEED_SYMBOLS.filter((symbol) => FEED_REGISTRY[network][symbol]).map((symbol) => [
+      symbol,
+      { symbol, name: NAMES[symbol], address: FEED_REGISTRY[network][symbol]! },
+    ]),
+  );
+/** Mainnet feeds, the default network for reads and composed policies. */
+export const CHAINLINK_FEEDS: Record<string, FeedDefinition> = definitions("ethereum-mainnet");
+export const feedsOn = (network: Network = DEFAULT_FEED_NETWORK) => definitions(network);
 
 /** Spoken and written forms the agent is likely to pass through verbatim. */
 const ALIASES: Record<string, string> = {
@@ -144,7 +88,10 @@ export function resolveFeedSymbol(input: string): FeedDefinition | null {
   return aliased ? CHAINLINK_FEEDS[aliased]! : null;
 }
 
-export const feedId = (symbol: string) => `feed:${symbol.toLowerCase()}-usd`;
+export const feedId = (symbol: string, network: Network = DEFAULT_FEED_NETWORK) =>
+  `feed:${symbol.toLowerCase()}-usd${network === DEFAULT_FEED_NETWORK ? "" : `:${network.replace("ethereum-", "")}`}`;
+/** Canvas object that displays a graph source's feed. */
+export const feedObjectId = (source: FeedSource) => feedId(source.symbol, source.network);
 
 const aggregatorAbi = [
   {
@@ -178,11 +125,13 @@ const aggregatorAbi = [
 
 export const MAINNET_RPC =
   process.env.ORIGINS_MAINNET_RPC || "https://ethereum-rpc.publicnode.com";
+export const SEPOLIA_RPC =
+  process.env.ORIGINS_SEPOLIA_RPC || "https://ethereum-sepolia-rpc.publicnode.com";
 
-const client = () =>
+const client = (network: Network) =>
   createPublicClient({
-    chain: mainnet,
-    transport: http(MAINNET_RPC, { timeout: 12000 }),
+    chain: network === "ethereum-sepolia" ? sepolia : mainnet,
+    transport: http(network === "ethereum-sepolia" ? SEPOLIA_RPC : MAINNET_RPC, { timeout: 12000 }),
   });
 
 /** Human phrasing for how long ago the aggregator last wrote an answer. */
@@ -200,13 +149,17 @@ export function describeAge(seconds: number): string {
  * deviation threshold or heartbeat, so an honest answer is routinely minutes
  * old and the canvas has to say so.
  */
-export async function fetchFeedPrice(input: string): Promise<GraphObject> {
-  const feed = resolveFeedSymbol(input);
+export async function fetchFeedPrice(
+  input: string,
+  network: Network = DEFAULT_FEED_NETWORK,
+): Promise<GraphObject> {
+  const known = resolveFeedSymbol(input);
+  const feed = known && feedsOn(network)[known.symbol];
   if (!feed)
     throw new Error(
-      `No Chainlink mainnet feed configured for "${input}". Available: ${listFeedSymbols().join(", ")}`,
+      `No Chainlink feed configured for "${input}" on ${NETWORKS[network].label}. Available: ${Object.keys(feedsOn(network)).join(", ")}`,
     );
-  const rpc = client();
+  const rpc = client(network);
   const [description, decimals, round] = await Promise.all([
     rpc.readContract({
       address: feed.address,
@@ -225,6 +178,8 @@ export async function fetchFeedPrice(input: string): Promise<GraphObject> {
     }),
   ]);
   const [roundId, answer, , updatedAt] = round;
+  if (Number(decimals) !== FEED_DECIMALS)
+    throw new Error(`${feed.symbol} feed reports ${decimals} decimals; the registry expects ${FEED_DECIMALS}`);
   if (answer <= 0n)
     throw new Error(`${feed.symbol} feed returned a non-positive answer`);
   if (updatedAt === 0n)
@@ -236,10 +191,11 @@ export async function fetchFeedPrice(input: string): Promise<GraphObject> {
     );
   const observedAt = new Date(Number(updatedAt) * 1000).toISOString();
   const ageSeconds = Date.now() / 1000 - Number(updatedAt);
+  const net = NETWORKS[network];
   return {
-    id: feedId(feed.symbol),
+    id: feedId(feed.symbol, network),
     kind: "feed",
-    label: `${feed.symbol} / USD`,
+    label: network === DEFAULT_FEED_NETWORK ? `${feed.symbol} / USD` : `${feed.symbol} / USD · Sepolia`,
     visible: true,
     pinned: false,
     data: {
@@ -254,16 +210,34 @@ export async function fetchFeedPrice(input: string): Promise<GraphObject> {
       ageLabel: describeAge(ageSeconds),
       feedAddress: feed.address,
       description,
+      network,
     },
     provenance: {
       source: "Chainlink Data Feed",
-      url: `https://etherscan.io/address/${feed.address}#readContract`,
+      url: `${net.explorer}/address/${feed.address}#readContract`,
       observedAt,
       fetchedAt: new Date().toISOString(),
-      chainId: 1,
+      chainId: net.chainId,
       address: feed.address,
       kind: "chain",
-      label: `Chainlink ${description} aggregator · Ethereum mainnet · round ${roundId} written ${describeAge(ageSeconds)}`,
+      label: `Chainlink ${description} aggregator · ${net.label} · round ${roundId} written ${describeAge(ageSeconds)}`,
     },
+  };
+}
+
+/** Archive form of a feed read, bound to the registry identity the policy hash uses. */
+export function feedObservation(object: GraphObject, source: FeedSource): Observation {
+  const identity = sourceIdentity(source);
+  const address = String(object.data.feedAddress || object.provenance.address || "");
+  if (object.kind !== "feed" || address.toLowerCase() !== identity.address!.toLowerCase())
+    throw new Error(`Feed read for ${identity.label} came from ${address || "an unknown address"}, not ${identity.address}`);
+  const usd = Number(object.data.price);
+  return {
+    ...identity,
+    usd,
+    raw: String(object.data.answer ?? Math.round(usd * 10 ** FEED_DECIMALS)),
+    ...(object.data.roundId ? { roundId: String(object.data.roundId) } : {}),
+    observedAt: object.provenance.observedAt,
+    fetchedAt: object.provenance.fetchedAt,
   };
 }

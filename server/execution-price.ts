@@ -33,14 +33,14 @@ export function buildExecutionPrice(
     observedAt: observation.observedAt,
     fetchedAt,
     kind: "live" as const,
-    label: "Live exchange observation · execution input",
+    label: observation.source.startsWith("chainlink-feed:") ? "On-chain oracle observation · execution input" : "Live exchange observation · execution input",
   };
   const input: GraphObject = {
     ...structuredClone(prior),
     data: {
       price: observation.usd,
       unit: "USD",
-      symbol: "ETH",
+      symbol: prior.data.symbol || prior.label.split(" / ")[0],
       history: [structuredClone(point)],
       historyLabel: "Actual execution observation",
     },

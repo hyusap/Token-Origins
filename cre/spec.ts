@@ -1,31 +1,40 @@
 import { z } from 'zod';
-import { policyGraphSchema } from './graph';
+import { policyGraphSchema, validateGraph, policyHash, EXCHANGE_TRADE_URL, MAX_EXCHANGE_AGE_SECONDS, exchangeTradeUrl } from './graph';
+
+/**
+ * The frozen execution request handed to every runner, including the CRE HTTP
+ * trigger. Parsing it runs the full graph validation and checks the policy
+ * hash, so a direct CRE caller cannot submit a cyclic, disconnected or
+ * mislabelled graph.
+ */
 export const specificationSchema = z.object({
-  runId:z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/),
-  revision:z.number().int().min(1).max(1000000),
-  thresholdUsd:z.number().positive().max(10000000),
-  maxAgeSeconds:z.number().int().min(1).max(120),
-  requireFresh:z.boolean(), skipIfPaused:z.boolean(), broadcast:z.boolean().optional(),
-  // Frozen with the rest of the specification, so a run's policy cannot drift
-  // between freeze and execution. Absent means the legacy single-threshold path.
-  graph:policyGraphSchema.optional()
-}).strict();
-export type ExecutionSpecification=z.infer<typeof specificationSchema>;
-export const PRICE_URL='https://api.exchange.coinbase.com/products/ETH-USD/ticker';
-export type PriceObservation={usd:number;observedAt:string;source:string};
-export type ConditionEvidence={kind:string;passed:boolean;detail:string};
-export function parsePrice(value:unknown):PriceObservation {
-  const data=z.object({price:z.string(),time:z.string().datetime({offset:true})}).parse(value);
-  const usd=Number(data.price);
-  if(!Number.isFinite(usd)||usd<=0) throw new Error('Invalid price observation');
-  return {usd,observedAt:data.time,source:PRICE_URL};
-}
-export function evaluate(spec:ExecutionSpecification,price:PriceObservation,paused:boolean,nowMs:number):ConditionEvidence[] {
-  const age=(nowMs-Date.parse(price.observedAt))/1000;
-  return [
-    {kind:'threshold',passed:Math.round(price.usd*100)<Math.round(spec.thresholdUsd*100),detail:`$${price.usd.toFixed(2)} < $${spec.thresholdUsd.toFixed(2)}`},
-    // Even a draft without a freshness node retains the receiver's safety cap.
-    {kind:'freshness',passed:Number.isFinite(age)&&age>=0&&age<=spec.maxAgeSeconds,detail:`Observation age ${age.toFixed(1)}s; maximum ${spec.maxAgeSeconds}s`},
-    {kind:'vault-state',passed:!paused,detail:paused?'Vault already paused; no action needed':'Vault spending active'}
-  ];
+  version: z.literal(2),
+  runId: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/),
+  revision: z.number().int().min(1).max(1000000),
+  graph: policyGraphSchema,
+  policyHash: z.string().regex(/^0x[0-9a-f]{64}$/),
+  /** Exchange-trade freshness cap for this run. */
+  maxAgeSeconds: z.number().int().min(1).max(MAX_EXCHANGE_AGE_SECONDS),
+  /** false evaluates with live inputs and stops before any write. */
+  broadcast: z.boolean().optional(),
+}).strict().superRefine((spec, ctx) => {
+  try {
+    validateGraph(spec.graph);
+  } catch (error) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['graph'], message: error instanceof Error ? error.message : String(error) });
+    return;
+  }
+  if (policyHash(spec.graph) !== spec.policyHash)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['policyHash'], message: 'Policy hash does not match the graph' });
+});
+export type ExecutionSpecification = z.infer<typeof specificationSchema>;
+
+export const PRICE_URL = EXCHANGE_TRADE_URL;
+export const priceUrl = exchangeTradeUrl;
+export type PriceObservation = { usd: number; observedAt: string; source: string; raw: string };
+export function parsePrice(value: unknown, source = PRICE_URL): PriceObservation {
+  const data = z.object({ price: z.string(), time: z.string().datetime({ offset: true }) }).parse(value);
+  const usd = Number(data.price);
+  if (!Number.isFinite(usd) || usd <= 0) throw new Error('Invalid price observation');
+  return { usd, observedAt: data.time, source, raw: data.price };
 }

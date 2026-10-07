@@ -1,0 +1,30 @@
+{
+  "source": "https://github.com/Uniswap/v2-core and https://github.com/Uniswap/v2-periphery",
+  "purpose": "Unmodified official deployment bytecode and ABI. Disposable testnet/local assets; genuine AMM settlement, not a simulated trade.",
+  "artifacts": [
+    {
+      "name": "UniswapV2Factory",
+      "package": "@uniswap/v2-core@1.0.1",
+      "originalArtifactSha256": "7e666780d3ddf601a17c97dcc6a414dd77f5eae13fb37fce7e0bd282f4f61406",
+      "bytecodeSha256": "f63e746d7b70f50f2d4c27111bf82007dfe76a59282ad35dbe7c7abddb2c88a0"
+    },
+    {
+      "name": "UniswapV2Pair",
+      "package": "@uniswap/v2-core@1.0.1",
+      "originalArtifactSha256": "bb00cb1d64deea4159731b5957eeb8354531a110fb9120b9ef14edbc950e0736",
+      "bytecodeSha256": "8cafeda79b9894fdfd572b60303fc0cfa6ecd2e30694eb8aad816d7c6344303f"
+    },
+    {
+      "name": "UniswapV2Router02",
+      "package": "@uniswap/v2-periphery@1.1.0-beta.0",
+      "originalArtifactSha256": "b5d849090faf5255b82bddb2a8a51ad796599fa31bb7a3aa0e0db75226031aaa",
+      "bytecodeSha256": "7e90782ba1efaa78023968eab9ccfba7ab6fc1e8c360e345e4cbc6ab806f1d8c"
+    },
+    {
+      "name": "WETH9",
+      "package": "@uniswap/v2-periphery@1.1.0-beta.0",
+      "originalArtifactSha256": "ba02494a1f4d2ca3873f74969d4ff57fc885f37b856486605afa214e4155d18d",
+      "bytecodeSha256": "3aabaab37435ea702b8688727851555eef1e36422dab4eb47092950554a552ef"
+    }
+  ]
+}

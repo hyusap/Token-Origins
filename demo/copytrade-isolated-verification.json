@@ -1,0 +1,659 @@
+{
+  "status": "verified",
+  "kind": "isolated-genuine-uniswap-v2-copytrade",
+  "createdAt": "2026-10-07T08:36:09.408Z",
+  "chainId": 31337,
+  "rpcUrl": "http://127.0.0.1:54349",
+  "temporaryDirectory": "/var/folders/34/vr8fyd1s5fsd42n8f2l4t5yc0000gn/T/woga-copytrade-60Ea57",
+  "statePath": "/var/folders/34/vr8fyd1s5fsd42n8f2l4t5yc0000gn/T/woga-copytrade-60Ea57/anvil-state.json",
+  "preserveHistoricalStates": true,
+  "venue": {
+    "id": "disposable-uniswap-v2",
+    "label": "Official Uniswap V2 · disposable EVM assets",
+    "network": "local",
+    "factory": "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0",
+    "router": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+    "pair": "0x5D70Af5E2015D0F76892F8a100D176423420B7db",
+    "token0": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "token1": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+    "factoryCodeHash": "0xbab145d02e7005f0d84c6c1639d39b799b0ea16df99ebbdaf5a14d9da820b4e0",
+    "routerCodeHash": "0xb6c806c0574ca82643672e9afd45b13e7a37b21d533958c01749533079d45dc9",
+    "pairCodeHash": "0x5b83bdbcc56b2e630f2807bbadd2b0c21619108066b92a58de081261089e9ce5",
+    "provenance": "Unmodified @uniswap/v2-core@1.0.1 and @uniswap/v2-periphery@1.1.0-beta.0 artifacts; new disposable tokens on isolated Anvil"
+  },
+  "leader": "0x32FDA73a12E43672A509e52ecc3f7C55b50A619c",
+  "follower": "0xAFFE563Ee93C814bBc3248429b64807d3E676d5E",
+  "source": {
+    "kind": "confirmed-uniswap-v2-swap",
+    "network": "local",
+    "chainId": 31337,
+    "venueId": "disposable-uniswap-v2",
+    "wallet": "0x32FDA73a12E43672A509e52ecc3f7C55b50A619c",
+    "transactionHash": "0x2e35ae53b447b668e5de62d1c5c1f0f90b53cd9f7ff56994d527b9c4bf9ba491",
+    "blockNumber": "16",
+    "blockHash": "0x34241000afc22ff4a234f3a5183bf95008de60984f776f222a53edce697b452e",
+    "logIndex": 3,
+    "router": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+    "pair": "0x5D70Af5E2015D0F76892F8a100D176423420B7db",
+    "tokenIn": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "tokenOut": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+    "amountIn": "100000000000000000000",
+    "amountOut": "99600698103990321649",
+    "tokenInDecimals": 18,
+    "tokenOutDecimals": 18,
+    "observedAt": "2026-10-07T08:36:06.330Z",
+    "confirmations": "1"
+  },
+  "quote": {
+    "source": {
+      "kind": "confirmed-uniswap-v2-swap",
+      "network": "local",
+      "chainId": 31337,
+      "venueId": "disposable-uniswap-v2",
+      "wallet": "0x32FDA73a12E43672A509e52ecc3f7C55b50A619c",
+      "transactionHash": "0x2e35ae53b447b668e5de62d1c5c1f0f90b53cd9f7ff56994d527b9c4bf9ba491",
+      "blockNumber": "16",
+      "blockHash": "0x34241000afc22ff4a234f3a5183bf95008de60984f776f222a53edce697b452e",
+      "logIndex": 3,
+      "router": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+      "pair": "0x5D70Af5E2015D0F76892F8a100D176423420B7db",
+      "tokenIn": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "tokenOut": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      "amountIn": "100000000000000000000",
+      "amountOut": "99600698103990321649",
+      "tokenInDecimals": 18,
+      "tokenOutDecimals": 18,
+      "observedAt": "2026-10-07T08:36:06.363Z",
+      "confirmations": "1"
+    },
+    "amountIn": "20000000000000000000",
+    "quotedAmountOut": "19896276027330883667",
+    "minAmountOut": "19697313267057574830",
+    "slippageBps": 100,
+    "inputDecimals": 18,
+    "outputDecimals": 18,
+    "quoteBlockNumber": "16",
+    "quoteBlockHash": "0x34241000afc22ff4a234f3a5183bf95008de60984f776f222a53edce697b452e",
+    "quotedAt": "2026-10-07T08:36:06.395Z",
+    "quoteBasis": "current-allowlisted-pool-reserves",
+    "independentPriceOracle": false
+  },
+  "receipt": {
+    "kind": "confirmed-evm-copy-swap",
+    "network": "local",
+    "chainId": 31337,
+    "venueId": "disposable-uniswap-v2",
+    "operationId": "isolated-copy-1",
+    "source": {
+      "kind": "confirmed-uniswap-v2-swap",
+      "network": "local",
+      "chainId": 31337,
+      "venueId": "disposable-uniswap-v2",
+      "wallet": "0x32FDA73a12E43672A509e52ecc3f7C55b50A619c",
+      "transactionHash": "0x2e35ae53b447b668e5de62d1c5c1f0f90b53cd9f7ff56994d527b9c4bf9ba491",
+      "blockNumber": "16",
+      "blockHash": "0x34241000afc22ff4a234f3a5183bf95008de60984f776f222a53edce697b452e",
+      "logIndex": 3,
+      "router": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+      "pair": "0x5D70Af5E2015D0F76892F8a100D176423420B7db",
+      "tokenIn": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "tokenOut": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      "amountIn": "100000000000000000000",
+      "amountOut": "99600698103990321649",
+      "tokenInDecimals": 18,
+      "tokenOutDecimals": 18,
+      "observedAt": "2026-10-07T08:36:06.449Z",
+      "confirmations": "1"
+    },
+    "signer": "0xAFFE563Ee93C814bBc3248429b64807d3E676d5E",
+    "transactionHash": "0x7bff96d3f636ba17e4f832410f5bf8fed2215c084ae95dff71eecc9baa0285ac",
+    "approvalTransactionHashes": [
+      "0xa68a6a7f6946e9ec3a692d005e3b9eb87104594cf3059b0961fedc4c5b31f9dc"
+    ],
+    "blockNumber": "18",
+    "blockHash": "0x97590919534ada28f787d1614ec98af464a40bc52a156f5bc9602f3730633d13",
+    "logIndex": 3,
+    "tokenIn": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "tokenOut": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+    "amountIn": "20000000000000000000",
+    "amountOut": "19896276027330883667",
+    "minAmountOut": "19697313267057574830",
+    "inputBalanceBefore": "1000000000000000000000",
+    "inputBalanceAfter": "980000000000000000000",
+    "outputBalanceBefore": "0",
+    "outputBalanceAfter": "19896276027330883667",
+    "replayed": false,
+    "explorerUrl": null,
+    "verifiedAt": "2026-10-07T08:36:06.632Z"
+  },
+  "faultReceipts": [
+    {
+      "stage": "approval",
+      "receipt": {
+        "kind": "confirmed-evm-copy-swap",
+        "network": "local",
+        "chainId": 31337,
+        "venueId": "disposable-uniswap-v2",
+        "operationId": "lost-approval-response",
+        "source": {
+          "kind": "confirmed-uniswap-v2-swap",
+          "network": "local",
+          "chainId": 31337,
+          "venueId": "disposable-uniswap-v2",
+          "wallet": "0x32FDA73a12E43672A509e52ecc3f7C55b50A619c",
+          "transactionHash": "0x2e35ae53b447b668e5de62d1c5c1f0f90b53cd9f7ff56994d527b9c4bf9ba491",
+          "blockNumber": "16",
+          "blockHash": "0x34241000afc22ff4a234f3a5183bf95008de60984f776f222a53edce697b452e",
+          "logIndex": 3,
+          "router": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+          "pair": "0x5D70Af5E2015D0F76892F8a100D176423420B7db",
+          "tokenIn": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+          "tokenOut": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+          "amountIn": "100000000000000000000",
+          "amountOut": "99600698103990321649",
+          "tokenInDecimals": 18,
+          "tokenOutDecimals": 18,
+          "observedAt": "2026-10-07T08:36:06.807Z",
+          "confirmations": "3"
+        },
+        "signer": "0xAFFE563Ee93C814bBc3248429b64807d3E676d5E",
+        "transactionHash": "0x7f9fdfea3159f000638c01038d990b3b3d9534557956d75ac24a710d2e105f70",
+        "approvalTransactionHashes": [
+          "0xae2575d1698dafbe8fc743d47cc6c1a5d7d2eddf73cf4dff0c5710b692f617ea"
+        ],
+        "blockNumber": "20",
+        "blockHash": "0x08a601525e5016929051693106292250ebab779e4a75208357d4ee453ca0b21c",
+        "logIndex": 3,
+        "tokenIn": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        "tokenOut": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+        "amountIn": "5000000000000000000",
+        "amountOut": "4972827787029934274",
+        "minAmountOut": "4923099509159634931",
+        "inputBalanceBefore": "980000000000000000000",
+        "inputBalanceAfter": "975000000000000000000",
+        "outputBalanceBefore": "19896276027330883667",
+        "outputBalanceAfter": "24869103814360817941",
+        "replayed": false,
+        "explorerUrl": null,
+        "verifiedAt": "2026-10-07T08:36:07.063Z"
+      }
+    },
+    {
+      "stage": "swap",
+      "receipt": {
+        "kind": "confirmed-evm-copy-swap",
+        "network": "local",
+        "chainId": 31337,
+        "venueId": "disposable-uniswap-v2",
+        "operationId": "lost-swap-response",
+        "source": {
+          "kind": "confirmed-uniswap-v2-swap",
+          "network": "local",
+          "chainId": 31337,
+          "venueId": "disposable-uniswap-v2",
+          "wallet": "0x32FDA73a12E43672A509e52ecc3f7C55b50A619c",
+          "transactionHash": "0x2e35ae53b447b668e5de62d1c5c1f0f90b53cd9f7ff56994d527b9c4bf9ba491",
+          "blockNumber": "16",
+          "blockHash": "0x34241000afc22ff4a234f3a5183bf95008de60984f776f222a53edce697b452e",
+          "logIndex": 3,
+          "router": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+          "pair": "0x5D70Af5E2015D0F76892F8a100D176423420B7db",
+          "tokenIn": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+          "tokenOut": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+          "amountIn": "100000000000000000000",
+          "amountOut": "99600698103990321649",
+          "tokenInDecimals": 18,
+          "tokenOutDecimals": 18,
+          "observedAt": "2026-10-07T08:36:07.096Z",
+          "confirmations": "5"
+        },
+        "signer": "0xAFFE563Ee93C814bBc3248429b64807d3E676d5E",
+        "transactionHash": "0x3d34f46374309894f733a9760023402741ecc0cdcf50f8a71e259f719f4020b8",
+        "approvalTransactionHashes": [
+          "0xce3a44a45988e65662d6f3694a8469f0055a790b30b316d22a6905cbf0b6ef8e"
+        ],
+        "blockNumber": "22",
+        "blockHash": "0xbc97682beb5761a2eb4ca4efe496811ff4a5da7be2bd4de7b3616189f2da721b",
+        "logIndex": 3,
+        "tokenIn": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        "tokenOut": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+        "amountIn": "5000000000000000000",
+        "amountOut": "4972331894760965155",
+        "minAmountOut": "4922608575813355503",
+        "inputBalanceBefore": "975000000000000000000",
+        "inputBalanceAfter": "970000000000000000000",
+        "outputBalanceBefore": "24869103814360817941",
+        "outputBalanceAfter": "29841435709121783096",
+        "replayed": true,
+        "explorerUrl": null,
+        "verifiedAt": "2026-10-07T08:36:07.178Z"
+      }
+    }
+  ],
+  "watchProof": {
+    "falseWatch": {
+      "id": "trade_watch_f4abbdd0912740f3941e671a4c0478bf",
+      "sessionId": "genuine-integration",
+      "status": "active",
+      "config": {
+        "network": "local",
+        "venueId": "disposable-uniswap-v2",
+        "leader": "0x32fda73a12e43672a509e52ecc3f7c55b50a619c",
+        "startBlock": "next",
+        "tokenIn": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "tokenOut": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+        "proportionBps": 2500,
+        "perTradeInputCapRaw": "2000000000000000000",
+        "cumulativeInputCapRaw": "2000000000000000000",
+        "slippageBps": 100,
+        "maxTrades": 1,
+        "intervalSeconds": 15,
+        "predicate": {
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "ETH-USD"
+                }
+              },
+              {
+                "id": "condition",
+                "kind": "compare",
+                "input": "eth",
+                "op": "<",
+                "value": 1
+              }
+            ],
+            "root": "condition"
+          },
+          "exchangeMaxAgeSeconds": 120
+        }
+      },
+      "venue": {
+        "network": "local",
+        "venueId": "disposable-uniswap-v2",
+        "chainId": 31337,
+        "genesisHash": "0x3c37f9180f1f63a6b5f0a0ef785bb0f6f1175026aac0fd0e8c14c94789d3c716",
+        "signer": "0xaffe563ee93c814bbc3248429b64807d3e676d5e",
+        "router": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+        "factory": "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0",
+        "pair": "0x5d70af5e2015d0f76892f8a100d176423420b7db",
+        "token0": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "token1": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+        "routerCodeHash": "0xb6c806c0574ca82643672e9afd45b13e7a37b21d533958c01749533079d45dc9",
+        "factoryCodeHash": "0xbab145d02e7005f0d84c6c1639d39b799b0ea16df99ebbdaf5a14d9da820b4e0",
+        "pairCodeHash": "0x5b83bdbcc56b2e630f2807bbadd2b0c21619108066b92a58de081261089e9ce5",
+        "headBlock": "23",
+        "headBlockHash": "0x578319401080176dd7421b1874e0c7eedfa2a0011feb498e54557be8ac1d1550"
+      },
+      "nextBlock": "26",
+      "cursorAnchor": {
+        "blockNumber": "25",
+        "blockHash": "0x4d685e7a6147309168a72f7291af563b90295f988e7abcd3df556b591a281eeb"
+      },
+      "createdAt": "2026-10-07T08:36:07.325Z",
+      "updatedAt": "2026-10-07T08:36:08.074Z",
+      "checks": 1,
+      "failures": 0,
+      "reservedTrades": 0,
+      "reservedInputRaw": "0",
+      "skippedEvents": [
+        {
+          "sourceTransactionHash": "0x1044cf5fdebd6802c687e95a9cac6ea457e6f53f004e5549bfda8aa1809bdebe",
+          "reason": "Fresh composed predicate is false or blocked",
+          "at": "2026-10-07T08:36:08.023Z",
+          "gate": {
+            "predicateHash": "0xc0d5efd0df77143fb705af2326329e2f98c721004812dcfe7ad6df132af4af24",
+            "inputs": {
+              "readings": {
+                "exchange-trade:ETH-USD": {
+                  "usd": 2618.39,
+                  "observedAt": "2026-10-07T08:36:03.239826504Z"
+                }
+              },
+              "vaultPaused": null,
+              "exchangeMaxAgeSeconds": 120
+            },
+            "result": {
+              "conditions": [
+                {
+                  "nodeId": "condition",
+                  "kind": "threshold",
+                  "role": "node",
+                  "passed": false,
+                  "detail": "Coinbase ETH-USD trade $2,618.39 < $1.00"
+                },
+                {
+                  "nodeId": "guard:root",
+                  "kind": "composed-policy",
+                  "role": "root",
+                  "passed": false,
+                  "detail": "Policy root \"condition\" evaluated false"
+                },
+                {
+                  "nodeId": "guard:source:exchange-trade:ETH-USD",
+                  "kind": "source-freshness",
+                  "role": "guard",
+                  "passed": true,
+                  "detail": "Coinbase ETH-USD trade observed 4.8s ago; limit 120s"
+                }
+              ],
+              "root": false,
+              "decision": "noop",
+              "blockedBy": {
+                "nodeId": "guard:root",
+                "kind": "composed-policy",
+                "role": "root",
+                "passed": false,
+                "detail": "Policy root \"condition\" evaluated false"
+              }
+            },
+            "evaluatedAt": "2026-10-07T08:36:08.021Z",
+            "observations": [
+              {
+                "key": "exchange-trade:ETH-USD",
+                "provider": "coinbase",
+                "label": "Coinbase ETH-USD trade",
+                "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+                "usd": 2618.39,
+                "raw": "2618.39",
+                "observedAt": "2026-10-07T08:36:03.239826504Z",
+                "fetchedAt": "2026-10-07T08:36:07.840Z"
+              }
+            ]
+          }
+        }
+      ],
+      "conditionHash": "0xc0d5efd0df77143fb705af2326329e2f98c721004812dcfe7ad6df132af4af24",
+      "logs": [
+        {
+          "at": "2026-10-07T08:36:07.329Z",
+          "message": "Explicitly watching confirmed leader swaps from block 24; at most 1 signed attempts. Only the frozen token direction is eligible; a false predicate skips that source event permanently."
+        },
+        {
+          "at": "2026-10-07T08:36:08.023Z",
+          "message": "Skipped 0x1044cf5fdebd6802c687e95a9cac6ea457e6f53f004e5549bfda8aa1809bdebe: Fresh composed predicate is false or blocked"
+        }
+      ],
+      "nextCheckAt": "2026-10-07T08:36:23.074Z"
+    },
+    "trueWatch": {
+      "id": "trade_watch_f7190a1e459949f3a4b29a772e1425f0",
+      "sessionId": "genuine-integration",
+      "status": "completed",
+      "config": {
+        "network": "local",
+        "venueId": "disposable-uniswap-v2",
+        "leader": "0x32fda73a12e43672a509e52ecc3f7c55b50a619c",
+        "startBlock": "next",
+        "tokenIn": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "tokenOut": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+        "proportionBps": 2500,
+        "perTradeInputCapRaw": "2000000000000000000",
+        "cumulativeInputCapRaw": "2000000000000000000",
+        "slippageBps": 100,
+        "maxTrades": 1,
+        "intervalSeconds": 15,
+        "predicate": {
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "ETH-USD"
+                }
+              },
+              {
+                "id": "condition",
+                "kind": "compare",
+                "input": "eth",
+                "op": ">",
+                "value": 1
+              }
+            ],
+            "root": "condition"
+          },
+          "exchangeMaxAgeSeconds": 120
+        }
+      },
+      "venue": {
+        "network": "local",
+        "venueId": "disposable-uniswap-v2",
+        "chainId": 31337,
+        "genesisHash": "0x3c37f9180f1f63a6b5f0a0ef785bb0f6f1175026aac0fd0e8c14c94789d3c716",
+        "signer": "0xaffe563ee93c814bbc3248429b64807d3e676d5e",
+        "router": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+        "factory": "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0",
+        "pair": "0x5d70af5e2015d0f76892f8a100d176423420b7db",
+        "token0": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "token1": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+        "routerCodeHash": "0xb6c806c0574ca82643672e9afd45b13e7a37b21d533958c01749533079d45dc9",
+        "factoryCodeHash": "0xbab145d02e7005f0d84c6c1639d39b799b0ea16df99ebbdaf5a14d9da820b4e0",
+        "pairCodeHash": "0x5b83bdbcc56b2e630f2807bbadd2b0c21619108066b92a58de081261089e9ce5",
+        "headBlock": "25",
+        "headBlockHash": "0x4d685e7a6147309168a72f7291af563b90295f988e7abcd3df556b591a281eeb"
+      },
+      "nextBlock": "26",
+      "cursorAnchor": {
+        "blockNumber": "25",
+        "blockHash": "0x4d685e7a6147309168a72f7291af563b90295f988e7abcd3df556b591a281eeb"
+      },
+      "createdAt": "2026-10-07T08:36:08.149Z",
+      "updatedAt": "2026-10-07T08:36:09.405Z",
+      "checks": 1,
+      "failures": 0,
+      "reservedTrades": 1,
+      "reservedInputRaw": "2000000000000000000",
+      "skippedEvents": [],
+      "conditionHash": "0x24e03291cfd13646767f6354a4b2ea796741fc6bbe486cd1a64d7d001996259e",
+      "logs": [
+        {
+          "at": "2026-10-07T08:36:08.150Z",
+          "message": "Explicitly watching confirmed leader swaps from block 26; at most 1 signed attempts. Only the frozen token direction is eligible; a false predicate skips that source event permanently."
+        },
+        {
+          "at": "2026-10-07T08:36:09.405Z",
+          "message": "confirmed: leader 0x9e796506118adf4448e3ff3473fed27cab293d9cfdc87d6d706026e3d93bc768 → follower 0x0fc7aec3ddb21256b04af970f2a012cf22c3ba5d2d3efa4577c029dbad300a40"
+        }
+      ],
+      "stopReason": "Explicit maximum signed attempts reached; this watch is stopped."
+    },
+    "attempts": [
+      {
+        "id": "trade_watch_f7190a1e459949f3a4b29a772e1425f0_1",
+        "watchId": "trade_watch_f7190a1e459949f3a4b29a772e1425f0",
+        "operationId": "trade_watch_f7190a1e459949f3a4b29a772e1425f0:0x9e796506118adf4448e3ff3473fed27cab293d9cfdc87d6d706026e3d93bc768",
+        "source": {
+          "transactionHash": "0x9e796506118adf4448e3ff3473fed27cab293d9cfdc87d6d706026e3d93bc768",
+          "blockNumber": "27",
+          "blockHash": "0x9c609d426391576a81486a74a3ecc62b24a2ad62f5fb700439fe0e192fc8e120",
+          "logIndex": 3,
+          "leader": "0x32FDA73a12E43672A509e52ecc3f7C55b50A619c",
+          "router": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+          "pair": "0x5D70Af5E2015D0F76892F8a100D176423420B7db",
+          "tokenIn": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+          "tokenOut": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "amountInRaw": "10000000000000000000"
+        },
+        "amountInRaw": "2000000000000000000",
+        "status": "confirmed",
+        "createdAt": "2026-10-07T08:36:08.911Z",
+        "updatedAt": "2026-10-07T08:36:09.405Z",
+        "gate": {
+          "predicateHash": "0x24e03291cfd13646767f6354a4b2ea796741fc6bbe486cd1a64d7d001996259e",
+          "inputs": {
+            "readings": {
+              "exchange-trade:ETH-USD": {
+                "usd": 2618.39,
+                "observedAt": "2026-10-07T08:36:03.239826504Z"
+              }
+            },
+            "vaultPaused": null,
+            "exchangeMaxAgeSeconds": 120
+          },
+          "result": {
+            "conditions": [
+              {
+                "nodeId": "condition",
+                "kind": "threshold",
+                "role": "node",
+                "passed": true,
+                "detail": "Coinbase ETH-USD trade $2,618.39 > $1.00"
+              },
+              {
+                "nodeId": "guard:root",
+                "kind": "composed-policy",
+                "role": "root",
+                "passed": true,
+                "detail": "Policy root \"condition\" evaluated true"
+              },
+              {
+                "nodeId": "guard:source:exchange-trade:ETH-USD",
+                "kind": "source-freshness",
+                "role": "guard",
+                "passed": true,
+                "detail": "Coinbase ETH-USD trade observed 6.2s ago; limit 120s"
+              }
+            ],
+            "root": true,
+            "decision": "act"
+          },
+          "evaluatedAt": "2026-10-07T08:36:09.399Z",
+          "observations": [
+            {
+              "key": "exchange-trade:ETH-USD",
+              "provider": "coinbase",
+              "label": "Coinbase ETH-USD trade",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+              "usd": 2618.39,
+              "raw": "2618.39",
+              "observedAt": "2026-10-07T08:36:03.239826504Z",
+              "fetchedAt": "2026-10-07T08:36:09.398Z"
+            }
+          ]
+        },
+        "execution": {
+          "operationId": "trade_watch_f7190a1e459949f3a4b29a772e1425f0:0x9e796506118adf4448e3ff3473fed27cab293d9cfdc87d6d706026e3d93bc768",
+          "sourceTransactionHash": "0x9e796506118adf4448e3ff3473fed27cab293d9cfdc87d6d706026e3d93bc768",
+          "chainId": 31337,
+          "signer": "0xaffe563ee93c814bbc3248429b64807d3e676d5e",
+          "tokenIn": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+          "tokenOut": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "amountInRaw": "2000000000000000000",
+          "status": "confirmed",
+          "transactionHash": "0x0fc7aec3ddb21256b04af970f2a012cf22c3ba5d2d3efa4577c029dbad300a40",
+          "blockNumber": "28",
+          "amountOutRaw": "1988000787564426864"
+        }
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "Confirmed leader swap decoded from real V2 receipt",
+      "passed": true
+    },
+    {
+      "name": "Fresh bounded quote uses current reserves and exact raw cap",
+      "passed": true
+    },
+    {
+      "name": "Follower performed actual proportional capped token swap",
+      "passed": true
+    },
+    {
+      "name": "Receipt-block token balance deltas prove input and output",
+      "passed": true
+    },
+    {
+      "name": "Source and follower transaction identities remain distinct and correlated",
+      "passed": true
+    },
+    {
+      "name": "Only exact input was approved and allowance consumed",
+      "passed": true
+    },
+    {
+      "name": "Same operation replays canonical receipt without another trade",
+      "passed": true
+    },
+    {
+      "name": "Changed spend cap cannot reuse the same operation identity",
+      "passed": true
+    },
+    {
+      "name": "Receipt from a different wallet cannot masquerade as a watched trade",
+      "passed": true
+    },
+    {
+      "name": "A token approval cannot masquerade as a swap",
+      "passed": true
+    },
+    {
+      "name": "Read-only recovery survives process restart",
+      "passed": true
+    },
+    {
+      "name": "Mainnet signing is unavailable",
+      "passed": true
+    },
+    {
+      "name": "Real approval broadcast survives a deliberately lost HTTP response",
+      "passed": true
+    },
+    {
+      "name": "Read-only approval reconciliation broadcasts nothing",
+      "passed": true
+    },
+    {
+      "name": "Restart retry of lost approval uses one original approval and one swap",
+      "passed": true
+    },
+    {
+      "name": "Real swap broadcast survives a deliberately lost HTTP response",
+      "passed": true
+    },
+    {
+      "name": "Read-only swap reconciliation broadcasts nothing",
+      "passed": true
+    },
+    {
+      "name": "Restart retry of lost swap uses one original approval and one swap",
+      "passed": true
+    },
+    {
+      "name": "Lost swap response resolves to the exact already-mined swap identity",
+      "passed": true
+    },
+    {
+      "name": "A fresh false predicate after real approval prevents signing or broadcasting the swap",
+      "passed": true
+    },
+    {
+      "name": "A real live-price false predicate archives the new leader swap and creates no follower transaction",
+      "passed": true
+    },
+    {
+      "name": "An explicitly activated live-price watch copies the next confirmed leader swap with a real receipt",
+      "passed": true
+    },
+    {
+      "name": "Watch enforces the frozen per-trade and cumulative input cap without duplicate submissions",
+      "passed": true
+    },
+    {
+      "name": "Completed watch cannot copy the same source again or exceed one authorized trade",
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "Disposable local chain and valueless test assets; this is real AMM settlement, not public-network execution.",
+    "Only allowlisted direct single-hop exact-input token swaps are supported.",
+    "Pool quotes are not independent price oracles."
+  ]
+}

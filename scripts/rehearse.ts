@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 
-const base = process.env.SOTTO_SERVER_URL ?? 'http://127.0.0.1:4318';
+const base = process.env.WOGA_SERVER_URL ?? 'http://127.0.0.1:4318';
 const auto = process.argv.includes('--auto');
 const reset = !process.argv.includes('--no-reset');
 async function request(path: string, body?: unknown) {
@@ -9,7 +9,7 @@ async function request(path: string, body?: unknown) {
   if (!response.ok || value.ok === false) throw new Error(value.error ?? `HTTP ${response.status}`);
   return value;
 }
-console.log('SOTTO / REAL CODEX + MCP REHEARSAL');
+console.log('WOGA / REAL CODEX + MCP REHEARSAL');
 console.log('Preplanned text cues. Each cue is interpreted by Codex; this is not an audio test.');
 try {
   await request('/api/rehearsal/start', { mode: auto ? 'auto' : 'manual', reset });

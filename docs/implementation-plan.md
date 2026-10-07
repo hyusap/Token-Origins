@@ -1,4 +1,4 @@
-# Sotto implementation plan: Ayush and Shivam
+# Woga implementation plan: Ayush and Shivam
 
 Created 2026-10-07. Baseline: `b19a04b`, including feature commit `cc345a2`.
 Execution tracker: [root TODO checklist](../TODO.md).

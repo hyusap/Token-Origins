@@ -1,70 +1,81 @@
-# Treasury policy execution
+# Chainlink CRE execution
 
-The canvas composes a **bounded application specification**, not a native CRE graph and not arbitrary generated code. It freezes `runId`, revision, USD threshold, and observation freshness before execution. The fixed HTTP-trigger workflow supports one allowlisted source (Coinbase ETH/USD ticker), one configured GrantVault receiver, a numeric `<` comparison, freshness, vault-state guard, AND, and a pause report. A draft can omit visible guard nodes; execution always preserves the freshness cap and already-paused guard as treasury safety invariants.
+CRE is the sole product execution authority. Semantic API 6 exposes the implemented `pause-vault` workflow and refuses standalone transfers, swaps, direct local/testnet runs and copy-trading. Missing authentication, funding or receiver readiness fails closed; there is no replacement signer.
 
-## Two explicitly different paths
+## Execution path
 
-**Default: Local EVM rehearsal.** `cre/runner.ts` fetches a real timestamped Coinbase ticker, reads a real isolated Anvil contract, evaluates the same bounded rule in a separate runner, delivers an ABI-encoded report through `LocalRehearsalForwarder`, then requires a successful mined receipt, a correlated `SpendingPaused` event, and a fresh `paused()` read. This demonstrates actual local contract behavior. It does **not** invoke the CRE runtime or demonstrate DON consensus. The backend initiates execution and renders evidence; it does not implement transaction submission.
+```text
+Spoken/typed intent → Codex → validated MCP graph → frozen revision/receiver
+→ CRE HTTP/EVM observations → shared graph evaluator → runtime.report()
+→ EVM writeReport() → Sepolia forwarder → GrantVault.onReport()
+→ independent receipt/event/historical-state verification
+```
 
-**Optional: CRE local simulation · Sepolia broadcast.** `cre/workflow/main.ts` uses CRE's HTTPClient and EVMClient to fetch and read fresh inputs, evaluates inside CRE, generates `runtime.report()`, and submits `EVMClient.writeReport()`. The runner supplies only the immutable specification; it verifies the returned report transaction and post-state. `--broadcast` changes actual testnet state while simulation itself still runs locally. This is not a deployed DON workflow.
+Exchange sources are read through the CRE HTTP capability with field aggregation. Chainlink feeds bind exact registered network/address; vault state uses the CRE EVM capability. The workflow supports HTTP-trigger payloads assembled from typed graphs rather than arbitrary agent-generated code. Coinbase discovery previews do not substitute for a run's CRE readings.
 
-No user credentials were inspected, and no testnet execution is claimed. The CRE TypeScript workflow was typechecked and compiled to actual WASM using SDK 1.23.0. CLI v1.37.0 was installed under `cre/bin/cre` after verifying the official release SHA-256 digest.
+The current path uses **CRE local simulation with public Sepolia broadcast**. It is not a deployed DON workflow or production oracle-consensus claim. Backend polling can invoke this workflow repeatedly, but is not a DON cron/log trigger. The Sepolia simulation forwarder is appropriate only for this explicit simulation proof.
 
-## Verified local evidence
+## Verified public evidence
 
-`contracts/evidence.local.json` records the real external price and timestamp, false/no-transaction run, successful local pause, already-paused no-op, and repeated-run deduplication. Addresses and hashes are actual localhost Anvil values, not Sepolia evidence. `contracts/deployment.local.json` contains the deployed contract addresses. `scripts/verify-local.ts` verifies the whole sequence and resumes the vault at the end so the demo begins with spending active.
+[Pause transaction](https://sepolia.etherscan.io/tx/0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec), block **11861492**, receiver `0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1`.
 
-Commands run successfully:
+The saved graph/hash/run/revision match the actual transaction and `SpendingPaused` event. Independent RPC reads establish paused state at that receipt block. A later owner resume is recorded separately; historical confirmation does not assert current spending state.
+
+```sh
+bun run verify:proof
+```
+
+[Fresh owned-receiver simulation evidence](../demo/sepolia-evidence-2026-10-07T09-06-03-441Z.json) · [Independent policy/receipt verification](../demo/sepolia-current-proof-verification.json) · [Second RPC verification](../demo/sepolia-current-alternate-rpc-verification.json).
+
+The current owned receiver is `0x3bacbd3a15dabc479e9654e92273cfbb53499a73`. Deployment replaces the default manifest only after verification and archives the previous receiver identity in `contracts/deployments/`, preserving historical receipts.
+
+## Setup
 
 ```sh
 bun install --cwd cre
-# Optional CLI installation, pinned official binary with checksum check:
 bun run --cwd cre install:cli
+cre/bin/cre login
 bun run --cwd cre typecheck
 bun run --cwd cre build:wasm
-bun run --cwd cre test
-forge test --root contracts -vv
-# Keep this localhost node running in a separate terminal:
-anvil --host 127.0.0.1 --port 8545 --chain-id 31337 --silent
-bun run scripts/deploy-local.ts
-bun run scripts/verify-local.ts
 ```
 
-The development wallet is Anvil's publicly documented development account and is accepted by the runner only at `http://127.0.0.1:8545` with chain ID 31337. Do not fund it on a public network.
+Use the application's report-v2 deployment manifest, or deploy an owned receiver with `bun run sepolia:deploy` using a funded Sepolia test wallet. Supply `CRE_ETH_PRIVATE_KEY` privately for broadcast, and `CRE_API_KEY` only if using API-key authentication instead of normal CLI login. No personal credential files are opened. `ORIGINS_CRE_DEPLOYMENT_FILE` selects the manifest; explicit receiver overrides must remain consistent with the frozen target. The default manifest is `contracts/deployment.sepolia.json`.
 
-## Sepolia setup when ready
-
-1. Create your own Chainlink CRE account. Use an explicitly supplied fresh `CRE_API_KEY`; current Chainlink documentation says API-key authentication requires deployment access. Interactive `cre login` is an alternative for manual CLI work, but the app runner intentionally requires an explicit API key and does not inspect existing desktop credentials.
-2. Create and fund your own fresh Sepolia test wallet. Set `CRE_ETH_PRIVATE_KEY` privately in your environment.
-3. Deploy `GrantVault` on Sepolia with the **simulation MockForwarder** address `0x15fC6ae953E024d975e77382eEeC56A9101f9F88` and max report age 120 seconds. Check the current forwarder directory before deployment. The local rehearsal forwarder is not used by CRE.
-4. Set `ORIGINS_EXECUTION_MODE=cre`, `ORIGINS_SEPOLIA_VAULT`, and the two CRE environment variables. The runner uses the Sepolia selector `16015286601757825753` and the configured project's public Sepolia RPC. A private RPC can be placed directly in `cre/project.yaml` locally; never commit RPC access tokens.
-5. Run with threshold `$1` for an observed false condition, then create a new revision with a threshold above the fresh observed price for the true case. Each execution fetches its own fresh input; a changing market can still affect the result.
-
-The executable CLI form is:
+`ORIGINS_CRE_GAS_LIMIT` defaults to 2,000,000. A past 350,000 budget allowed a forwarder transaction while receiver execution ran out of gas; independent event/state verification caught it. A transaction hash alone never establishes successful action delivery.
 
 ```sh
-cd cre
-./bin/cre workflow simulate ./workflow \
-  --project-root . --target staging-settings --non-interactive \
-  --trigger-index 0 \
-  --http-payload '{"runId":"example-run","revision":1,"thresholdUsd":1,"maxAgeSeconds":120,"requireFresh":true,"skipIfPaused":true,"broadcast":false}' \
-  --config workflow/config.runtime.json
+bun run test:boundary
+# Authenticated real CLI evaluation; no signing or broadcast:
+bun run test:e2e
+# Explicit public write proof for a configured, funded, owned test receiver:
+bun run sepolia:prove
+bun run dev
 ```
 
-The runner creates `config.runtime.json` from the explicit vault setting. Add `--broadcast` only for an intended true testnet action. The simulation trigger is configured with `{}` deliberately; deployed HTTP triggers require authorized signing keys.
+The inspector reads `/api/cre/capabilities`: CLI installation/authentication, receiver configuration and signing-key presence are separate from verified funding. It never exposes account details or key values.
 
-## Report and contract checks
+## Receiver and recovery
 
-Report payload: `abi.encode(bytes32 keccak256(runId), uint256 revision, uint256 priceUsdCents, uint256 thresholdUsdCents, uint256 observedAtSeconds)`.
+Report v2 binds version, receiver, chain, run hash, revision, policy hash, pause action and decision timestamp. The receiver authenticates its immutable forwarder and checks domain, expiry and replay protection. Submitted hashes are durably recorded before receipt waiting; uncertain outcomes reconcile read-only against the original target.
 
-GrantVault implements `onReport(bytes,bytes)` and ERC165 receiver detection. It permits only its immutable forwarder, rejects future/stale observations and nonpositive/false threshold reports, suppresses replay by run ID, and blocks grant payments while paused. Seven Solidity tests cover these behaviors. Nine TypeScript tests include the actual CRE HTTP handler under the official capability mock harness, checking threshold decisions, stale/paused no-op behavior, correct EVM balance decoding, and receiver-revert failure. These SDK tests use explicitly mocked capabilities; they do not claim authenticated runtime execution. The mock forwarder is a simulation transport, so this deployment is strictly a demo. Before any production deployment, use a production KeystoneForwarder, bind workflow identity and chain domain, and review authorization and operational policy.
+Monitors freeze the graph/target, use CRE dry evaluation before a fresh CRE write evaluation, and stop after verified settlement. Backend restart pauses checks. Archived direct/local/Solana jobs cannot reactivate or satisfy a CRE job's settlement requirement.
+
+Production DON deployment requires deploy access, supported triggers, funded billing, real forwarder configuration, workflow metadata authorization and a verified deployed execution. These are remaining milestones, not implied by the saved simulation receipt.
+
+## Deferred copy trading and Solana
+
+CRE supports report delivery to appropriate EVM receivers and Solana programs. This product has neither a funded CRE swap receiver nor a deployed Solana `on_report` program. Its standalone direct signer experiments are disabled, hidden from HTTP/MCP discovery and absent from advertised actions. [Copy-trading requirements](cre-copytrading-feasibility.md).
 
 ## Primary references
 
-- [CRE HTTP simulation](https://docs.chain.link/cre/guides/workflow/using-triggers/http-trigger/testing-in-simulation)
-- [CRE HTTP GET requests](https://docs.chain.link/cre/guides/workflow/using-http-client/get-request)
-- [CRE TypeScript EVM reads](https://docs.chain.link/cre/guides/workflow/using-evm-client/onchain-read)
-- [Consumer contracts and mock forwarders](https://docs.chain.link/cre/guides/workflow/using-evm-client/onchain-write/building-consumer-contracts)
-- [Submitting reports and independent receiver status](https://docs.chain.link/cre/guides/workflow/using-evm-client/onchain-write/submitting-reports-onchain)
-- [Authentication and API-key requirements](https://docs.chain.link/cre/reference/cli/authentication)
-- [Official CLI release](https://github.com/smartcontractkit/cre-cli/releases/tag/v1.37.0)
+- [CRE overview](https://docs.chain.link/cre)
+- [HTTP simulation](https://docs.chain.link/cre/guides/workflow/using-triggers/http-trigger/testing-in-simulation)
+- [Consumer contracts](https://docs.chain.link/cre/guides/workflow/using-evm-client/onchain-write/building-consumer-contracts)
+- [Submitting reports](https://docs.chain.link/cre/guides/workflow/using-evm-client/onchain-write/submitting-reports-onchain)
+- [Solana Write](https://docs.chain.link/cre/capabilities/solana-write)
+
+See [execution contract](execution-contract.md) for graph and API invariants.
+
+## Actual deploy-access check
+
+On October 7, 2026, the authenticated CLI reported deployment access is not enabled for this organization. The account-access command unexpectedly submitted a request despite `--non-interactive`; submission succeeded, but approval is pending. Both private and onchain registries were listed as available registry types. Private registry management avoids mainnet registry gas, but still requires deploy approval. [Recorded CLI result](../demo/cre-deploy-access-verification.json). The app still needs a deployed-workflow gateway adapter, deployed forwarder/metadata authorization and live DON execution verification after approval.

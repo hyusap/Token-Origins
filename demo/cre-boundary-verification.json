@@ -1,0 +1,70 @@
+{
+  "verified": true,
+  "acceptedProductProof": true,
+  "scope": "CRE-only semantic boundary; live execution not tested",
+  "verifiedAt": "2026-10-07T08:47:29.464Z",
+  "temporaryDirectory": "/var/folders/34/vr8fyd1s5fsd42n8f2l4t5yc0000gn/T/woga-cre-acceptance-n3uFO4",
+  "isolatedBackend": "http://127.0.0.1:56911",
+  "checks": [
+    {
+      "check": "real backend exposes CRE-only semantic API",
+      "passed": true,
+      "detail": {
+        "version": 5,
+        "fingerprint": "c6b2444443c5c9f3094d74e3aaa7449f3580ffd8ac967a1bfe23b7f0949cf41e"
+      }
+    },
+    {
+      "check": "readiness reports actual CLI authentication and distinguishes DON deployment",
+      "passed": true,
+      "detail": {
+        "ok": true,
+        "executionAuthority": "chainlink-cre",
+        "mode": "cre-local-simulation",
+        "donDeployed": false,
+        "cliInstalled": true,
+        "authenticated": false,
+        "receiver": {
+          "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+          "chainId": 11155111
+        },
+        "signingKeyConfigured": false,
+        "readyForEvaluation": false,
+        "broadcastConfigured": false,
+        "fundingVerified": false,
+        "reason": "Sign in with cre/bin/cre login.",
+        "checkedAt": "2026-10-07T08:47:29.278Z"
+      }
+    },
+    {
+      "check": "HTTP manifest and routes exclude every standalone signer utility",
+      "passed": true,
+      "detail": {
+        "excluded": [
+          "inspect_solana_wallet",
+          "get_solana_devnet_wallet",
+          "transfer_solana_devnet",
+          "list_evm_trade_venues",
+          "get_evm_trade_wallet",
+          "inspect_evm_swap",
+          "inspect_evm_wallet_swaps",
+          "quote_evm_copy_swap",
+          "copy_evm_swap",
+          "reconcile_evm_copy_swap",
+          "activate_evm_trade_watch",
+          "get_evm_trade_watches",
+          "deactivate_evm_trade_watch",
+          "reconcile_evm_trade_watch"
+        ]
+      }
+    },
+    {
+      "check": "official MCP refuses unavailable direct action tools",
+      "passed": true
+    },
+    {
+      "check": "direct Solana graph cannot mutate draft or queue execution",
+      "passed": true
+    }
+  ]
+}

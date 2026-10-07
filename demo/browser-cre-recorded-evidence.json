@@ -1,0 +1,72 @@
+{
+  "claim": "Actual CRE structured output retained before progress handling failed; correlated with browser run and independently verified receipt.",
+  "evidence": {
+    "runId": "run-fef2e11f-59bf-4140-8fea-8744eaa53526",
+    "revision": 1,
+    "policyHash": "0xd4ce151f5f3be4d322118894578153d63ac7b7f4b6c6ef2c388f6038918306ae",
+    "mode": "cre-local-simulation",
+    "observations": [
+      {
+        "key": "chainlink-feed:ethereum-mainnet:SOL",
+        "provider": "chainlink",
+        "label": "Chainlink SOL/USD (mainnet)",
+        "network": "ethereum-mainnet",
+        "chainId": 1,
+        "address": "0x4ffC43a60e009B551865A93d232E33Fce9f01507",
+        "decimals": 8,
+        "usd": 119.14780745,
+        "raw": "11914780745",
+        "roundId": "36893488147419106531",
+        "observedAt": "2026-10-07T01:59:11.000Z",
+        "fetchedAt": "2026-10-07T09:22:12.046Z"
+      }
+    ],
+    "vault": {
+      "address": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+      "chainId": 11155111,
+      "paused": false,
+      "balanceWei": "0",
+      "reportVersion": 2
+    },
+    "conditions": [
+      {
+        "nodeId": "above-one",
+        "kind": "threshold",
+        "role": "node",
+        "passed": true,
+        "detail": "Chainlink SOL/USD (mainnet) $119.14780745 > $1"
+      },
+      {
+        "nodeId": "guard:root",
+        "kind": "composed-policy",
+        "role": "root",
+        "passed": true,
+        "detail": "Policy root \"above-one\" evaluated true"
+      },
+      {
+        "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:SOL",
+        "kind": "source-freshness",
+        "role": "guard",
+        "passed": true,
+        "detail": "Chainlink SOL/USD (mainnet) observed 26581.3s ago; limit 93600s"
+      },
+      {
+        "nodeId": "guard:vault-active",
+        "kind": "vault-state",
+        "role": "guard",
+        "passed": true,
+        "detail": "Vault spending active"
+      }
+    ],
+    "root": true,
+    "decision": "act",
+    "action": "pause-vault",
+    "decidedAt": "2026-10-07T09:22:12.337Z",
+    "logs": [],
+    "transaction": {
+      "hash": "0x3479462f65013c97b0705a7e5ac30024d00b066356674fbed05b98a8e8132c33",
+      "status": "success",
+      "receiverConfirmed": true
+    }
+  }
+}

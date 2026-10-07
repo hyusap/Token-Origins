@@ -81,7 +81,7 @@ test("a two-asset graph composes and describes itself", async () => {
   });
   expect(result.ok).toBe(true);
   expect(result.summary).toContain("Coinbase ETH-USD trade < $3,000");
-  expect(result.summary).toContain("Chainlink BTC/USD < $90,000");
+  expect(result.summary).toContain("Chainlink BTC/USD (mainnet) < $90,000");
   // Execution has to know it needs the oracle as well as the exchange.
   expect(result.summary).toContain("Chainlink BTC/USD");
   expect(engine.state.workflow.revision).toBe(1);
@@ -194,9 +194,9 @@ test("a frozen run keeps the graph that was composed when it started", async () 
   // Revising afterwards must not reach back into the frozen snapshot.
   await engine.invoke("compose_graph", {
     expectedRevision: 1,
-    graph: { ...ethAndBtc, nodes: ethAndBtc.nodes.slice(0, 3), root: "ethUnder" },
+    graph: { ...ethAndBtc, nodes: ethAndBtc.nodes.filter(node => node.id === "eth" || node.id === "ethUnder"), root: "ethUnder" },
     operationId: "revise",
   });
   expect(run.snapshot.graph.nodes).toHaveLength(5);
-  expect(engine.state.workflow.graph.nodes).toHaveLength(3);
+  expect(engine.state.workflow.graph.nodes).toHaveLength(2);
 });

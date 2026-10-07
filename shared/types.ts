@@ -1,5 +1,10 @@
-import type { PolicyGraph } from "../cre/graph";
-export type { PolicyGraph };
+import type {EvmTradeWatch} from "../server/evm-trade-watch";
+import type {ExecutionTarget} from "./execution-target";
+import type {SolanaTransferReceipt} from "./solana-types";
+import type { PolicyMonitor } from "../server/monitor";
+import type { supportedPolicyCapabilities } from "./policy-capabilities";
+import type { PolicyGraph, Observation, ResultRole } from "../cre/graph";
+export type { PolicyGraph, Observation, ResultRole };
 export type Mode = "explore" | "compose" | "run";
 export interface Provenance {
   source: string;
@@ -33,6 +38,9 @@ export interface WorkflowRevision {
   reason: string;
   /** Composed policy. Scalar edits synthesise the equivalent single-compare graph. */
   graph: PolicyGraph;
+  target?: ExecutionTarget;
+  /** Structural hash of graph; the receiver event carries the same value. */
+  policyHash?: string;
 }
 export interface Workflow {
   id: string;
@@ -44,6 +52,7 @@ export interface Workflow {
   revisions: WorkflowRevision[];
   created: boolean;
   graph: PolicyGraph;
+  policyHash?: string;
 }
 export interface RunDecision {
   id: string;
@@ -52,6 +61,8 @@ export interface RunDecision {
   detail: string;
   /** Graph node this verdict came from; absent for legacy scalar runs. */
   nodeId?: string;
+  /** node: an intermediate result; root: the policy verdict; guard: a mandatory execution gate. */
+  role?: ResultRole;
 }
 export interface RunLog {
   at: string;
@@ -73,10 +84,28 @@ export interface ExecutionRun {
   startedAt: string;
   completedAt?: string;
   executionMode: string;
-  inputs?: { price: GraphObject; vault: GraphObject };
+  /** Frozen read-only CRE invocation; never enables report submission. */
+  evaluationOnly?: boolean;
+  /** Hash of the frozen graph this run evaluated. */
+  policyHash?: string;
+  /** The action the frozen graph names. */
+  action?: "pause-vault" | "sell" | "solana-transfer";
+  inputs?: { price?: GraphObject; vault?: GraphObject };
+  /** Every source reading the decision used, with provider, network, address and timestamps. */
+  observations?: Observation[];
+  /** Why no action was taken, from the gate that actually stopped it. */
+  noopReason?: string;
+  /** Set after a restart interrupted this run, until the chain says whether its report landed. */
+  uncertain?: boolean;
+  submissionPossible?: boolean;
+  /** Target frozen before execution so recovery never reads a replacement vault. */
+  target?: ExecutionTarget;
   decisions: RunDecision[];
   logs: RunLog[];
   evidence?: {
+    evaluationOnly?:true;
+    solanaTransfer?: SolanaTransferReceipt & {genesisHash:string;verified:true};
+    submittedSignature?:string;
     transactionHash?: string;
     blockNumber?: string;
     receiptStatus?: string;
@@ -85,6 +114,10 @@ export interface ExecutionRun {
     contractAddress?: string;
     explorerUrl?: string;
     reportId?: string;
+    /** Policy hash read back from the receiver event. */
+    policyHash?: string;
+    /** Fixture rehearsal: in-memory state only. */
+    fixture?: boolean;
     verification?: string;
     /** Present only for a mock sell. Never a real order or asset movement. */
     simulatedOrder?: {
@@ -110,6 +143,8 @@ export interface ConversationEntry {
   source: string;
 }
 export interface CanvasState {
+  /** Persisted state layout; see server/migrate.ts. */
+  stateVersion?: number;
   sessionId: string;
   canUndoClear?: boolean;
   canvasView?: { action: "fit" | "zoom_in" | "zoom_out" | "pan_left" | "pan_right" | "pan_up" | "pan_down" | "focus"; sequence: number };
@@ -122,6 +157,8 @@ export interface CanvasState {
   edges: { id: string; from: string; to: string; label: string }[];
   workflow: Workflow;
   runs: ExecutionRun[];
+  monitors?: PolicyMonitor[];
+  tradeWatches?: EvmTradeWatch[];
   inspectedRunId?: string;
   conversation: ConversationEntry[];
   activity: {
@@ -145,6 +182,7 @@ export interface CanvasState {
     renderMs?: number;
   }[];
   capabilities: {
+    supported?: typeof supportedPolicyCapabilities;
     price: string;
     vault: string;
     execution: string;
@@ -154,6 +192,7 @@ export interface CanvasState {
   clarification?: { question: string; candidates: string[] };
 }
 export interface ToolResult {
+  data?: Record<string, unknown>;
   ok: boolean;
   summary: string;
   state: CanvasState;

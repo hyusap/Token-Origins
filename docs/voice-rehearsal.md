@@ -1,72 +1,74 @@
 # Voice and agent rehearsal
 
-Sotto preserves the preferred architecture: Codex interprets a conversational command, calls our custom MCP tools, and the backend updates the external canvas over WebSocket. The autonomous demo uses **preplanned text utterances and a real Codex CLI agent**. It does not emulate microphone audio, claim speech latency, or inject events into the desktop app's private voice session.
+Woga has two inputs to the same semantic operator: typed commands and browser microphone dictation. Final text goes to `/api/agent`, a real Codex CLI turn calls Woga's MCP tools, and committed canvas state arrives over WebSocket. The timed rehearsal supplies preplanned text; it does not capture audio.
 
-## Run the rehearsal
+## Browser microphone
 
-Start `bun run dev`, then open `http://127.0.0.1:5173`. In a second terminal run:
-
-```sh
-bun run rehearse --auto --reset
-```
-
-Each cue from `demo/script.json` goes through `codex exec --json`, the official MCP SDK's stdio transport, and semantic tools. No natural-language parser selects the action in this path. The CLI account must already be signed in (`codex login`); the bridge uses standard CLI authentication without reading or copying account files. Existing user configuration is ignored. It does not select a new model. Shell diagnostics and live web search are allowed; app connectors are disabled, and the operator instructions prohibit application edits, delegation, and other integrations. The model receives a bounded conversation transcript plus fresh authoritative MCP context each turn.
-
-The script's `atSeconds` values are minimum offsets from rehearsal start. Turns are serialized, with six seconds between completed turns by default; late turns defer subsequent cues instead of dropping them. Execution runs can continue asynchronously. The special draft revision cue follows the run-return turn without the six-second gap. Depending on actual tool/model timing, the chain transaction may already have completed before that next turn. This is a draft revision test, not proof of audio barge-in during a transaction.
-
-For a manual filming take:
+From the project root:
 
 ```sh
-bun run rehearse --reset
+bun run voice:setup
+bun run dev
 ```
 
-Press Enter for each next cue, or type a custom utterance. `/quit` and Ctrl+C stop future cues. They do not cancel an active semantic operation or blockchain transaction. No mouse interaction is required. In the canvas the keyboard rehearsal controls call the same bridge.
+Voice setup requires `git`, `curl`, `cmake`, a C++ compiler and `ffmpeg`. It builds pinned whisper.cpp and downloads the checksum-verified `base.en` model into `.data/voice`. Setup needs network access; local transcription does not need an API key or send audio to an external service.
 
-Canvas keyboard controls:
+Open `http://127.0.0.1:5173` (or the built app at `http://127.0.0.1:4318`). Click **Mic**, allow microphone access, and speak one command. Local capture shows a real amplitude waveform, ends after speech followed by silence, and sends the recording to local Whisper. The final transcript is visible and submitted once through the same operator as typed input. Captures are bounded below the backend's 30-second / 5-MB limits; temporary decoder audio is deleted after processing or cancellation.
 
-| Key    | Action                                                                                   |
-| ------ | ---------------------------------------------------------------------------------------- |
-| Space  | Start or stop the timed real-agent rehearsal                                             |
-| `/`    | Open the transcript input; type an utterance and press Enter to send it to Codex         |
-| Escape | Close the transcript input, stop future rehearsal cues, and stop optional caption speech |
-| I      | Toggle the provenance and evidence inspector                                             |
-| V      | Toggle browser narration of planned prompts and final responses                          |
+`GET /api/voice/capabilities` reports local readiness. If local transcription is unavailable, the client uses native browser speech recognition when supported. That browser service may process audio remotely; the UI identifies the provider. Unsupported browsers and permission/service failures leave the typed command path available. Reload the page after installing local voice to select it.
 
-Browser read-aloud is optional output narration. It does not listen to the microphone or verify desktop voice integration.
+**Mic** or **Escape** stops capture or cancels pending transcription. Starting dictation stops browser speech playback. Once an agent command has been submitted, stopping audio does not cancel the semantic operation or a blockchain transaction. The Mic control remains disabled during submission; failed commands retain recognized text for review rather than automatically retrying.
 
-The script includes discovery, explicit focus, composition, freshness and paused-state guards, framing, deliberate ambiguity, named clarification, a false-condition run using a $1 threshold, an explicit above-current-price revision, execution, a draft revision, receipt inspection, and an already-paused guard test. Starting a rehearsal prepares the local Anvil vault with a verified owner `resume()` transaction if it was paused, then clears the canvas. This helper accepts only `http://127.0.0.1:8545` and chain ID 31337, using Anvil's public development key. It never resets a public-network vault. Clearing the canvas through the semantic reset tool alone never unpauses a contract.
+## Verified browser evidence
 
-## What is measured
+[The browser verification](../demo/voice-browser-e2e-verification.json) records nine passing checks on 7 October 2026. A dedicated Chromium instance received synthetic spoken input through its test microphone, then used the production MediaRecorder, actual local Whisper and an authenticated Codex operator. The exact recognized instruction was:
 
-`.data/agent/agent-*.jsonl` preserves the raw Codex event stream. `.data/rehearsal-turns.jsonl` preserves thread IDs, prompt timestamps, completion timestamps, duration, and actual MCP calls. Tool receipt/state commit measurements live in `CanvasState.latency`; the frontend sends `/api/rendered` acknowledgements after applying a state update. A real rendered acknowledgement can distinguish backend commit time from browser delivery/render time. None of these measurements include microphone onset, audio transcription, or desktop voice delegation.
+> Show me the price of Solana. Keep this as a draft and do not execute anything.
 
-Inspect `GET /api/rehearsal/status` for progress and completed turns. `POST /api/agent` accepts `{ "text": "Focus on the vault." }`. The backend supports `/api/rehearsal/start`, `/next`, and `/stop`. Rehearsal errors are visible captions, and raw stderr logs remain next to the event trace for diagnosis.
+The 6.54-second recording transcribed in 1.165 seconds. Exactly one semantic turn discovered a live Coinbase SOL trade at $118.43 with source timestamps and trade ID; that turn completed in 42.422 seconds. These are separate recording, transcription and operator measurements, not a general voice latency guarantee. The UI settled and released capture. The isolated test created no run, monitor or chain action. No user ambient microphone was captured; the synthetic audio and browser were removed after verification. [Rendered result](../demo/voice-browser-e2e.png).
 
-| Endpoint                    | Payload / return                                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/agent`           | `{ "text": "Focus on the vault." }` → one measured `AgentTurn`, including `ok`, `summary`, and actual MCP tool names |
-| `POST /api/rehearsal/start` | `{ "mode": "auto", "reset": true }`; use `"manual"` for cue-by-cue control                                           |
-| `POST /api/rehearsal/next`  | `{}` → next cue and its measured agent turn                                                                          |
-| `POST /api/rehearsal/stop`  | `{}` → stop future cues; active operations can finish                                                                |
-| `GET /api/rehearsal/status` | Current `running`, `busy`, `cueIndex`, `totalCues`, completed `turns`, next cue, and errors                          |
-| `GET /api/state`            | Authoritative persistent graph, draft revisions, runs, evidence, provenance, and measured tool latency               |
+This proves the browser dictation pipeline with synthetic spoken input. Human microphone behavior and Codex desktop voice are separate verification scopes.
 
-## Prepare an actual desktop voice test
+## Timed rehearsal
 
-Open `operator/` as the primary folder of a Codex project and start a new chat there. `operator/AGENTS.md` defines the Sotto operator role; `operator/.codex/config.toml` loads it as the model instructions, permits shell diagnostics and live web search, disables app connectors, and attaches the Sotto MCP through `operator/mcp.ts`. The rehearsal starts its agents in the same folder and uses the same instructions. The parent project remains the development workspace. Existing chats do not switch roles automatically.
-
-Verify `sotto` is connected in MCP settings or `/mcp`. The backend and canvas must already be running. If project configuration is not loaded, the equivalent local connection is:
+The backend and canvas must be running, and the CLI account must be signed in. In a second terminal:
 
 ```sh
-codex mcp add sotto --env ORIGINS_BACKEND_URL=http://127.0.0.1:4318 -- bun run /Users/ayush/dev/token-origins/scripts/mcp.ts
+bun run rehearse --auto
 ```
 
-That command modifies the user's Codex MCP configuration; it is provided for setup and was not silently run. Start the backend and canvas first, select **Start voice chat** in this task, and say: “Use only the Sotto MCP tools to show ETH's price and our grant vault, then focus on the price.” Then compose a rule, interrupt a spoken explanation to revise its threshold, and ask for current state. Measure the visible behavior and retain only observations actually made.
+For manual cues, use `bun run rehearse`. `--no-reset` preserves the existing canvas session; the default clears the canvas before the take. **Neither path resumes, resets or redeploys a vault.** The rehearsal preserves contract state, so an already-paused vault must produce an honest no-op.
 
-As of 6 October 2026, [official voice documentation](https://learn.chatgpt.com/docs/features/voice) describes GPT-Live, spoken task steering, and natural interruption. It requires the user to start the voice session and grant microphone access. [Official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) describes custom stdio tool connections. Those establish supported components; they do not establish end-to-end external canvas voice latency, partial transcript access, or an API to drive the desktop's internal audio session. The built-in microphone route remains unverified until the actual voice test.
+Each cue in `demo/script.json` passes through a real `codex exec --json` turn and official MCP stdio transport. The bridge supplies authoritative canvas context, ignores incompatible global CLI configuration and uses the account's default model. Cue timestamps are minimum offsets. Turns are serialized, with six seconds between completed turns by default. Slow turns defer later cues. The planned draft revision immediately follows the run-return turn; the transaction might already have completed, so this is not proof of audio interruption during a transaction.
 
-If that route cannot meet interaction latency, an app-owned voice client can send final transcripts to `/api/agent` and retain the same semantic MCP/backend/canvas pipeline. That is a future integration and must be labelled separately. Browser speech recognition alone does not prove Codex desktop voice integration.
+Product execution uses Chainlink CRE as its sole action authority. The supported action is a bounded grant-vault pause through the version 2 receiver. Source reads and drafts alone do not prove CRE readiness. A run requires configured CRE source/receiver networks and actual execution evidence; there is no standalone signer fallback. See [CRE setup](cre-integration.md).
 
-## CLI implementation references
+`/quit`, Ctrl+C, **Stop demo** and **Escape** stop future rehearsal cues. Active semantic operations and submitted transactions can finish.
 
-[Non-interactive Codex](https://learn.chatgpt.com/docs/non-interactive-mode) documents JSONL events and standard CLI authentication. [Configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) documents `features.shell_tool`, MCP stdio command/args/env, and replacement model instructions. This implementation uses those supported settings rather than fabricating tool-call traces.
+| Key | Action outside text inputs |
+| --- | --- |
+| M | Start or stop dictation |
+| `/` | Expand typed command input |
+| Escape | Close overlays, stop dictation/transcription and future rehearsal cues |
+| I | Open proof |
+| 0 | Fit canvas |
+| Space | Start or stop the timed rehearsal |
+
+## Traces and endpoints
+
+`.data/agent/agent-*.jsonl` contains actual CLI event streams. `.data/rehearsal-turns.jsonl` records prompts, timing and semantic tool calls. `CanvasState.latency` and `/api/rendered` acknowledgements measure committed state delivery/rendering; they exclude audio capture and transcription. The separate browser proof records actual transcription timing.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/voice/capabilities` | Local engine/model readiness and audio limits |
+| `POST /api/voice/transcribe` | Audio FormData field `audio` → recognized transcript; no action submission |
+| `POST /api/agent` | `{ "text": "Focus on the vault." }` → one semantic operator turn |
+| `POST /api/rehearsal/start` | `{ "mode": "auto", "reset": true }`; `manual` uses individual cues |
+| `POST /api/rehearsal/next` / `POST /api/rehearsal/stop` | Advance one cue / stop future cues |
+| `GET /api/rehearsal/status` / `/api/state` | Actual progress / authoritative persistent canvas |
+
+## Codex desktop voice
+
+Open [the operator folder](../operator/README.md) as a trusted Codex project, start a new operator chat and confirm `woga` is connected through `/mcp`. If your desktop client offers voice, start the session there and grant microphone permission yourself. A suitable read-only test is: “Use Woga's MCP tools to show ETH's price and focus on it.”
+
+This repository does not start, capture or emulate the desktop app's private voice session. The browser proof does not verify desktop audio, partial transcripts, interruption or desktop voice latency. Those require a separate observed user-started session. The operator uses project-local MCP configuration and does not modify global registrations or model settings.
