@@ -20,6 +20,8 @@ import {
 import {
   legacyGraph,
   readsVault,
+  DEFAULT_EXCHANGE_MAX_AGE_SECONDS,
+  MAX_FEED_AGE_SECONDS,
   describeGraph,
   describeAction,
   validateGraph,
@@ -37,6 +39,7 @@ import {
   type PolicyGraph,
 } from "../cre/graph";
 import type { ExecutionSpecification } from "../cre/spec";
+import { ZodError } from "zod";
 import {
   executeCreRun,
   executePolicy,
@@ -596,7 +599,13 @@ export class Engine {
           code: "OPERATION_CONFLICT",
           state: this.context(),
         };
-      return { ...existing.result, state: this.context(), duplicate: true };
+      const run = existing.result.runId ? this.state.runs.find((x) => x.id === existing.result.runId) : undefined;
+      return {
+        ...existing.result,
+        ...(run ? { summary: `Same request as before (no new execution). Run ${run.id} for revision ${run.revision} is ${run.status}${run.noopReason ? `: ${run.noopReason}` : run.error ? `: ${run.error}` : ""}.` } : {}),
+        state: this.context(),
+        duplicate: true,
+      };
     }
     let summary = "";
     let runId: string | undefined;
@@ -625,7 +634,7 @@ export class Engine {
               if (object.kind === "price") this.observePrice(object);
               else this.object(object);
               discovered.push(object);
-            } else errors.push(String(r.reason));
+            } else errors.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
           }
           if (!discovered.length) throw new Error(errors.join("; ") || "No objects requested");
           this.state.mode = "explore";
@@ -752,7 +761,7 @@ export class Engine {
               summary = this.state.clarification.question;
               break;
             }
-            throw new Error("That object has not been discovered yet");
+            throw new Error(`Nothing on the canvas matches "${args.objectId || args.reference}". Visible objects: ${this.state.objects.filter((x) => x.visible).map((x) => x.label).join(", ") || "none yet; discover objects first"}`);
           }
           object.visible = true;
           if (args.pin) object.pinned = true;
@@ -762,6 +771,13 @@ export class Engine {
         }
         case "inspect_object": {
           const ref = args.objectId || args.reference || "this";
+          const focusedRun = ["this", "it", "that"].includes(ref) && this.state.focus.objectId?.startsWith("run:")
+            ? this.state.runs.find((x) => `run:${x.id}` === this.state.focus.objectId) : undefined;
+          if (focusedRun) {
+            runId = focusedRun.id;
+            summary = `Run ${focusedRun.id}, revision ${focusedRun.revision}: ${focusedRun.status}. ${focusedRun.noopReason || focusedRun.error || focusedRun.evidence?.verification || focusedRun.logs.at(-1)?.message || ""}`.trim();
+            break;
+          }
           if (
             ["workflow", "rule"].includes(ref) ||
             (["this", "it", "that"].includes(ref) &&
@@ -867,7 +883,7 @@ export class Engine {
               ? legacyGraph(threshold)
               : clone(current.graph),
           };
-          revision.policyHash = policyHash(revision.graph);
+          revision.policyHash = policyHash(revision.graph, revision.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS);
           current.revisions.push(revision);
           Object.assign(current, revision, { created: true });
           this.state.mode = "compose";
@@ -883,7 +899,11 @@ export class Engine {
             break;
           }
           const sources = collectSources(w.graph).map(describeSource);
-          summary = `Revision ${w.revision}. ${describeGraph(w.graph)} Execution fetches ${sources.join(" and ")}, and always enforces each source's freshness cap${w.graph.action.type === "pause-vault" ? " plus the already-paused no-op" : ""}.`;
+          const caps = [
+            collectSources(w.graph).some((source) => source.type === "exchange-trade") && `the Coinbase trade must be at most ${w.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS}s old`,
+            collectSources(w.graph).some((source) => source.type === "chainlink-feed") && `each Chainlink feed at most ${MAX_FEED_AGE_SECONDS / 3600}h old`,
+          ].filter(Boolean).join(" and ");
+          summary = `Revision ${w.revision}. ${describeGraph(w.graph)} Execution fetches ${sources.join(" and ")}; ${caps}${w.graph.action.type === "pause-vault" ? ", and an already-paused vault is never paused again" : ""}.`;
           break;
         }
         case "compose_graph": {
@@ -918,7 +938,7 @@ export class Engine {
             createdAt: now(),
             reason: args.reason || "Composed condition graph",
             graph,
-            policyHash: policyHash(graph),
+            policyHash: policyHash(graph, w.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS),
           };
           w.revisions.push(revision);
           Object.assign(w, revision, { created: true });
@@ -961,7 +981,7 @@ export class Engine {
           if (!w.created) throw new Error("Compose a policy first");
           if (args.expectedRevision !== w.revision)
             throw Object.assign(
-              new Error("Draft changed; run the explicit current revision"),
+              new Error(`Draft is now revision ${w.revision}; run it with expectedRevision ${w.revision} if that is the version the user wants`),
               { code: "REVISION_CONFLICT" },
             );
           // A retried request reuses its operationId and gets the stored
@@ -983,7 +1003,7 @@ export class Engine {
             break;
           }
           const snapshot = clone(w.revisions.at(-1)!);
-          snapshot.policyHash ??= policyHash(snapshot.graph);
+          snapshot.policyHash ??= policyHash(snapshot.graph, snapshot.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS);
           runId = `run-${crypto.randomUUID()}`;
           const run: ExecutionRun = {
             id: runId,
@@ -1069,7 +1089,6 @@ export class Engine {
           const capabilities = clone(this.state.capabilities);
           this.state = emptyState();
           this.state.capabilities = capabilities;
-          this.fixturePaused = false;
           summary = "Canvas cleared. Contract state is unchanged.";
           break;
         }
@@ -1093,9 +1112,11 @@ export class Engine {
         const frameRule = ["workflow", "whole rule", "whole workflow", "treasury policy"].includes(String(args.reference || "").toLowerCase());
         this.state.canvasView = { action: frameRule ? "fit" : "focus", sequence: (this.state.canvasView?.sequence || 0) + 1 };
       }
-      if (!["set_activity", "submit_utterance"].includes(tool))
+      const readOnly = ["get_run", "describe_policy", "list_price_feeds", "navigate_canvas"].includes(tool);
+      const executing = this.state.runs.some((x) => !TERMINAL.includes(x.status));
+      if (!["set_activity", "submit_utterance"].includes(tool) && !readOnly)
         this.say(summary);
-      if (!["run_workflow", "submit_utterance", "set_activity"].includes(tool))
+      if (!["run_workflow", "submit_utterance", "set_activity"].includes(tool) && !(readOnly && executing))
         this.state.activity = {
           ...this.state.activity,
           status: "idle",
@@ -1119,7 +1140,12 @@ export class Engine {
       this.store.remember(operationId, signature, result);
       return result;
     } catch (error) {
-      summary = error instanceof Error ? error.message : String(error);
+      // cre/ resolves its own zod copy, so match ZodError by shape rather than by class.
+      const issues = error instanceof ZodError || (error instanceof Error && error.name === "ZodError" && Array.isArray((error as ZodError).issues))
+        ? (error as ZodError).issues : undefined;
+      summary = issues
+        ? `Invalid ${tool} arguments: ${issues.map((issue) => `${issue.path.join(".") || "input"}: ${issue.message}`).join("; ")}`
+        : error instanceof Error ? error.message : String(error);
       this.state.activity = {
         ...this.state.activity,
         status: "error",
@@ -1144,7 +1170,7 @@ export class Engine {
       runId: run.id,
       revision: run.revision,
       graph,
-      policyHash: run.snapshot.policyHash ?? policyHash(graph),
+      policyHash: run.snapshot.policyHash ?? policyHash(graph, run.snapshot.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS),
       maxAgeSeconds: run.snapshot.maxAgeSeconds ?? 60,
       broadcast: true,
     };

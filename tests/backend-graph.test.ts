@@ -178,7 +178,7 @@ test("describe_policy reports the rule and the sources execution will fetch", as
   const result = await engine.invoke("describe_policy", {});
   expect(result.summary).toContain("Coinbase ETH-USD trade");
   expect(result.summary).toContain("Chainlink BTC/USD");
-  expect(result.summary).toContain("freshness cap");
+  expect(result.summary).toContain("at most 60s old");
 });
 
 test("a frozen run keeps the graph that was composed when it started", async () => {

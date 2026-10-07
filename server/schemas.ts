@@ -51,7 +51,7 @@ export const toolDefinitions = {
     description:
       "Set semantic conversational focus. this/it resolves to current focused object. reference accepts price, vault, source, workflow, back, object IDs, condition, run:<runId>, or a raw run ID. Existing runs are focused without executing again. pin keeps object visible.",
     schema: z.object({
-      reference: z.string(),
+      reference: z.string().max(200),
       pin: z.boolean().optional(),
       operationId: op,
     }),
@@ -60,7 +60,7 @@ export const toolDefinitions = {
     description:
       "Inspect a named or focused object. Refresh fetches actual live data. Use reference workflow to frame the whole readable rule.",
     schema: z.object({
-      reference: z.string().default("this"),
+      reference: z.string().max(200).default("this"),
       refresh: z.boolean().optional(),
       operationId: op,
     }),
@@ -76,7 +76,7 @@ export const toolDefinitions = {
         maxAgeSeconds: z.number().int().min(1).max(120).nullable().optional(),
         skipPaused: z.boolean().optional(),
       }),
-      reason: z.string().optional(),
+      reason: z.string().max(500).optional(),
       operationId: op,
     }),
   },
@@ -94,7 +94,7 @@ export const toolDefinitions = {
         .describe(
           'Example: {"nodes":[{"id":"eth","kind":"price","source":{"type":"exchange-trade","pair":"ETH-USD"}},{"id":"btc","kind":"price","source":{"type":"chainlink-feed","symbol":"BTC"}},{"id":"a","kind":"compare","input":"eth","op":"<","value":3000},{"id":"b","kind":"compare","input":"btc","op":"<","value":90000},{"id":"both","kind":"and","inputs":["a","b"]}],"root":"both","action":{"type":"pause-vault"}}',
         ),
-      reason: z.string().optional(),
+      reason: z.string().max(500).optional(),
       operationId: op,
     }),
   },
@@ -139,8 +139,8 @@ export const toolDefinitions = {
         "speaking",
         "error",
       ]),
-      prompt: z.string().optional(),
-      summary: z.string().optional(),
+      prompt: z.string().max(2000).optional(),
+      summary: z.string().max(2000).optional(),
       operationId: op,
     }),
   },

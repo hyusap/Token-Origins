@@ -1,9 +1,11 @@
-// Regressions for the MCP QA run (.data/mcp-qa/REPORT.md, bugs B1–B7).
+// Regressions for the MCP QA run (.data/mcp-qa/REPORT.md, bugs B1–B13 and the wording issues).
 import { test, expect } from "bun:test";
 import { Engine } from "../server/engine";
 import { StateStore } from "../server/store";
 import { resolveFeedSymbol } from "../server/chainlink";
-import { describeGraph, policyGraphSchema, FEED_REGISTRY } from "../cre/graph";
+import { describeGraph, policyGraphSchema, policyHash, legacyGraph, FEED_REGISTRY } from "../cre/graph";
+import { compactMcpResult, RUN_SUMMARY_LIMIT } from "../scripts/mcp-compact";
+import { toolDefinitions } from "../server/schemas";
 import type { GraphObject } from "../shared/types";
 
 const iso = (secondsAgo = 0) => new Date(Date.now() - secondsAgo * 1000).toISOString();
@@ -171,4 +173,107 @@ test("B7: a shared price input is phrased in full, never as a node id", () => {
     { id: "both", kind: "and", inputs: ["under", "fresh"] },
   ], root: "both", action: { type: "pause-vault" } });
   expect(describeGraph(graph)).toBe("Pause spending when (Coinbase ETH-USD trade < $3,000 and Coinbase ETH-USD trade observed within 60s).");
+});
+
+const settle = async (engine: Engine) => {
+  for (let i = 0; i < 200 && engine.state.runs.some((r) => !["confirmed", "no-op", "failed"].includes(r.status)); i++) await Bun.sleep(5);
+};
+
+test("B8: the exchange freshness cap is part of the policy hash; feed-only graphs ignore it", async () => {
+  const graph = legacyGraph(3000);
+  expect(policyHash(graph)).toBe(policyHash(graph, 60));
+  expect(policyHash(graph, 30)).not.toBe(policyHash(graph, 60));
+  const feedOnly = policyGraphSchema.parse({ nodes: [price("btc", { type: "chainlink-feed", symbol: "BTC" }), { id: "d", kind: "compare", input: "btc", op: "<", value: 1 }], root: "d", action: { type: "pause-vault" } });
+  expect(policyHash(feedOnly, 30)).toBe(policyHash(feedOnly, 60));
+  const engine = create();
+  await engine.invoke("discover_objects", { operationId: op() });
+  await engine.invoke("patch_workflow", { expectedRevision: 0, patch: { threshold: 3000 }, operationId: op() });
+  const before = engine.state.workflow.policyHash;
+  await engine.invoke("patch_workflow", { expectedRevision: 1, patch: { maxAgeSeconds: 30 }, operationId: op() });
+  expect(engine.state.workflow.policyHash).not.toBe(before);
+  expect((await engine.invoke("describe_policy", {})).summary).toContain("at most 30s old");
+});
+
+test("B9, B10, U6: a focused run inspects as that run; polling neither chats nor idles; retries report the outcome", async () => {
+  const engine = create();
+  await engine.invoke("discover_objects", { operationId: op() });
+  await engine.invoke("patch_workflow", { expectedRevision: 0, patch: { threshold: 2000 }, operationId: op() });
+  const runOp = op();
+  const started = await engine.invoke("run_workflow", { expectedRevision: 1, operationId: runOp });
+  const lines = engine.state.conversation.length;
+  const activity = engine.state.activity.status;
+  await engine.invoke("get_run", { runId: started.runId });
+  await engine.invoke("describe_policy", {});
+  expect(engine.state.conversation.length).toBe(lines);
+  if (engine.state.runs.some((r) => !["confirmed", "no-op", "failed"].includes(r.status))) expect(engine.state.activity.status).toBe(activity);
+  await settle(engine);
+  const retry = await engine.invoke("run_workflow", { expectedRevision: 1, operationId: runOp });
+  expect(retry.duplicate).toBe(true);
+  expect(retry.summary).toStartWith(`Same request as before (no new execution). Run ${started.runId} for revision 1 is no-op`);
+  await engine.invoke("focus_object", { reference: `run:${started.runId}`, operationId: op() });
+  const inspected = await engine.invoke("inspect_object", { reference: "this", operationId: op() });
+  expect(inspected.ok).toBe(true);
+  expect(inspected.runId).toBe(started.runId);
+  expect(inspected.summary).toContain("no-op");
+});
+
+test("B11: reset_session leaves the fixture vault's paused state alone", async () => {
+  const engine = create();
+  await engine.invoke("discover_objects", { operationId: op() });
+  await engine.invoke("patch_workflow", { expectedRevision: 0, patch: { threshold: 3000 }, operationId: op() });
+  await engine.invoke("run_workflow", { expectedRevision: 1, operationId: op() });
+  await settle(engine);
+  expect(engine.state.runs[0]!.status).toBe("confirmed");
+  const reset = await engine.invoke("reset_session", { operationId: op() });
+  expect(reset.summary).toContain("Contract state is unchanged");
+  await engine.invoke("discover_objects", { objects: ["vault"], operationId: op() });
+  expect(engine.state.objects.find((o) => o.id === "vault:grant")!.data.paused).toBe(true);
+});
+
+test("B12: free-text arguments are bounded", () => {
+  const huge = "x".repeat(200_000);
+  expect(toolDefinitions.set_activity.schema.safeParse({ status: "thinking", prompt: huge, summary: "s" }).success).toBe(false);
+  expect(toolDefinitions.focus_object.schema.safeParse({ reference: huge, operationId: op() }).success).toBe(false);
+  expect(toolDefinitions.patch_workflow.schema.safeParse({ expectedRevision: 0, patch: {}, reason: huge, operationId: op() }).success).toBe(false);
+});
+
+test("B13: compact results carry at most the last runs, without snapshots, plus a total count", async () => {
+  const engine = create();
+  await engine.invoke("discover_objects", { operationId: op() });
+  await engine.invoke("patch_workflow", { expectedRevision: 0, patch: { threshold: 2000 }, operationId: op() });
+  for (let i = 0; i < RUN_SUMMARY_LIMIT + 3; i++) {
+    await engine.invoke("run_workflow", { expectedRevision: 1, operationId: op() });
+    await settle(engine);
+  }
+  const result = await engine.invoke("describe_policy", {});
+  const view = compactMcpResult(result as any, "describe_policy");
+  expect(view.state!.runs).toHaveLength(RUN_SUMMARY_LIMIT);
+  expect((view.state as any).runCount).toBe(RUN_SUMMARY_LIMIT + 3);
+  expect(view.state!.runs.every((run) => !("snapshot" in run))).toBe(true);
+  // An explicitly requested older run is still returned in full.
+  const oldest = engine.state.runs.at(-1)!.id;
+  const full = compactMcpResult((await engine.invoke("get_run", { runId: oldest })) as any, "get_run", { runId: oldest });
+  expect(full.state!.runs.find((run) => run.id === oldest)).toHaveProperty("snapshot");
+});
+
+test("U4, U5: errors are readable and name the next step", async () => {
+  const engine = create();
+  await engine.invoke("discover_objects", { operationId: op() });
+  const sol = await engine.invoke("compose_graph", { expectedRevision: 0, operationId: op(), graph: {
+    nodes: [price("sol", { type: "exchange-trade", pair: "SOL-USD" }), { id: "c", kind: "compare", input: "sol", op: "<", value: 100 }], root: "c", action: { type: "pause-vault" } } });
+  expect(sol.ok).toBe(false);
+  expect(sol.error).toContain("use a chainlink-feed source");
+  expect(sol.error).not.toContain('"code"');
+  const badOp = await engine.invoke("compose_graph", { expectedRevision: 0, operationId: op(), graph: {
+    nodes: [price("eth", ETH), { id: "c", kind: "compare", input: "eth", op: "==", value: 100 }], root: "c", action: { type: "pause-vault" } } });
+  expect(badOp.ok).toBe(false);
+  expect(badOp.error).not.toContain('"code"');
+  await engine.invoke("patch_workflow", { expectedRevision: 0, patch: { threshold: 2500 }, operationId: op() });
+  await engine.invoke("patch_workflow", { expectedRevision: 1, patch: { threshold: 2400 }, operationId: op() });
+  const stale = await engine.invoke("run_workflow", { expectedRevision: 1, operationId: op() });
+  expect(stale.ok).toBe(false);
+  expect(stale.error).toContain("Draft is now revision 2; run it with expectedRevision 2");
+  const missing = await engine.invoke("focus_object", { reference: "dogecoin chart", operationId: op() });
+  expect(missing.ok).toBe(false);
+  expect(missing.error).toContain("Grant vault");
 });

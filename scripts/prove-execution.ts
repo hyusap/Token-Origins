@@ -5,7 +5,7 @@ import type { ExecutionEvidence } from "../cre/runner";
 /** Freezes a graph into the request every runner accepts. */
 export function specOf(graphInput: unknown, runId: string, revision: number, maxAgeSeconds = 60): ExecutionSpecification {
   const graph = policyGraphSchema.parse(graphInput);
-  return { version: 2, runId, revision, graph, policyHash: policyHash(graph), maxAgeSeconds, broadcast: true };
+  return { version: 2, runId, revision, graph, policyHash: policyHash(graph, maxAgeSeconds), maxAgeSeconds, broadcast: true };
 }
 
 /** "Pause when ETH trades below X and the Chainlink BTC/USD feed is live": two providers, one AND. */

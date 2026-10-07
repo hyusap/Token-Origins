@@ -24,7 +24,7 @@ export const specificationSchema = z.object({
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['graph'], message: error instanceof Error ? error.message : String(error) });
     return;
   }
-  if (policyHash(spec.graph) !== spec.policyHash)
+  if (policyHash(spec.graph, spec.maxAgeSeconds) !== spec.policyHash)
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['policyHash'], message: 'Policy hash does not match the graph' });
 });
 export type ExecutionSpecification = z.infer<typeof specificationSchema>;

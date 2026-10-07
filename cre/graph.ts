@@ -68,7 +68,7 @@ export const FEED_REGISTRY: Record<Network, Partial<Record<FeedSymbol, `0x${stri
 export const feedAddress = (network: Network, symbol: FeedSymbol): `0x${string}` | undefined => FEED_REGISTRY[network][symbol];
 
 export const priceSourceSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('exchange-trade'), pair: z.literal('ETH-USD') }).strict(),
+  z.object({ type: z.literal('exchange-trade'), pair: z.literal('ETH-USD', { errorMap: () => ({ message: 'Only the Coinbase ETH-USD trade is an exchange source; use a chainlink-feed source for other assets' }) }) }).strict(),
   z.object({
     type: z.literal('chainlink-feed'),
     symbol: z.enum(FEED_SYMBOLS),
@@ -253,7 +253,14 @@ export const readsVault = (graph: PolicyGraph): boolean =>
 export const USD_SCALE = 100_000_000;
 export const toUsdUnits = (usd: number): number => Math.round(usd * USD_SCALE);
 
-export function policyHash(input: PolicyGraphInput | PolicyGraph): Hex {
+/** The exchange-trade freshness cap a run uses when the policy doesn't set one. */
+export const DEFAULT_EXCHANGE_MAX_AGE_SECONDS = 60;
+/**
+ * The exchange cap changes decisions, so a non-default cap is part of the
+ * identity. The default is left out so hashes recorded before this rule
+ * (all at 60 s) still verify.
+ */
+export function policyHash(input: PolicyGraphInput | PolicyGraph, exchangeMaxAgeSeconds: number = DEFAULT_EXCHANGE_MAX_AGE_SECONDS): Hex {
   const graph = policyGraphSchema.parse(input);
   const byId = new Map(graph.nodes.map((node) => [node.id, node] as const));
   const memo = new Map<string, string>();
@@ -283,7 +290,9 @@ export function policyHash(input: PolicyGraphInput | PolicyGraph): Hex {
   const action = graph.action.type === 'sell'
     ? `sell(${graph.action.symbol},${graph.action.amount},${graph.action.venue})`
     : 'pause-vault';
-  return digest(`sotto-policy/v${GRAPH_VERSION}|${hashOf(graph.root)}|${action}`);
+  const usesExchange = graph.nodes.some((node) => node.kind === 'price' && node.source.type === 'exchange-trade');
+  const cap = usesExchange && exchangeMaxAgeSeconds !== DEFAULT_EXCHANGE_MAX_AGE_SECONDS ? `|exchange-max-age(${exchangeMaxAgeSeconds})` : '';
+  return digest(`sotto-policy/v${GRAPH_VERSION}|${hashOf(graph.root)}|${action}${cap}`);
 }
 
 // ---------------------------------------------------------------------------

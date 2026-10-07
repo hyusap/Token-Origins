@@ -26,7 +26,7 @@ export async function verifyEvidenceFile(path: string, rpcUrl?: string) {
   // Each frozen graph still validates and still hashes to what was executed.
   for (const [name, entry] of Object.entries<any>({ falseCondition: proof.cases.falseCondition, trueCondition: proof.cases.trueCondition })) {
     const spec = specificationSchema.parse(entry.spec);
-    checks[`${name}.policyHashRecomputed`] = policyHash(spec.graph) === spec.policyHash && spec.policyHash === entry.evidence.policyHash;
+    checks[`${name}.policyHashRecomputed`] = policyHash(spec.graph, spec.maxAgeSeconds) === spec.policyHash && spec.policyHash === entry.evidence.policyHash;
   }
   checks["falseCondition.noTransaction"] = !proof.cases.falseCondition.evidence.transaction;
 
