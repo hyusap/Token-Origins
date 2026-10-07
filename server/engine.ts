@@ -1,6 +1,7 @@
 import type {
   CanvasState,
   ExecutionRun,
+  FixtureTreasury,
   GraphObject,
   ToolResult,
   WatchState,
@@ -48,7 +49,11 @@ import {
   type Observation,
   type PolicyGraph,
   type VaultAction,
+  type VaultTerms,
+  payeeId,
+  ZERO_ADDRESS,
 } from "../cre/graph";
+import { LOCAL_PAYEES } from "../cre/local-deploy";
 import type { ExecutionSpecification } from "../cre/spec";
 import { ZodError } from "zod";
 import {
@@ -79,6 +84,17 @@ const baseRevision = (): WorkflowRevision => ({
   policyHash: policyHash(legacyGraph(3000)),
 });
 const TERMINAL = ["confirmed", "no-op", "failed"];
+/** Runs kept in the live state; older ones stay in the executions archive (get_run still finds them). */
+export const MAX_LIVE_RUNS = 50;
+/** The fixture vault's deploy-time limits, matching the Sepolia vault scripts/deploy-sepolia.ts deploys. */
+export const FIXTURE_LIMITS = {
+  payees: LOCAL_PAYEES as Record<string, string>,
+  maxPaymentEth: 0.002,
+  minPaymentIntervalSeconds: 60,
+  maxCcipFeeEth: 0.005,
+  minEvacuationIntervalSeconds: 300,
+};
+const defaultFixtureTreasury = (): FixtureTreasury => ({ balanceEth: 0.12, tokens: 2, reserveEth: 0, lastPaymentAt: 0, lastEvacuationAt: 0 });
 /** Inside a run, every watch check and the fixture treasury share these. */
 const round9 = (value: number) => Math.round(value * 1e9) / 1e9;
 const toWei = (eth: number) => (BigInt(Math.round(eth * 1e9)) * 1_000_000_000n).toString();
@@ -150,9 +166,15 @@ export class Engine {
   listeners = new Set<(state: CanvasState) => void>();
   fixturePaused = false;
   /** Fixture treasury: in-memory balances that fixture sweeps, payments and evacuations change. */
-  fixtureBalanceEth = 0.12;
-  fixtureTokens = 2;
-  fixtureReserveEth = 0;
+  get fixtureTreasury(): FixtureTreasury { return (this.state.fixtureTreasury ??= defaultFixtureTreasury()); }
+  get fixtureBalanceEth() { return this.fixtureTreasury.balanceEth; }
+  set fixtureBalanceEth(value: number) { this.fixtureTreasury.balanceEth = value; }
+  get fixtureTokens() { return this.fixtureTreasury.tokens; }
+  set fixtureTokens(value: number) { this.fixtureTreasury.tokens = value; }
+  get fixtureReserveEth() { return this.fixtureTreasury.reserveEth; }
+  set fixtureReserveEth(value: number) { this.fixtureTreasury.reserveEth = value; }
+  /** One execution at a time, whatever started it: a manual run never overlaps a watch check. */
+  executions: Promise<unknown> = Promise.resolve();
   cancelWatch?: () => void;
   sources: EngineSources;
   constructor(store = new StateStore(), sources: Partial<EngineSources> = {}) {
@@ -271,6 +293,9 @@ export class Engine {
   commit() {
     this.state.seq++;
     this.store.save(this.state);
+    // Everything saved above is archived; the live state keeps the recent runs plus any still open.
+    if (this.state.runs.length > MAX_LIVE_RUNS)
+      this.state.runs = this.state.runs.filter((run, i) => i < MAX_LIVE_RUNS || !TERMINAL.includes(run.status) || run.uncertain || run.id === this.state.inspectedRunId);
     const state = this.context();
     for (const listener of this.listeners) listener(state);
   }
@@ -1007,7 +1032,16 @@ export class Engine {
             throw Object.assign(new Error(`Draft is now revision ${w.revision}; refresh context before applying a recipe.`), { code: "REVISION_CONFLICT" });
           const recipe = recipeById(String(args.recipe));
           if (!recipe) throw new Error(`Unknown recipe "${args.recipe}". Available: ${RECIPES.map((x) => x.id).join(", ")}`);
-          const params = recipe.params.parse(args.params ?? {});
+          const parsed = recipe.params.safeParse(args.params ?? {});
+          if (!parsed.success) {
+            const issue = parsed.error.issues[0]!;
+            const name = issue.path.join(".") || "params";
+            const known = Object.keys(recipe.params.shape).join(", ");
+            throw new Error(issue.code === "unrecognized_keys"
+              ? `Recipe ${recipe.id} has no parameter ${issue.keys.map((k) => `"${k.slice(0, 40)}"`).join(", ")}; its parameters are ${known}.`
+              : `Recipe ${recipe.id} parameter ${name}: ${issue.message}. Its parameters are ${known}.`);
+          }
+          const params = parsed.data;
           const { graph } = validateGraph(recipe.build(params));
           const credit = recipe.inspiredBy.map((x) => `${x.project} (${x.event}, ${x.award})`).join(" and ");
           summary = `${this.composeRevision(graph, args.reason || `Recipe: ${recipe.title}`, args.maxAgeSeconds)} ${recipe.title}, inspired by ${credit}.${recipe.note ? ` ${recipe.note}` : ""}${recipe.watchSeconds ? ` To keep it running, call watch_policy with everySeconds ${recipe.watchSeconds}.` : ""}`;
@@ -1070,14 +1104,21 @@ export class Engine {
           runId = run.id;
           this.selectRun(run);
           const sessionId = this.state.sessionId;
-          setTimeout(() => void this.execute(run.id, sessionId), 10);
-          summary = `Run ${runId} started against immutable revision ${w.revision}.`;
+          const waiting = this.state.runs.some((x) => x.id !== run.id && !TERMINAL.includes(x.status));
+          setTimeout(() => void this.executeInTurn(run.id, sessionId), 10);
+          summary = `Run ${runId} started against immutable revision ${w.revision}.${waiting ? " It starts after the run already executing finishes." : ""}`;
           break;
         }
         case "get_run": {
           const run = args.runId
             ? this.state.runs.find((x) => x.id === args.runId)
             : this.state.runs[0];
+          const archived = !run && args.runId ? this.store.execution(args.runId) : null;
+          if (archived) {
+            runId = archived.id;
+            summary = `Run revision ${archived.revision} (archived): ${archived.status}. ${archived.error || archived.noopReason || archived.logs.at(-1)?.message || ""}`;
+            break;
+          }
           if (!run) throw new Error(args.runId
             ? `No run ${args.runId}. Recent runs: ${this.state.runs.slice(0, 5).map((x) => `${x.id} (revision ${x.revision}, ${x.status})`).join(", ") || "none yet"}`
             : "No run yet; run_workflow starts one");
@@ -1164,9 +1205,12 @@ export class Engine {
           this.stopWatch("Canvas cleared");
           if (!this.isBlank()) this.store.archiveSession(this.state);
           const capabilities = clone(this.state.capabilities);
+          const treasury = this.state.fixtureTreasury;
+          const watched = this.state.watch?.stopReason === "Canvas cleared";
           this.state = emptyState();
           this.state.capabilities = capabilities;
-          summary = "Canvas cleared. Contract state is unchanged.";
+          if (treasury) this.state.fixtureTreasury = treasury;
+          summary = `Canvas cleared.${watched ? " The standing policy stopped." : ""} Contract state is unchanged.`;
           break;
         }
         case "restore_session": {
@@ -1175,7 +1219,10 @@ export class Engine {
           if (!this.isBlank()) throw new Error("Undo clear is available only before starting a new canvas session.");
           const archived = this.store.latestClearedSession();
           if (!archived) throw new Error("There is no cleared session to restore.");
+          const treasury = this.state.fixtureTreasury;
           this.state = migrateState(clone(archived));
+          // The vault did not go back in time with the canvas.
+          if (treasury) this.state.fixtureTreasury = treasury;
           this.state.sessionId = crypto.randomUUID();
           this.state.activity = { status: "idle", prompt: "", summary: "Canvas restored." };
           this.fixturePaused = Boolean(this.state.objects.find(x => x.id === "vault:grant" && x.data.fixture)?.data.paused);
@@ -1308,6 +1355,19 @@ export class Engine {
         return `${object.label}: ${object.provenance.label}${object.provenance.url ? ` (${object.provenance.url})` : ""}.`;
     }
   }
+  /** The fixture vault's answer to terms(payeeId): the same fields a GrantVault v3 returns. */
+  fixtureTerms(payee: string | undefined): VaultTerms {
+    const treasury = this.fixtureTreasury;
+    return {
+      payee: (payee && FIXTURE_LIMITS.payees[payee]) || ZERO_ADDRESS,
+      maxPaymentWei: toWei(FIXTURE_LIMITS.maxPaymentEth),
+      nextPaymentAt: treasury.lastPaymentAt ? treasury.lastPaymentAt + FIXTURE_LIMITS.minPaymentIntervalSeconds : 0,
+      ccipConfigured: true,
+      tokenBalance: toWei(this.fixtureTokens),
+      maxCcipFeeWei: toWei(FIXTURE_LIMITS.maxCcipFeeEth),
+      nextEvacuationAt: treasury.lastEvacuationAt ? treasury.lastEvacuationAt + FIXTURE_LIMITS.minEvacuationIntervalSeconds : 0,
+    };
+  }
   /** Fixture vault cards carry the in-memory treasury balances that fixture actions change. */
   fixtureVault(vault: GraphObject): GraphObject {
     if (!vault.data.fixture) return vault;
@@ -1341,6 +1401,12 @@ export class Engine {
     this.state.runs.unshift(run);
     this.state.activity = { status: "executing", prompt: options.prompt, summary: `Running revision ${snapshot.revision}` };
     return run;
+  }
+  /** Executes a run after any execution already underway, so two runs never move the same funds at once. */
+  executeInTurn(runId: string, sessionId: string, options: Parameters<Engine["execute"]>[2] = {}) {
+    const work = this.executions.then(() => this.execute(runId, sessionId, options));
+    this.executions = work.catch(() => {});
+    return work;
   }
   /** Runs work inside the operation queue, after anything already queued. */
   enqueue<T>(work: () => Promise<T> | T): Promise<T> {
@@ -1388,11 +1454,20 @@ export class Engine {
       return { run, sessionId: this.state.sessionId, watch };
     });
     if (!started) return undefined;
-    await this.execute(started.run.id, started.sessionId, { quiet: true, cron: { schedule: cronEvery(started.watch.everySeconds) } });
+    await this.executeInTurn(started.run.id, started.sessionId, { quiet: true, cron: { schedule: cronEvery(started.watch.everySeconds) } });
     return this.enqueue(() => {
       const watch = this.state.watch;
       const run = this.state.runs.find((x) => x.id === started.run.id);
-      if (!watch || watch.id !== started.watch.id || watch.status !== "watching" || !run || this.state.sessionId !== started.sessionId) return run;
+      if (!run || this.state.sessionId !== started.sessionId) return run;
+      if (!watch || watch.id !== started.watch.id || watch.status !== "watching") {
+        // The watch was stopped or replaced while this check ran; its outcome is still reported.
+        const outcome = run.status === "confirmed" ? this.completionSummary(run) : run.status === "no-op" ? `no action: ${run.noopReason ?? "nothing to do"}` : `failed: ${run.error}`;
+        if (run.status !== "no-op") this.say(`The check that was running when the watch stopped finished: ${outcome}`);
+        if (!this.state.runs.some((x) => !TERMINAL.includes(x.status)))
+          this.state.activity = { status: run.status === "failed" ? "error" : "idle", prompt: this.state.activity.prompt, summary: `Last watch check: ${outcome}` };
+        this.commit();
+        return run;
+      }
       const outcome = run.status === "confirmed" ? this.completionSummary(run) : run.status === "no-op" ? `no action: ${run.noopReason ?? "nothing to do"}` : `failed: ${run.error}`;
       watch.lastOutcome = outcome;
       watch.consecutiveFailures = run.status === "failed" ? watch.consecutiveFailures + 1 : 0;
@@ -1449,9 +1524,10 @@ export class Engine {
         if (!vault.data.fixture)
           throw new Error("Real contract configured but no runner deployment is available; execution prevented");
         this.object(vault);
+        const terms = options?.terms ? this.fixtureTerms(options.terms.payee) : undefined;
         return {
           address: "fixture", chainId: 0, paused: Boolean(vault.data.paused), balanceWei: toWei(this.fixtureBalanceEth), reportVersion: REPORT_VERSION,
-          ...(options?.tokenBalance ? { tokenBalance: toWei(this.fixtureTokens) } : {}),
+          ...(terms ? { terms, tokenBalance: terms.tokenBalance } : {}),
         };
       },
       readSource: async (source) => {
@@ -1464,9 +1540,17 @@ export class Engine {
         this.readFeed({ type: "chainlink-feed", symbol: symbol as FeedSource["symbol"], network: DEFAULT_FEED_NETWORK }),
       fixtureAct: async (action: VaultAction) => {
         const effects: FixtureEffects = {};
+        const treasury = this.fixtureTreasury;
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        // The same checks GrantVault makes, against the state at the moment of acting.
         if (action.type === "pay") {
           if (this.fixturePaused) throw new Error("Fixture vault spending is paused; no payment");
+          if (!FIXTURE_LIMITS.payees[action.payee]) throw new Error(`No payee named "${action.payee}" is registered on the fixture vault`);
+          if (action.amountEth > FIXTURE_LIMITS.maxPaymentEth) throw new Error(`The fixture vault caps payments at ${FIXTURE_LIMITS.maxPaymentEth} ETH`);
+          if (treasury.lastPaymentAt && nowSeconds < treasury.lastPaymentAt + FIXTURE_LIMITS.minPaymentIntervalSeconds) throw new Error("The fixture vault paid too recently");
+          if (round9(this.fixtureBalanceEth - action.amountEth) < 0) throw new Error(`The fixture vault holds ${round9(this.fixtureBalanceEth)} ETH, less than the ${action.amountEth} ETH payment`);
           this.fixtureBalanceEth = round9(this.fixtureBalanceEth - action.amountEth);
+          treasury.lastPaymentAt = nowSeconds;
           Object.assign(effects, { paidEth: action.amountEth, payee: action.payee });
         }
         if (actionPauses(action)) {
@@ -1482,6 +1566,7 @@ export class Engine {
         if (action.type === "evacuate") {
           const moved = round9(this.fixtureTokens * toBps(action.fraction) / 10_000);
           this.fixtureTokens = round9(this.fixtureTokens - moved);
+          treasury.lastEvacuationAt = nowSeconds;
           effects.evacuatedTokens = moved;
         }
         this.object(this.fixtureVault(await this.sources.fetchVault(this.fixturePaused)));

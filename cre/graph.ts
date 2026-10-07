@@ -219,19 +219,19 @@ export const MATH_OPS = ['-', '/', '*'] as const;
 export const USD_SCALE = 100_000_000;
 export const toUsdUnits = (usd: number): number => Math.round(usd * USD_SCALE);
 /** Thresholds carry at most 8 decimals, so the hash and the comparison see the same number. */
-const threshold = z.number().finite().min(-1e15).max(1e15)
+export const thresholdSchema = z.number().finite().min(-1e15).max(1e15)
   .refine((value) => Math.abs(value) >= 1e7 || toUsdUnits(value) / USD_SCALE === value, 'Thresholds may use at most 8 decimal places');
-const timestamp = z.string().datetime({ offset: true })
+export const timestampSchema = z.string().datetime({ offset: true })
   .refine((value) => { const t = Date.parse(value); return t >= Date.parse('2020-01-01T00:00:00Z') && t <= Date.parse('2100-01-01T00:00:00Z'); }, 'Time must be between 2020 and 2100');
 
 export const graphNodeSchema = z.discriminatedUnion('kind', [
   z.object({ id, kind: z.literal('price'), source: priceSourceSchema }).strict(),
   z.object({ id, kind: z.literal('reading'), source: sourceSchema }).strict(),
   z.object({ id, kind: z.literal('math'), op: z.enum(MATH_OPS), left: id, right: id }).strict(),
-  z.object({ id, kind: z.literal('compare'), input: id, op: z.enum(COMPARATORS), value: threshold }).strict(),
+  z.object({ id, kind: z.literal('compare'), input: id, op: z.enum(COMPARATORS), value: thresholdSchema }).strict(),
   z.object({ id, kind: z.literal('freshness'), input: id, maxAgeSeconds: z.number().int().min(1).max(86400) }).strict(),
   z.object({ id, kind: z.literal('vault-paused'), equals: z.boolean() }).strict(),
-  z.object({ id, kind: z.literal('time'), op: z.enum(['before', 'after']), at: timestamp }).strict(),
+  z.object({ id, kind: z.literal('time'), op: z.enum(['before', 'after']), at: timestampSchema }).strict(),
   z.object({ id, kind: z.literal('and'), inputs: z.array(id).min(2).max(8) }).strict(),
   z.object({ id, kind: z.literal('or'), inputs: z.array(id).min(2).max(8) }).strict(),
   z.object({ id, kind: z.literal('not'), input: id }).strict(),
@@ -241,11 +241,11 @@ type SourceNode = Extract<GraphNode, { kind: 'price' | 'reading' }>;
 export const isSourceNode = (node: GraphNode): node is SourceNode => node.kind === 'price' || node.kind === 'reading';
 
 /** A share of a balance, as a whole number of basis points (0.25 = 2,500 bps). */
-const fraction = z.number().gt(0).max(1)
+export const fractionSchema = z.number().gt(0).max(1)
   .refine((value) => Math.abs(value * 10_000 - Math.round(value * 10_000)) < 1e-9, 'Use a fraction with at most 4 decimals, e.g. 0.25 for a quarter');
 export const toBps = (value: number): number => Math.round(value * 10_000);
 /** Payment sizes are whole gwei, so the hash and the transfer agree exactly. */
-const ethAmount = z.number().gt(0).max(10)
+export const ethAmountSchema = z.number().gt(0).max(10)
   .refine((value) => value >= 1e-9 && Math.abs(value * 1e9 - Math.round(value * 1e9)) < 1e-6, 'Use at most 9 decimal places of ETH');
 export const toGwei = (eth: number): bigint => BigInt(Math.round(eth * 1e9));
 export const PAYEE_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
@@ -272,11 +272,11 @@ export const actionSchema = z.discriminatedUnion('type', [
     from: z.enum(LENDING_PROTOCOLS),
     to: z.enum(LENDING_PROTOCOLS),
     asset: z.enum(LENDING_ASSETS).default('USDC'),
-    fraction,
+    fraction: fractionSchema,
   }).strict(),
-  z.object({ type: z.literal('sweep'), fraction, pause: z.boolean().default(true) }).strict(),
-  z.object({ type: z.literal('pay'), payee: z.string().regex(PAYEE_PATTERN, 'Payee is a registered name such as "grantee"'), amountEth: ethAmount }).strict(),
-  z.object({ type: z.literal('evacuate'), destination: z.enum(CCIP_DESTINATION_IDS), fraction, pause: z.boolean().default(true) }).strict(),
+  z.object({ type: z.literal('sweep'), fraction: fractionSchema, pause: z.boolean().default(true) }).strict(),
+  z.object({ type: z.literal('pay'), payee: z.string().regex(PAYEE_PATTERN, 'Payee is a registered name such as "grantee"'), amountEth: ethAmountSchema }).strict(),
+  z.object({ type: z.literal('evacuate'), destination: z.enum(CCIP_DESTINATION_IDS), fraction: fractionSchema, pause: z.boolean().default(true) }).strict(),
 ]);
 export type PolicyAction = z.infer<typeof actionSchema>;
 export type SimulatedAction = Extract<PolicyAction, { type: 'sell' | 'rebalance' }>;
@@ -307,11 +307,16 @@ export const MAX_SOURCES = 5;
 // percentage from a dollar price or compare a ratio against a token amount.
 // ---------------------------------------------------------------------------
 
+/**
+ * `usd` with `per` is a price (USD per one unit of that asset); without it, a
+ * USD amount. A ratio of two different assets' prices is an exchange rate
+ * (`exchange`), which converts between assets and so cannot scale an amount.
+ */
 export type Unit =
   | { dim: 'usd'; per?: string }
   | { dim: 'amount'; asset: string }
   | { dim: 'percent' }
-  | { dim: 'ratio' };
+  | { dim: 'ratio'; exchange?: true };
 type ValueType = 'bool' | Unit;
 
 export function unitOfSource(source: Source): Unit {
@@ -325,8 +330,10 @@ export function unitOfSource(source: Source): Unit {
   }
 }
 const unitName = (unit: Unit): string =>
-  unit.dim === 'usd' ? (unit.per ? `a USD price of ${unit.per}` : 'a USD amount') : unit.dim === 'amount' ? `an amount of ${unit.asset}` : unit.dim === 'percent' ? 'a percentage' : 'a ratio';
-const sameDimension = (a: Unit, b: Unit) => a.dim === b.dim && (a.dim !== 'amount' || a.asset === (b as { asset: string }).asset);
+  unit.dim === 'usd' ? (unit.per ? `a USD price of ${unit.per}` : 'a USD amount') : unit.dim === 'amount' ? `an amount of ${unit.asset}` : unit.dim === 'percent' ? 'a percentage' : unit.exchange ? 'a price ratio between two assets' : 'a ratio';
+/** Same unit for subtraction: a price only with a price of the same asset, a USD amount only with a USD amount. */
+const sameUnit = (a: Unit, b: Unit) =>
+  a.dim === b.dim && (a.dim === 'amount' ? a.asset === (b as { asset: string }).asset : a.dim === 'usd' ? a.per === (b as { per?: string }).per : a.dim !== 'ratio' || Boolean(a.exchange) === Boolean((b as { exchange?: true }).exchange));
 
 /** Formats a number in its unit, for narration and evidence. */
 export function formatValue(value: number, unit: Unit): string {
@@ -394,6 +401,10 @@ function typeGraph(graph: PolicyGraph): Map<string, ValueType> {
       case 'compare': {
         const input = typeOf(node.input);
         if (input === 'bool') throw new Error(`"${node.id}" (compare) needs a price or value node, but "${node.input}" is a condition`);
+        const inputNode = byId.get(node.input)!;
+        // A source never reads below zero, so a negative threshold would make the condition constant.
+        if (isSourceNode(inputNode) && node.value < 0)
+          throw new Error(`"${node.id}" compares ${describeSource(inputNode.source)} with ${node.value}, but it is never negative; use a threshold of 0 or more`);
         type = 'bool';
         break;
       }
@@ -405,19 +416,33 @@ function typeGraph(graph: PolicyGraph): Map<string, ValueType> {
         break;
       }
       case 'math': {
+        if (node.left === node.right)
+          throw new Error(`"${node.id}" (math ${node.op}) uses "${node.left}" on both sides, so its result never changes; use two different inputs`);
         const [left, right] = [typeOf(node.left), typeOf(node.right)];
         if (left === 'bool' || right === 'bool')
           throw new Error(`"${node.id}" (math ${node.op}) needs values, but "${left === 'bool' ? node.left : node.right}" is a condition`);
         if (node.op === '*') {
-          if (left.dim === 'ratio') type = right.dim === 'usd' ? { dim: 'usd' } : right;
-          else if (right.dim === 'ratio') type = left.dim === 'usd' ? { dim: 'usd' } : left;
+          const exchange = (left.dim === 'ratio' && left.exchange) || (right.dim === 'ratio' && right.exchange);
+          if (exchange && !(left.dim === 'ratio' && right.dim === 'ratio'))
+            throw new Error(`"${node.id}" (math *) multiplies by a price ratio between two assets, which converts between assets; multiply an amount by its own USD price instead (vault ETH × ETH/USD)`);
+          if (left.dim === 'ratio') type = right.dim === 'ratio' ? { dim: 'ratio', ...(exchange ? { exchange: true as const } : {}) } : right;
+          else if (right.dim === 'ratio') type = left;
           else if (left.dim === 'amount' && right.dim === 'usd' && right.per === left.asset) type = { dim: 'usd' };
           else if (right.dim === 'amount' && left.dim === 'usd' && left.per === right.asset) type = { dim: 'usd' };
           else throw new Error(`"${node.id}" (math *) can multiply an amount by its own USD price (vault ETH × ETH/USD) or anything by a ratio, not ${unitName(left)} by ${unitName(right)}`);
+        } else if (node.op === '/') {
+          // Two prices of different assets divide into an exchange rate (BTC/USD ÷ ETH/USD = ETH per BTC).
+          const prices = left.dim === 'usd' && right.dim === 'usd' && left.per && right.per && left.per !== right.per;
+          if (!prices && !sameUnit(left, right))
+            throw new Error(`"${node.id}" (math /) needs two values in the same unit (or two USD prices), but got ${unitName(left)} and ${unitName(right)}`);
+          type = prices ? { dim: 'ratio', exchange: true } : { dim: 'ratio' };
+        } else if (left.dim === 'usd' && right.dim === 'usd' && left.per && right.per) {
+          // A spread between two prices (USDC − USDT, Coinbase ETH − Chainlink ETH) stays a per-unit price.
+          type = { dim: 'usd', per: left.per === right.per ? left.per : `${left.per}−${right.per}` };
         } else {
-          if (!sameDimension(left, right))
-            throw new Error(`"${node.id}" (math ${node.op}) needs two values in the same unit, but got ${unitName(left)} and ${unitName(right)}`);
-          type = node.op === '/' ? { dim: 'ratio' } : left.dim === 'usd' ? { dim: 'usd' } : left;
+          if (!sameUnit(left, right))
+            throw new Error(`"${node.id}" (math -) needs two values in the same unit, but got ${unitName(left)} and ${unitName(right)}`);
+          type = left;
         }
         break;
       }
@@ -514,12 +539,15 @@ export function policyHash(input: PolicyGraphInput | PolicyGraph, exchangeMaxAge
   const graph = policyGraphSchema.parse(input);
   const byId = new Map(graph.nodes.map((node) => [node.id, node] as const));
   const memo = new Map<string, string>();
+  const visiting = new Set<string>();
   const digest = (text: string) => keccak256(toBytes(text));
   const hashOf = (nodeId: string): string => {
     const cached = memo.get(nodeId);
     if (cached) return cached;
     const node = byId.get(nodeId);
     if (!node) throw new Error(`Cannot hash unknown node "${nodeId}"`);
+    if (visiting.has(nodeId)) throw new Error(`Graph contains a cycle through "${nodeId}"`);
+    visiting.add(nodeId);
     let text: string;
     switch (node.kind) {
       case 'price':
@@ -543,6 +571,7 @@ export function policyHash(input: PolicyGraphInput | PolicyGraph, exchangeMaxAge
       default: text = `${node.kind}(${[...new Set(node.inputs.map(hashOf))].sort().join(',')})`;
     }
     const value = digest(text);
+    visiting.delete(nodeId);
     memo.set(nodeId, value);
     return value;
   };
@@ -584,15 +613,45 @@ export const MAX_STATE_AGE_SECONDS = 300;
 /** Tolerated clock disagreement before a timestamp counts as "from the future". */
 export const MAX_FUTURE_SKEW_SECONDS = 30;
 
+/**
+ * GrantVault.terms(payeeId): everything the vault will check before it moves
+ * funds, in one read. Wei amounts are decimal strings so the record can sit in
+ * evidence JSON as is; times are unix seconds (0 = no limit yet).
+ */
+export interface VaultTerms {
+  /** Address registered for the action's payee; the zero address when none. */
+  payee: string;
+  maxPaymentWei: string;
+  nextPaymentAt: number;
+  ccipConfigured: boolean;
+  /** The vault's CCIP token balance in its smallest unit. */
+  tokenBalance: string;
+  maxCcipFeeWei: string;
+  nextEvacuationAt: number;
+}
+export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+/** GrantVault.terms(bytes32), as viem reads it. */
+export const vaultTermsAbi = [{
+  type: 'function', name: 'terms', stateMutability: 'view', inputs: [{ name: 'payeeId', type: 'bytes32' }],
+  outputs: [
+    { name: 'paused', type: 'bool' }, { name: 'payee', type: 'address' }, { name: 'maxPaymentWei', type: 'uint256' }, { name: 'nextPaymentAt', type: 'uint256' },
+    { name: 'ccipConfigured', type: 'bool' }, { name: 'tokenBalance', type: 'uint256' }, { name: 'maxCcipFeeWei', type: 'uint256' }, { name: 'nextEvacuationAt', type: 'uint256' },
+  ],
+}] as const;
+export const termsFromTuple = (t: readonly [boolean, string, bigint, bigint, boolean, bigint, bigint, bigint]): VaultTerms => ({
+  payee: t[1], maxPaymentWei: t[2].toString(), nextPaymentAt: Number(t[3]), ccipConfigured: t[4], tokenBalance: t[5].toString(), maxCcipFeeWei: t[6].toString(), nextEvacuationAt: Number(t[7]),
+});
 export interface GraphInputs {
   /** Keyed by sourceKey(). Must cover every source collectSources() reports. */
   readings: Record<string, Reading>;
   /** Fresh vault read; null when the graph neither targets nor reads the vault. */
   vaultPaused: boolean | null;
-  /** Vault ETH balance, needed by sweep and pay guards. */
+  /** Exact vault ETH balance in wei; sweep, pay and evacuate (its CCIP fee) need it. */
+  vaultBalanceWei?: bigint | null;
+  /** @deprecated callers written before exact balances; used only when vaultBalanceWei is absent. */
   vaultBalanceEth?: number | null;
-  /** Vault CCIP-BnM balance, needed by the evacuate guard. */
-  vaultTokenBalance?: number | null;
+  /** The vault's terms() for this action; pay and evacuate need them. */
+  vaultTerms?: VaultTerms | null;
   /** Exchange trade age cap for this run, 1–120 seconds. */
   exchangeMaxAgeSeconds: number;
 }
@@ -606,6 +665,13 @@ export interface GraphResult {
   decision: 'act' | 'noop';
   /** First failing gate when the decision is noop: the root or a named guard. */
   blockedBy?: ConditionEvidence;
+  /**
+   * Set when a protective sweep or evacuation cannot move anything but its
+   * pause still matters: only the pause is sent. Absent: the action as written.
+   */
+  effectiveAction?: VaultAction;
+  /** The movement guard that reduced the action to a pause. */
+  degradedBy?: ConditionEvidence;
 }
 
 const ageSeconds = (observedAt: string, nowMs: number) => (nowMs - Date.parse(observedAt)) / 1000;
@@ -619,7 +685,39 @@ export const sourceAgeLimit = (source: Source, exchangeMaxAgeSeconds: number): n
   source.type === 'exchange-trade' ? Math.min(Math.max(1, Math.floor(exchangeMaxAgeSeconds)), MAX_EXCHANGE_AGE_SECONDS)
     : source.type === 'chainlink-feed' || source.type === 'proof-of-reserve' ? MAX_FEED_AGE_SECONDS
     : MAX_STATE_AGE_SECONDS;
-const formatTime = (iso: string) => new Date(iso).toISOString().replace('T', ' ').replace(/:\d\d(\.\d+)?Z$/, ' UTC');
+/** "2026-10-07 14:00 UTC", with seconds only when they are not zero. */
+const formatTime = (iso: string) => {
+  const text = new Date(Math.floor(Date.parse(iso) / 1000) * 1000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+  return text.replace(/:00 UTC$/, ' UTC');
+};
+/** A time node's instant in whole seconds, exactly as the policy hash records it. */
+const timeAt = (iso: string) => Math.floor(Date.parse(iso) / 1000) * 1000;
+/** Seconds of age, with enough decimals that a value just over its limit never reads as equal to it. */
+const formatAge = (age: number, limit: number) => {
+  for (const digits of [1, 3, 6]) {
+    const text = age.toFixed(digits);
+    if (Number(text) <= limit === age <= limit) return text;
+  }
+  return String(age);
+};
+/** Two values in one unit, with enough precision that a decided difference stays visible. */
+function formatPair(left: number, right: number, unit: Unit): [string, string] {
+  const a = formatValue(left, unit), b = formatValue(right, unit);
+  if (a !== b || toUsdUnits(left) === toUsdUnits(right)) return [a, b];
+  const exact = (value: number) => {
+    const plain = value.toLocaleString('en-US', { maximumFractionDigits: 8 });
+    return unit.dim === 'usd' ? `${value < 0 ? '-' : ''}$${plain.replace(/^-/, '')}` : unit.dim === 'percent' ? `${plain}%` : unit.dim === 'ratio' ? plain : `${plain} ${unit.asset}`;
+  };
+  return [exact(left), exact(right)];
+}
+/** Wei as ETH without exponent notation: "0.000000001 ETH", "1.2049 ETH". */
+export function formatWei(wei: bigint, symbol = 'ETH'): string {
+  const negative = wei < 0n;
+  const abs = negative ? -wei : wei;
+  const whole = abs / 10n ** 18n;
+  const fraction = (abs % 10n ** 18n).toString().padStart(18, '0').replace(/0+$/, '');
+  return `${negative ? '-' : ''}${whole.toLocaleString('en-US')}${fraction ? `.${fraction}` : ''} ${symbol}`;
+}
 
 type NumberValue = { value: number; unit: Unit };
 
@@ -674,14 +772,15 @@ export function evaluateGraph(graph: PolicyGraph, inputs: GraphInputs, nowMs: nu
         const input = value(node.input) as NumberValue;
         const passed = compareScaled(input.value, node.op, node.value);
         result = passed;
-        conditions.push({ nodeId: node.id, kind: 'threshold', role: 'node', passed, detail: `${label(node.input)} ${formatValue(input.value, input.unit)} ${node.op} ${formatValue(node.value, input.unit)}` });
+        const [shown, limit] = formatPair(input.value, node.value, input.unit);
+        conditions.push({ nodeId: node.id, kind: 'threshold', role: 'node', passed, detail: `${label(node.input)} ${shown} ${node.op} ${limit}` });
         break;
       }
       case 'freshness': {
         const source = (byId.get(node.input) as SourceNode).source;
         const age = ageSeconds(reading(source).observedAt, nowMs);
         result = withinAge(age, node.maxAgeSeconds);
-        conditions.push({ nodeId: node.id, kind: 'freshness', role: 'node', passed: result, detail: `${describeSource(source)} observed ${age.toFixed(1)}s ago; maximum ${node.maxAgeSeconds}s` });
+        conditions.push({ nodeId: node.id, kind: 'freshness', role: 'node', passed: result, detail: `${describeSource(source)} observed ${formatAge(age, node.maxAgeSeconds)}s ago; maximum ${node.maxAgeSeconds}s` });
         break;
       }
       case 'vault-paused':
@@ -690,7 +789,8 @@ export function evaluateGraph(graph: PolicyGraph, inputs: GraphInputs, nowMs: nu
         conditions.push({ nodeId: node.id, kind: 'vault-state', role: 'node', passed: result, detail: `Vault is ${inputs.vaultPaused ? 'paused' : 'active'}; condition wants ${node.equals ? 'paused' : 'active'}` });
         break;
       case 'time': {
-        const at = Date.parse(node.at);
+        // Whole seconds, as hashed and as a block timestamp would see it.
+        const at = timeAt(node.at);
         result = node.op === 'before' ? nowMs < at : nowMs >= at;
         conditions.push({ nodeId: node.id, kind: 'time', role: 'node', passed: result, detail: `Decided at ${formatTime(new Date(nowMs).toISOString())}; condition wants ${node.op} ${formatTime(node.at)}` });
         break;
@@ -721,40 +821,82 @@ export function evaluateGraph(graph: PolicyGraph, inputs: GraphInputs, nowMs: nu
       nodeId: `guard:source:${sourceKey(source)}`, kind: 'source-freshness', role: 'guard', passed: withinAge(age, limit),
       detail: age < -MAX_FUTURE_SKEW_SECONDS
         ? `${describeSource(source)} timestamp is ${(-age).toFixed(0)}s in the future`
-        : `${describeSource(source)} observed ${age.toFixed(1)}s ago; limit ${limit}s`,
+        : `${describeSource(source)} observed ${formatAge(age, limit)}s ago; limit ${limit}s`,
     });
   }
-  gates.push(...actionGuards(graph.action, inputs));
-  const blockedBy = gates.find((gate) => !gate.passed);
+  const guards = actionGuards(graph.action, inputs, nowMs);
+  gates.push(...guards);
+  let blockedBy = gates.find((gate) => !gate.passed);
+  // A protective sweep or evacuation that cannot move anything still pauses, if the vault is active.
+  const action = graph.action;
+  if (blockedBy && guards.includes(blockedBy) && (action.type === 'sweep' || action.type === 'evacuate') && action.pause && inputs.vaultPaused === false
+    && gates.every((gate) => gate.passed || guards.includes(gate))) {
+    const degradedBy = blockedBy;
+    gates.push({ nodeId: 'guard:pause-only', kind: 'pause-only', role: 'guard', passed: true, detail: `${degradedBy.detail}, so only the pause is sent` });
+    return { conditions: [...conditions, ...gates], root, decision: 'act', effectiveAction: { type: 'pause-vault' }, degradedBy };
+  }
   return { conditions: [...conditions, ...gates], root, decision: blockedBy ? 'noop' : 'act', ...(blockedBy ? { blockedBy } : {}) };
 }
 
-/** The vault state each real action needs before a report is worth sending. */
-function actionGuards(action: PolicyAction, inputs: GraphInputs): ConditionEvidence[] {
+/**
+ * The vault state each real action needs before a report is worth sending:
+ * the same checks GrantVault makes, on the same exact numbers, so a report the
+ * guards pass is one the vault accepts (barring a change between read and delivery).
+ */
+function actionGuards(action: PolicyAction, inputs: GraphInputs, nowMs: number): ConditionEvidence[] {
   if (isSimulatedAction(action)) return [];
   if (inputs.vaultPaused === null) throw new Error(`A vault ${action.type === 'pause-vault' ? 'pause' : action.type} needs a fresh vault read`);
-  const balance = () => {
-    if (typeof inputs.vaultBalanceEth !== 'number' || !Number.isFinite(inputs.vaultBalanceEth)) throw new Error(`A vault ${action.type} needs a fresh vault balance read`);
-    return inputs.vaultBalanceEth;
+  const balance = (): bigint => {
+    if (typeof inputs.vaultBalanceWei === 'bigint') return inputs.vaultBalanceWei;
+    if (typeof inputs.vaultBalanceEth === 'number' && Number.isFinite(inputs.vaultBalanceEth)) return BigInt(Math.round(inputs.vaultBalanceEth * 1e9)) * 1_000_000_000n;
+    throw new Error(`A vault ${action.type} needs a fresh vault balance read`);
   };
+  const terms = (): VaultTerms => {
+    if (!inputs.vaultTerms) throw new Error(`A vault ${action.type === 'pay' ? 'payment' : 'evacuation'} needs a fresh read of the vault's terms`);
+    return inputs.vaultTerms;
+  };
+  const now = Math.floor(nowMs / 1000);
+  const guard = (nodeId: string, kind: string, passed: boolean, ok: string, fail: string): ConditionEvidence =>
+    ({ nodeId, kind, role: 'guard', passed, detail: passed ? ok : fail });
+  const wait = (at: number) => `${at - now}s from now (${formatTime(new Date(at * 1000).toISOString())})`;
+  const active = guard('guard:vault-active', 'vault-state', !inputs.vaultPaused, 'Vault spending active', 'Vault spending is paused; no payment is made');
   switch (action.type) {
     case 'pause-vault':
-      return [{ nodeId: 'guard:vault-active', kind: 'vault-state', role: 'guard', passed: !inputs.vaultPaused, detail: inputs.vaultPaused ? 'Vault already paused; no second pause needed' : 'Vault spending active' }];
+      return [{ ...active, detail: inputs.vaultPaused ? 'Vault already paused; no second pause needed' : 'Vault spending active' }];
     case 'sweep': {
-      const eth = balance();
-      return [{ nodeId: 'guard:vault-funds', kind: 'vault-funds', role: 'guard', passed: eth > 0, detail: eth > 0 ? `Vault holds ${eth} ETH; sweeping ${toBps(action.fraction) / 100}% to the reserve` : 'Vault holds no ETH to sweep' }];
+      const wei = balance();
+      const moved = wei * BigInt(toBps(action.fraction)) / 10_000n;
+      return [guard('guard:vault-funds', 'vault-funds', moved > 0n,
+        `Vault holds ${formatWei(wei)}; sweeping ${percent(action.fraction)} (${formatWei(moved)}) to the reserve`,
+        wei === 0n ? 'Vault holds no ETH to sweep' : `${percent(action.fraction)} of the vault's ${formatWei(wei)} rounds down to nothing`)];
     }
     case 'pay': {
-      const eth = balance();
+      const wei = balance();
+      const t = terms();
+      const amount = toGwei(action.amountEth) * 1_000_000_000n;
+      const cap = BigInt(t.maxPaymentWei);
       return [
-        { nodeId: 'guard:vault-active', kind: 'vault-state', role: 'guard', passed: !inputs.vaultPaused, detail: inputs.vaultPaused ? 'Vault spending is paused; no payment is made' : 'Vault spending active' },
-        { nodeId: 'guard:vault-funds', kind: 'vault-funds', role: 'guard', passed: eth >= action.amountEth, detail: eth >= action.amountEth ? `Vault holds ${eth} ETH for a ${action.amountEth} ETH payment` : `Vault holds ${eth} ETH, less than the ${action.amountEth} ETH payment` },
+        active,
+        guard('guard:payee', 'vault-terms', t.payee.toLowerCase() !== ZERO_ADDRESS, `Payee "${action.payee}" is registered at ${t.payee}`, `No payee named "${action.payee}" is registered on the vault; the owner registers payees`),
+        guard('guard:payment-cap', 'vault-terms', amount <= cap, `${formatWei(amount)} is within the vault's ${formatWei(cap)} payment cap`, `${formatWei(amount)} is over the vault's ${formatWei(cap)} payment cap`),
+        guard('guard:payment-interval', 'vault-terms', now >= t.nextPaymentAt, 'No payment interval pending', `The vault allows the next payment ${wait(t.nextPaymentAt)}`),
+        guard('guard:vault-funds', 'vault-funds', wei >= amount, `Vault holds ${formatWei(wei)} for a ${formatWei(amount)} payment`, `Vault holds ${formatWei(wei)}, less than the ${formatWei(amount)} payment`),
       ];
     }
     case 'evacuate': {
-      const tokens = inputs.vaultTokenBalance;
-      if (typeof tokens !== 'number' || !Number.isFinite(tokens)) throw new Error('An evacuation needs a fresh read of the vault token balance');
-      return [{ nodeId: 'guard:vault-tokens', kind: 'vault-funds', role: 'guard', passed: tokens > 0, detail: tokens > 0 ? `Vault holds ${tokens} CCIP-BnM; bridging ${toBps(action.fraction) / 100}% via CCIP` : 'Vault holds no CCIP-BnM to evacuate' }];
+      const t = terms();
+      const tokens = BigInt(t.tokenBalance);
+      const moved = tokens * BigInt(toBps(action.fraction)) / 10_000n;
+      const wei = balance();
+      const fee = BigInt(t.maxCcipFeeWei);
+      return [
+        guard('guard:ccip', 'vault-terms', t.ccipConfigured, `CCIP route to ${CCIP_DESTINATIONS[action.destination].label} configured`, 'This vault has no CCIP route configured'),
+        guard('guard:vault-tokens', 'vault-funds', moved > 0n, `Vault holds ${formatWei(tokens, 'CCIP-BnM')}; bridging ${percent(action.fraction)} (${formatWei(moved, 'CCIP-BnM')}) via CCIP`,
+          tokens === 0n ? 'Vault holds no CCIP-BnM to evacuate' : `${percent(action.fraction)} of the vault's ${formatWei(tokens, 'CCIP-BnM')} rounds down to nothing`),
+        guard('guard:evacuation-interval', 'vault-terms', now >= t.nextEvacuationAt, 'No evacuation interval pending', `The vault allows the next evacuation ${wait(t.nextEvacuationAt)}`),
+        // The router's quote is only known on chain; the vault refuses any fee above its cap, so holding the cap is enough.
+        guard('guard:ccip-fee', 'vault-funds', wei >= fee, `Vault holds ${formatWei(wei)} for the CCIP fee (at most ${formatWei(fee)})`, `Vault holds ${formatWei(wei)}, less than the ${formatWei(fee)} CCIP fee allowance`),
+      ];
     }
   }
 }
@@ -870,7 +1012,7 @@ export function describeAction(action: PolicyAction): string {
     case 'sell': return `Simulated sell of ${action.amount} ${action.symbol}`;
     case 'rebalance': return `Simulated rebalance of ${percent(action.fraction)} ${action.asset} from ${protocolLabel(action.from)} to ${protocolLabel(action.to)}`;
     case 'sweep': return `Sweep ${percent(action.fraction)} of the vault to the reserve${action.pause ? ' and pause spending' : ''}`;
-    case 'pay': return `Pay ${action.amountEth} ETH to the ${action.payee}`;
+    case 'pay': return `Pay ${formatWei(toGwei(action.amountEth) * 1_000_000_000n)} to the ${action.payee}`;
     case 'evacuate': return `Bridge ${percent(action.fraction)} of the vault's CCIP-BnM to the reserve on ${CCIP_DESTINATIONS[action.destination].label} via CCIP${action.pause ? ' and pause spending' : ''}`;
   }
 }

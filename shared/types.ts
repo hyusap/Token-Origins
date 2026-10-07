@@ -214,6 +214,19 @@ export interface CanvasState {
   clarification?: { question: string; candidates: string[] };
   /** The standing policy, if one was started this session. */
   watch?: WatchState;
+  /**
+   * Fixture rehearsal's in-memory vault (no deployment). Persisted so a
+   * restart or a cleared canvas keeps its balances, like a contract would.
+   */
+  fixtureTreasury?: FixtureTreasury;
+}
+export interface FixtureTreasury {
+  balanceEth: number;
+  tokens: number;
+  reserveEth: number;
+  /** Unix seconds of the last fixture payment / evacuation; 0 when none. */
+  lastPaymentAt: number;
+  lastEvacuationAt: number;
 }
 export interface ToolResult {
   ok: boolean;

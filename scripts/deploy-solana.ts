@@ -42,7 +42,7 @@ const signature = await sendAndConfirmTransaction(connection, new Transaction().
 // New vaults can sweep from the start: the reserve defaults to the owner.
 const reserve = new PublicKey(process.env.ORIGINS_SOLANA_RESERVE || owner.publicKey.toBase58());
 try {
-  await sendAndConfirmTransaction(connection, new Transaction().add(configureReserveIx(vault.publicKey, owner.publicKey, reserve, 10_000)), [owner], { commitment: "confirmed" });
+  await sendAndConfirmTransaction(connection, new Transaction().add(configureReserveIx(vault.publicKey, owner.publicKey, reserve, 10_000, SIMULATION_FORWARDER.state)), [owner], { commitment: "confirmed" });
 } catch (error) {
   console.warn(`The deployed program predates reserve sweeps, so this vault can only pause for now; run bun run solana:enable-sweep to upgrade it. (${error instanceof Error ? error.message.split("\n")[0] : String(error)})`);
 }

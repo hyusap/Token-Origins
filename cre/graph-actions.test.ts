@@ -3,7 +3,7 @@ import {decodeAbiParameters,parseAbiParameters,keccak256,toBytes} from 'viem';
 import {
   validateGraph,evaluateGraph,policyHash,describeGraph,describeAction,explainNoop,policyGraphSchema,collectSources,sourceKey,sourceIdentity,readsVault,
   encodeActionReport,encodeReportFor,actionTerms,payeeId,REPORT_VERSION,PAUSE_REPORT_VERSION,ACTION_SWEEP,ACTION_PAY,ACTION_EVACUATE,FLAG_PAUSE,REPORT_V3_BYTES,
-  CCIP_DESTINATIONS,POR_REGISTRY,TOKEN_REGISTRY,LENDING_REGISTRY,type GraphInputs,type PolicyGraph,type VaultAction,
+  CCIP_DESTINATIONS,POR_REGISTRY,TOKEN_REGISTRY,LENDING_REGISTRY,ZERO_ADDRESS,type GraphInputs,type PolicyGraph,type VaultAction,type VaultTerms,
 } from './graph';
 import {specificationSchema} from './spec';
 
@@ -12,7 +12,10 @@ const at=(secondsAgo:number)=>new Date(now-secondsAgo*1000).toISOString();
 const POR='proof-of-reserve:ethereum-mainnet:WBTC', SUPPLY='token-supply:ethereum-mainnet:WBTC';
 const AAVE='lending-rate:ethereum-mainnet:aave-v3:USDC', COMP='lending-rate:ethereum-mainnet:compound-v3:USDC';
 const USDC='chainlink-feed:ethereum-mainnet:USDC', USDT='chainlink-feed:ethereum-mainnet:USDT', ETHF='chainlink-feed:ethereum-mainnet:ETH';
-const base=(readings:GraphInputs['readings'],extra:Partial<GraphInputs>={}):GraphInputs=>({readings,vaultPaused:false,vaultBalanceEth:1,vaultTokenBalance:2,exchangeMaxAgeSeconds:60,...extra});
+const ETH=10n**18n;
+const TERMS:VaultTerms={payee:'0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',maxPaymentWei:(ETH/20n).toString(),nextPaymentAt:0,ccipConfigured:true,tokenBalance:(2n*ETH).toString(),maxCcipFeeWei:(ETH/100n).toString(),nextEvacuationAt:0};
+const terms=(patch:Partial<VaultTerms>={})=>({...TERMS,...patch});
+const base=(readings:GraphInputs['readings'],extra:Partial<GraphInputs>={}):GraphInputs=>({readings,vaultPaused:false,vaultBalanceWei:ETH,vaultTerms:TERMS,exchangeMaxAgeSeconds:60,...extra});
 const g=(input:unknown)=>validateGraph(input).graph;
 
 // "Sweep half to the reserve if WBTC's reserves fall below its supply."
@@ -93,7 +96,7 @@ test('validation: duplicate operands, sub-1e-8 thresholds, freshness on a comput
   const feed={id:'btc',kind:'price',source:{type:'chainlink-feed',symbol:'BTC'}};
   expect(()=>g({nodes:[feed,{id:'a',kind:'compare',input:'btc',op:'<',value:1},{id:'both',kind:'and',inputs:['a','a']}],root:'both',action:{type:'pause-vault'}})).toThrow(/same input twice/);
   expect(()=>g({nodes:[feed,{id:'a',kind:'compare',input:'btc',op:'<',value:1e-9}],root:'a',action:{type:'pause-vault'}})).toThrow(/8 decimal places/);
-  expect(()=>g({nodes:[feed,{id:'x',kind:'math',op:'/',left:'btc',right:'btc'},{id:'f',kind:'freshness',input:'x',maxAgeSeconds:60}],root:'f',action:{type:'pause-vault'}})).toThrow(/source reading/);
+  expect(()=>g({nodes:[feed,{id:'eth',kind:'price',source:{type:'chainlink-feed',symbol:'ETH'}},{id:'x',kind:'math',op:'/',left:'btc',right:'eth'},{id:'f',kind:'freshness',input:'x',maxAgeSeconds:60}],root:'f',action:{type:'pause-vault'}})).toThrow(/source reading/);
   const ok=[feed,{id:'a',kind:'compare',input:'btc',op:'<',value:1}];
   expect(()=>g({nodes:ok,root:'a',action:{type:'pay',payee:'0xattacker',amountEth:1}})).toThrow();
   expect(()=>g({nodes:ok,root:'a',action:{type:'pay',payee:'grantee',amountEth:11}})).toThrow();
@@ -110,20 +113,83 @@ const feedOnly=(action:unknown)=>g({nodes:[{id:'btc',kind:'price',source:{type:'
 const btc={['chainlink-feed:ethereum-mainnet:BTC']:{value:85000,observedAt:at(60)}};
 
 test('action guards: sweep needs funds, pay needs an active funded vault, evacuate needs tokens; a sweep runs on a paused vault',()=>{
-  const sweep=feedOnly({type:'sweep',fraction:0.5});
+  const sweep=feedOnly({type:'sweep',fraction:0.5,pause:false});
   expect(evaluateGraph(sweep,base(btc,{vaultPaused:true}),now).decision).toBe('act');
-  const empty=evaluateGraph(sweep,base(btc,{vaultBalanceEth:0}),now);
+  const empty=evaluateGraph(sweep,base(btc,{vaultBalanceWei:0n}),now);
   expect(empty.decision).toBe('noop');
   expect(explainNoop(empty)).toBe('Vault holds no ETH to sweep.');
+  // The vault computes balance × bps / 10,000 in wei: one wei at 50% moves nothing.
+  expect(explainNoop(evaluateGraph(sweep,base(btc,{vaultBalanceWei:1n}),now))).toBe("50% of the vault's 0.000000000000000001 ETH rounds down to nothing.");
   const pay=feedOnly({type:'pay',payee:'grantee',amountEth:0.01});
   expect(evaluateGraph(pay,base(btc),now).decision).toBe('act');
   expect(explainNoop(evaluateGraph(pay,base(btc,{vaultPaused:true}),now))).toBe('Vault spending is paused; no payment is made.');
-  expect(explainNoop(evaluateGraph(pay,base(btc,{vaultBalanceEth:0.001}),now))).toBe('Vault holds 0.001 ETH, less than the 0.01 ETH payment.');
-  const evacuate=feedOnly({type:'evacuate',destination:'base-sepolia',fraction:1});
+  expect(explainNoop(evaluateGraph(pay,base(btc,{vaultBalanceWei:ETH/1000n}),now))).toBe('Vault holds 0.001 ETH, less than the 0.01 ETH payment.');
+  const evacuate=feedOnly({type:'evacuate',destination:'base-sepolia',fraction:1,pause:false});
   expect(evaluateGraph(evacuate,base(btc),now).decision).toBe('act');
-  expect(explainNoop(evaluateGraph(evacuate,base(btc,{vaultTokenBalance:0}),now))).toBe('Vault holds no CCIP-BnM to evacuate.');
-  expect(()=>evaluateGraph(evacuate,base(btc,{vaultTokenBalance:null}),now)).toThrow(/token balance/);
-  expect(()=>evaluateGraph(sweep,base(btc,{vaultBalanceEth:undefined}),now)).toThrow(/balance read/);
+  expect(explainNoop(evaluateGraph(evacuate,base(btc,{vaultTerms:terms({tokenBalance:'0'})}),now))).toBe('Vault holds no CCIP-BnM to evacuate.');
+  expect(()=>evaluateGraph(evacuate,base(btc,{vaultTerms:null}),now)).toThrow(/terms/);
+  expect(()=>evaluateGraph(sweep,base(btc,{vaultBalanceWei:undefined}),now)).toThrow(/balance read/);
+});
+
+test('guards check what the vault checks: payee registry, payment cap and interval, CCIP route, fee allowance and interval',()=>{
+  const pay=feedOnly({type:'pay',payee:'grantee',amountEth:0.01});
+  const nowSec=Math.floor(now/1000);
+  expect(explainNoop(evaluateGraph(pay,base(btc,{vaultTerms:terms({payee:ZERO_ADDRESS})}),now))).toBe('No payee named "grantee" is registered on the vault; the owner registers payees.');
+  expect(explainNoop(evaluateGraph(pay,base(btc,{vaultTerms:terms({maxPaymentWei:(ETH/500n).toString()})}),now))).toBe("0.01 ETH is over the vault's 0.002 ETH payment cap.");
+  expect(explainNoop(evaluateGraph(pay,base(btc,{vaultTerms:terms({nextPaymentAt:nowSec+60})}),now))).toBe('The vault allows the next payment 60s from now (2026-10-06 04:41 UTC).');
+  // Gwei-normalised amounts: the guard compares the exact wei the report carries.
+  const tiny=feedOnly({type:'pay',payee:'grantee',amountEth:0.000000001});
+  expect(describeAction(tiny.action)).toBe('Pay 0.000000001 ETH to the grantee');
+  expect(evaluateGraph(tiny,base(btc,{vaultBalanceWei:1_000_000_000n}),now).decision).toBe('act');
+  expect(evaluateGraph(tiny,base(btc,{vaultBalanceWei:999_999_999n}),now).decision).toBe('noop');
+  const evacuate=feedOnly({type:'evacuate',destination:'base-sepolia',fraction:1,pause:false});
+  expect(explainNoop(evaluateGraph(evacuate,base(btc,{vaultTerms:terms({ccipConfigured:false})}),now))).toBe('This vault has no CCIP route configured.');
+  expect(explainNoop(evaluateGraph(evacuate,base(btc,{vaultBalanceWei:ETH/1000n}),now))).toBe('Vault holds 0.001 ETH, less than the 0.01 ETH CCIP fee allowance.');
+  expect(explainNoop(evaluateGraph(evacuate,base(btc,{vaultTerms:terms({nextEvacuationAt:nowSec+3600})}),now))).toMatch(/^The vault allows the next evacuation 3600s from now/);
+});
+
+test('a protective sweep or evacuation that cannot move anything still pauses an active vault, and only the pause is sent',()=>{
+  const sweep=feedOnly({type:'sweep',fraction:0.5});
+  const degraded=evaluateGraph(sweep,base(btc,{vaultBalanceWei:0n}),now);
+  expect(degraded.decision).toBe('act');
+  expect(degraded.effectiveAction).toEqual({type:'pause-vault'});
+  expect(degraded.degradedBy!.detail).toBe('Vault holds no ETH to sweep');
+  expect(degraded.conditions.at(-1)!.detail).toBe('Vault holds no ETH to sweep, so only the pause is sent');
+  // Already paused: nothing to send at all.
+  expect(evaluateGraph(sweep,base(btc,{vaultBalanceWei:0n,vaultPaused:true}),now).decision).toBe('noop');
+  const evacuate=feedOnly({type:'evacuate',destination:'base-sepolia',fraction:1});
+  expect(evaluateGraph(evacuate,base(btc,{vaultTerms:terms({ccipConfigured:false,tokenBalance:'0'})}),now).effectiveAction).toEqual({type:'pause-vault'});
+  // The policy's own condition still gates the pause.
+  expect(evaluateGraph(sweep,base({['chainlink-feed:ethereum-mainnet:BTC']:{value:95000,observedAt:at(60)}},{vaultBalanceWei:0n}),now).decision).toBe('noop');
+  // A movement the vault can make is sent as written.
+  expect(evaluateGraph(sweep,base(btc),now).effectiveAction).toBeUndefined();
+});
+
+test('units: prices subtract only with the same asset, price ratios do not scale amounts, and constant graphs are refused',()=>{
+  const price=(id:string,symbol:string)=>({id,kind:'price',source:{type:'chainlink-feed',symbol}});
+  const vault={id:'v',kind:'reading',source:{type:'vault-balance'}};
+  // ETH value of the vault minus a BTC price: a USD amount and a price are different units.
+  expect(()=>g({nodes:[price('btc','BTC'),price('eth','ETH'),vault,{id:'usd',kind:'math',op:'*',left:'v',right:'eth'},{id:'d',kind:'math',op:'-',left:'usd',right:'btc'},{id:'a',kind:'compare',input:'d',op:'>',value:0}],root:'a',action:{type:'pause-vault'}})).toThrow(/a USD amount and a USD price of BTC/);
+  // BTC/USD ÷ ETH/USD is an exchange rate, comparable but not a multiplier for ETH holdings.
+  expect(()=>g({nodes:[price('btc','BTC'),price('eth','ETH'),{id:'r',kind:'math',op:'/',left:'btc',right:'eth'},{id:'a',kind:'compare',input:'r',op:'>',value:20}],root:'a',action:{type:'pause-vault'}})).not.toThrow();
+  expect(()=>g({nodes:[price('btc','BTC'),price('eth','ETH'),vault,{id:'r',kind:'math',op:'/',left:'btc',right:'eth'},{id:'x',kind:'math',op:'*',left:'r',right:'v'},{id:'a',kind:'compare',input:'x',op:'>',value:1}],root:'a',action:{type:'pause-vault'}})).toThrow(/price ratio between two assets/);
+  expect(()=>g({nodes:[price('eth','ETH'),{id:'d',kind:'math',op:'-',left:'eth',right:'eth'},{id:'a',kind:'compare',input:'d',op:'>',value:0}],root:'a',action:{type:'pause-vault'}})).toThrow(/on both sides/);
+  expect(()=>g({nodes:[price('eth','ETH'),{id:'a',kind:'compare',input:'eth',op:'>',value:-5}],root:'a',action:{type:'pause-vault'}})).toThrow(/never negative/);
+  // A spread can be negative.
+  expect(()=>g({nodes:[{id:'cb',kind:'price',source:{type:'exchange-trade',pair:'ETH-USD'}},price('eth','ETH'),{id:'d',kind:'math',op:'-',left:'cb',right:'eth'},{id:'a',kind:'compare',input:'d',op:'<',value:-20}],root:'a',action:{type:'pause-vault'}})).not.toThrow();
+  // A cyclic graph cannot be hashed into a stack overflow.
+  expect(()=>policyHash({nodes:[{id:'a',kind:'not',input:'b'},{id:'b',kind:'not',input:'a'}],root:'a',action:{type:'pause-vault'}})).toThrow(/cycle/);
+});
+
+test('narration keeps decided differences visible, times keep their seconds, and the time a node hashes is the time it decides',()=>{
+  const close=g({nodes:[{id:'eth',kind:'price',source:{type:'chainlink-feed',symbol:'ETH'}},{id:'a',kind:'compare',input:'eth',op:'<',value:3000}],root:'a',action:{type:'pause-vault'}});
+  const result=evaluateGraph(close,base({[ETHF]:{value:2999.999,observedAt:at(5)}}),now);
+  expect(result.conditions.find(c=>c.nodeId==='a')!.detail).toBe('Chainlink ETH/USD (mainnet) $2,999.999 < $3,000');
+  const timed=g({nodes:[{id:'t',kind:'time',op:'after',at:'2026-10-06T04:40:00.500Z'}],root:'t',action:{type:'pause-vault'}});
+  // Hashed as 04:40:00, so it holds at 04:40:00.000 too.
+  expect(evaluateGraph(timed,base({}),now).root).toBe(true);
+  expect(describeGraph(g({nodes:[{id:'t',kind:'time',op:'after',at:'2026-10-06T04:40:30Z'}],root:'t',action:{type:'pause-vault'}}))).toBe('Pause spending when the time is after 2026-10-06 04:40:30 UTC.');
+  expect(describeGraph(g({nodes:[{id:'t',kind:'time',op:'after',at:'2026-10-06T04:40:00Z'}],root:'t',action:{type:'pause-vault'}}))).toBe('Pause spending when the time is after 2026-10-06 04:40 UTC.');
 });
 
 test('every action is part of the policy hash; recorded Sepolia hashes still recompute exactly',async()=>{

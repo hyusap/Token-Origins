@@ -68,9 +68,9 @@ test.skipIf(!enabled)("enable-sweep upgrades the deployed pause-only program in 
   expect(await readTreasuryConfig(connection, vault.publicKey)).toBeNull();
 
   const logs: string[] = [];
-  const result = await enableSweep({ connection, rpcUrl: RPC, owner, vault: vault.publicKey, reserve, log: (line) => logs.push(line) });
+  const result = await enableSweep({ connection, rpcUrl: RPC, owner, vault: vault.publicKey, reserve, forwarderState: forwarderState.publicKey, log: (line) => logs.push(line) });
   expect(result.upgraded).toBe(true);
-  expect(result.config).toEqual({ vault: vault.publicKey.toBase58(), reserve: reserve.toBase58(), maxSweepBps: 10_000 });
+  expect(result.config).toEqual({ vault: vault.publicKey.toBase58(), reserve: reserve.toBase58(), forwarderState: forwarderState.publicKey.toBase58(), maxSweepBps: 10_000 });
   // Same account, same state history: the pause count from before the upgrade is still there.
   expect((await readSolanaVault(connection, vault.publicKey)).pauseCount).toBe(1);
 
@@ -83,6 +83,6 @@ test.skipIf(!enabled)("enable-sweep upgrades the deployed pause-only program in 
   expect(await connection.getBalance(reserve)).toBeGreaterThan(0.49 * LAMPORTS_PER_SOL);
 
   // Running it again changes nothing.
-  const again = await enableSweep({ connection, rpcUrl: RPC, owner, vault: vault.publicKey, reserve, log: () => {} });
+  const again = await enableSweep({ connection, rpcUrl: RPC, owner, vault: vault.publicKey, reserve, forwarderState: forwarderState.publicKey, log: () => {} });
   expect(again.upgraded).toBe(false);
 }, 180_000);

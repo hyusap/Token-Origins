@@ -141,7 +141,7 @@ test("every recipe composes against the fixture and credits the project that ins
 test("recipes run end to end in the fixture: stream pays, cover pays the insured, evacuation queues tokens, the yield chase is simulated", async () => {
   const cases: [string, Record<string, unknown>, (run: any, engine: Engine) => void][] = [
     ["grant-stream", { amountEth: 0.001 }, (run) => expect(run.evidence.fixtureEffects).toEqual({ paidEth: 0.001, payee: "grantee" })],
-    ["parametric-cover", { strike: 3000 }, (run) => expect(run.evidence.fixtureEffects).toEqual({ paidEth: 0.005, payee: "insured" })],
+    ["parametric-cover", { strike: 3000 }, (run) => expect(run.evidence.fixtureEffects).toEqual({ paidEth: 0.002, payee: "insured" })],
     ["crash-evacuation", { floor: 3000 }, (run, engine) => { expect(run.evidence.fixtureEffects).toEqual({ paused: true, evacuatedTokens: 2 }); expect(engine.state.objects.find((o) => o.id === "vault:grant")!.data.ccipTokens).toBe(0); }],
     ["yield-chaser", {}, (run) => { expect(run.evidence.simulatedRebalance).toMatchObject({ simulated: true, from: "aave-v3", to: "compound-v3", fromAprPercent: 3.1, toAprPercent: 3.9 }); expect(run.evidence.transactionHash).toBeUndefined(); }],
     ["runway-guard", { minUsd: 1000 }, (run) => expect(run.evidence.fixtureEffects).toEqual({ paused: true })],

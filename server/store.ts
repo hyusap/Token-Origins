@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
-import type { CanvasState, ToolResult } from "../shared/types";
+import type { CanvasState, ExecutionRun, ToolResult } from "../shared/types";
 
 export class StateStore {
   db: Database;
@@ -32,6 +32,11 @@ export class StateStore {
           "INSERT INTO executions(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
         )
         .run(run.id, JSON.stringify(run));
+  }
+  /** A run from the archive: every run ever saved, including ones trimmed from the live state. */
+  execution(id: string): ExecutionRun | null {
+    const row = this.db.query("SELECT payload FROM executions WHERE id=?").get(id) as { payload: string } | null;
+    return row ? JSON.parse(row.payload) : null;
   }
   archiveSession(state: CanvasState) {
     this.db.query("INSERT INTO cleared_sessions(id,payload,cleared_at) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING")

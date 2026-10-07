@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CCIP_DESTINATION_IDS, PAYEE_PATTERN, LENDING_PROTOCOLS, type PolicyGraphInput } from "../cre/graph";
+import { CCIP_DESTINATION_IDS, PAYEE_PATTERN, LENDING_PROTOCOLS, fractionSchema, ethAmountSchema, thresholdSchema, timestampSchema, type PolicyGraphInput } from "../cre/graph";
 
 /**
  * Policies modelled on what past Chainlink hackathon winners built, each
@@ -24,9 +24,11 @@ export interface Recipe {
   note?: string;
 }
 
-const fraction = z.number().gt(0).max(1);
-const usd = z.number().positive().max(1e7);
-const eth = z.number().gt(0).max(1);
+// The graph's own parameter rules, so a recipe accepts exactly what compose_graph would.
+const fraction = fractionSchema;
+const usd = thresholdSchema.pipe(z.number().positive().max(1e7));
+const eth = ethAmountSchema.pipe(z.number().max(1));
+const payee = z.string().regex(PAYEE_PATTERN, 'a registered payee name such as "grantee"');
 const ethFeed = (id: string) => ({ id, kind: "price" as const, source: { type: "chainlink-feed" as const, symbol: "ETH" as const } });
 const nextWeek = () => new Date(Math.ceil((Date.now() + 7 * 86_400_000) / 3_600_000) * 3_600_000).toISOString().replace(".000Z", "Z");
 
@@ -37,20 +39,28 @@ export const RECIPES: Recipe[] = [
     inspiredBy: [{ project: "SentinelCRE", event: "Convergence 2026", award: "CRE & AI, 1st place", built: "checks every autonomous agent action against compliance limits and Proof of Reserve before it executes" }],
     sentence: "If WBTC's reserves fall below its supply or USDC depegs, sweep half the treasury to the reserve and pause spending.",
     execution: "real",
-    params: z.object({ minCoverage: z.number().positive().max(10).default(1), depegFloor: usd.max(2).default(0.98), sweepFraction: fraction.default(0.5), pause: z.boolean().default(true) }).strict(),
-    build: (p) => ({
-      nodes: [
+    params: z.object({ minCoverage: thresholdSchema.pipe(z.number().positive().max(10)).default(1), includeDepeg: z.boolean().default(true), depegFloor: thresholdSchema.pipe(z.number().positive().max(2)).default(0.98), sweepFraction: fraction.default(0.5), pause: z.boolean().default(true) }).strict(),
+    build: (p) => {
+      const coverage = [
         { id: "reserves", kind: "reading", source: { type: "proof-of-reserve", asset: "WBTC" } },
         { id: "supply", kind: "reading", source: { type: "token-supply", token: "WBTC" } },
         { id: "coverage", kind: "math", op: "/", left: "reserves", right: "supply" },
         { id: "undercollateralised", kind: "compare", input: "coverage", op: "<", value: p.minCoverage },
-        { id: "usdc", kind: "price", source: { type: "chainlink-feed", symbol: "USDC" } },
-        { id: "depegged", kind: "compare", input: "usdc", op: "<", value: p.depegFloor },
-        { id: "risk", kind: "or", inputs: ["undercollateralised", "depegged"] },
-      ],
-      root: "risk",
-      action: { type: "sweep", fraction: p.sweepFraction, pause: p.pause },
-    }),
+      ] as const;
+      const action = { type: "sweep", fraction: p.sweepFraction, pause: p.pause } as const;
+      // Without the depeg check it is the Proof of Reserve guard alone.
+      if (!p.includeDepeg) return { nodes: [...coverage], root: "undercollateralised", action };
+      return {
+        nodes: [
+          ...coverage,
+          { id: "usdc", kind: "price", source: { type: "chainlink-feed", symbol: "USDC" } },
+          { id: "depegged", kind: "compare", input: "usdc", op: "<", value: p.depegFloor },
+          { id: "risk", kind: "or", inputs: ["undercollateralised", "depegged"] },
+        ],
+        root: "risk",
+        action,
+      };
+    },
     watchSeconds: 60,
   },
   {
@@ -59,7 +69,7 @@ export const RECIPES: Recipe[] = [
     inspiredBy: [{ project: "FlowVault", event: "Convergence 2026", award: "DeFi & Tokenization, 1st place", built: "scores stablecoin spreads and other market signals in CRE workflows and acts behind risk gates" }],
     sentence: "If USDC and USDT drift more than a cent apart, pause spending.",
     execution: "real",
-    params: z.object({ maxSpread: usd.max(1).default(0.01), action: z.enum(["pause", "sweep"]).default("pause"), sweepFraction: fraction.default(0.5) }).strict(),
+    params: z.object({ maxSpread: thresholdSchema.pipe(z.number().positive().max(1)).default(0.01), action: z.enum(["pause", "sweep"]).default("pause"), sweepFraction: fraction.default(0.5) }).strict(),
     build: (p) => ({
       nodes: [
         { id: "usdc", kind: "price", source: { type: "chainlink-feed", symbol: "USDC" } },
@@ -83,7 +93,7 @@ export const RECIPES: Recipe[] = [
     ],
     sentence: "If Compound pays at least half a point more than Aave on USDC, move it to Compound.",
     execution: "simulated",
-    params: z.object({ from: z.enum(LENDING_PROTOCOLS).default("aave-v3"), to: z.enum(LENDING_PROTOCOLS).default("compound-v3"), minEdgePercent: z.number().positive().max(100).default(0.5), fraction: fraction.default(1) }).strict(),
+    params: z.object({ from: z.enum(LENDING_PROTOCOLS).default("aave-v3"), to: z.enum(LENDING_PROTOCOLS).default("compound-v3"), minEdgePercent: thresholdSchema.pipe(z.number().positive().max(100)).default(0.5), fraction: fraction.default(1) }).strict(),
     build: (p) => ({
       nodes: [
         { id: "current", kind: "reading", source: { type: "lending-rate", protocol: p.from, asset: "USDC" } },
@@ -123,7 +133,7 @@ export const RECIPES: Recipe[] = [
     inspiredBy: [{ project: "InControl", event: "Convergence 2026", award: "Autonomous Agents, 1st place", built: "runs recurring executions such as dollar-cost averaging through CRE workflows" }],
     sentence: "Pay the grantee 0.001 ETH every minute while ETH stays above $1,000 and spending is active.",
     execution: "real",
-    params: z.object({ amountEth: eth.default(0.001), ethFloor: usd.default(1000), payee: z.string().regex(PAYEE_PATTERN).default("grantee") }).strict(),
+    params: z.object({ amountEth: eth.default(0.001), ethFloor: usd.default(1000), payee: payee.default("grantee") }).strict(),
     build: (p) => ({
       nodes: [
         ethFeed("eth"),
@@ -135,7 +145,7 @@ export const RECIPES: Recipe[] = [
       action: { type: "pay", payee: p.payee, amountEth: p.amountEth },
     }),
     watchSeconds: 60,
-    note: "Each check pays at most once; the vault also caps each payment and enforces a minimum interval on chain.",
+    note: "Each check pays at most once; the vault also caps each payment (0.002 ETH on the demo vault) and enforces a minimum interval on chain. Watch it with stopOnAction false so it keeps paying.",
   },
   {
     id: "parametric-cover",
@@ -144,9 +154,9 @@ export const RECIPES: Recipe[] = [
       { project: "Azurance", event: "Constellation 2023", award: "DeFi & Payments prize", built: "an on-chain insurance marketplace that pays out on verifiable conditions" },
       { project: "TAPL", event: "Convergence 2026", award: "Prediction Markets, 1st place", built: "settles time-bounded price predictions with oracle-verified outcomes" },
     ],
-    sentence: "If ETH falls below $2,000 before next Friday, pay the insured 0.005 ETH.",
+    sentence: "If ETH falls below $2,000 within the next week, pay the insured 0.002 ETH.",
     execution: "real",
-    params: z.object({ strike: usd.default(2000), deadline: z.string().datetime({ offset: true }).optional(), amountEth: eth.default(0.005), payee: z.string().regex(PAYEE_PATTERN).default("insured") }).strict(),
+    params: z.object({ strike: usd.default(2000), deadline: timestampSchema.optional(), amountEth: eth.default(0.002), payee: payee.default("insured") }).strict(),
     build: (p) => ({
       nodes: [
         ethFeed("eth"),

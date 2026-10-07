@@ -27,9 +27,11 @@ interface ICcipRouter {
 ///   2. sweep a share of its ETH to the `reserve` address fixed at deploy;
 ///   3. pay a payee the owner registered, at most `maxPaymentWei` per report
 ///      and at most once per `minPaymentInterval`, never while paused;
-///   4. bridge a share of its CCIP token to `reserve` on the one CCIP
-///      destination fixed at deploy, paying the CCIP fee in native ETH.
-/// Sweep and evacuation may also pause in the same delivery (FLAG_PAUSE).
+///   4. bridge a share of its CCIP token to `ccipReceiver` on the one CCIP
+///      destination fixed at deploy, paying at most `maxCcipFeeWei` in native
+///      ETH, at most once per `minEvacuationInterval`.
+/// Sweep and evacuation may also pause in the same delivery (FLAG_PAUSE); the
+/// pause stands even if the movement itself fails (MovementFailed).
 ///
 /// Report v3 binds each delivery to this receiver, this chain, one execution
 /// (runId), the policy revision and the structural hash of the exact policy
@@ -39,8 +41,12 @@ interface ICcipRouter {
 /// worst a misbehaving workflow can do is move funds to the owner's reserve
 /// or pay a registered payee within its cap and rate limit.
 ///
-/// Production deployments must use a CRE production forwarder and bind workflow
-/// identity; the permissive local forwarder is ONLY for an isolated rehearsal.
+/// Workflow identity: the forwarder vouches for "some workflow", not ours. Once
+/// the owner calls setWorkflowIdentity, reports are accepted only when the
+/// forwarder's metadata names that workflow owner (and name). CRE's simulation
+/// MockForwarder checks no signatures, so a vault trusting it should be locked
+/// this way (scripts/lock-workflow.ts) or hold only test funds. The local
+/// rehearsal forwarder is ONLY for an isolated chain.
 contract GrantVault {
     uint256 public constant REPORT_VERSION = 3;
     uint256 public constant ACTION_PAUSE = 1;
@@ -52,6 +58,9 @@ contract GrantVault {
     /// @dev Tolerated disagreement between the workflow's clock and block time.
     uint256 public constant MAX_CLOCK_SKEW = 60;
     uint256 internal constant REPORT_LENGTH = 384;
+    /// @dev Gas a pausing report must still have before it tries its movement. Without it, a caller
+    /// (or gas estimation) could starve the isolated movement so it fails while the pause lands.
+    uint256 public constant MOVEMENT_GAS = 400_000;
 
     /// @notice Deploy-time bounds on every movement a report can make.
     struct Limits {
@@ -62,6 +71,10 @@ contract GrantVault {
         address ccipRouter;
         address ccipToken;
         uint64 ccipDestination;
+        /// Who receives evacuated tokens on the destination chain (an EOA or a contract deployed there).
+        address ccipReceiver;
+        uint256 maxCcipFeeWei;
+        uint256 minEvacuationInterval;
     }
     struct Report {
         uint256 version;
@@ -88,9 +101,16 @@ contract GrantVault {
     address public immutable ccipRouter;
     address public immutable ccipToken;
     uint64 public immutable ccipDestination;
+    address public immutable ccipReceiver;
+    uint256 public immutable maxCcipFeeWei;
+    uint256 public immutable minEvacuationInterval;
 
     bool public paused;
     uint256 public lastPaymentAt;
+    uint256 public lastEvacuationAt;
+    /// Workflow identity reports must carry once set (zero: not enforced).
+    address public workflowOwner;
+    bytes10 public workflowName;
     mapping(bytes32 => bool) public processedRuns;
     mapping(bytes32 => address payable) public payees;
 
@@ -101,6 +121,9 @@ contract GrantVault {
     event SpendingResumed();
     event GrantPaid(address indexed recipient, uint256 amount);
     event PayeeSet(bytes32 indexed payeeId, address payee);
+    event WorkflowIdentitySet(address workflowOwner, bytes10 workflowName);
+    /// A pausing sweep or evacuation whose movement failed: the pause stands, nothing moved.
+    event MovementFailed(bytes32 indexed runId, uint256 indexed revision, bytes32 indexed policyHash, uint256 action, bytes reason);
     error Unauthorized();
     error InvalidReport();
     error UnsupportedReport();
@@ -116,12 +139,17 @@ contract GrantVault {
     error WrongDestination();
     error InsufficientFee();
     error TransferFailed();
+    error FeeTooHigh();
+    error EvacuationTooSoon();
+    error UnauthorizedWorkflow();
+    error InsufficientGas();
 
     constructor(address authorizedForwarder, uint256 reportAge, Limits memory limits) payable {
         require(authorizedForwarder != address(0) && reportAge > 0 && reportAge <= 3600, "Invalid configuration");
         require(limits.reserve != address(0) && limits.maxSweepBps > 0 && limits.maxSweepBps <= BPS, "Invalid reserve limits");
         require(limits.minPaymentInterval <= 30 days, "Invalid payment interval");
-        require(limits.ccipRouter == address(0) || (limits.ccipToken != address(0) && limits.ccipDestination != 0), "Invalid CCIP configuration");
+        require(limits.ccipRouter == address(0) || (limits.ccipToken != address(0) && limits.ccipDestination != 0 && limits.ccipReceiver != address(0) && limits.maxCcipFeeWei > 0), "Invalid CCIP configuration");
+        require(limits.minEvacuationInterval <= 30 days, "Invalid evacuation interval");
         owner = msg.sender;
         forwarder = authorizedForwarder;
         maxReportAge = reportAge;
@@ -132,6 +160,9 @@ contract GrantVault {
         ccipRouter = limits.ccipRouter;
         ccipToken = limits.ccipToken;
         ccipDestination = limits.ccipDestination;
+        ccipReceiver = limits.ccipReceiver;
+        maxCcipFeeWei = limits.maxCcipFeeWei;
+        minEvacuationInterval = limits.minEvacuationInterval;
     }
     receive() external payable {}
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
@@ -141,8 +172,9 @@ contract GrantVault {
     /// @notice Lets runners refuse to submit a report layout this receiver cannot decode.
     function reportVersion() external pure returns (uint256) { return REPORT_VERSION; }
 
-    function onReport(bytes calldata, bytes calldata report) external {
+    function onReport(bytes calldata metadata, bytes calldata report) external {
         if (msg.sender != forwarder) revert Unauthorized();
+        if (workflowOwner != address(0)) _checkWorkflow(metadata);
         if (report.length != REPORT_LENGTH) revert UnsupportedReport();
         Report memory r = abi.decode(report, (Report));
         if (r.version != REPORT_VERSION) revert UnsupportedReport();
@@ -154,10 +186,34 @@ contract GrantVault {
         if (processedRuns[r.runId]) return; // duplicate delivery is an explicit no-op
         if (r.decidedAt > block.timestamp + MAX_CLOCK_SKEW || block.timestamp > r.decidedAt + maxReportAge) revert StaleReport();
         processedRuns[r.runId] = true;
-        if (r.action == ACTION_PAUSE || r.flags & FLAG_PAUSE != 0) _pause(r);
+        bool pauses = r.action == ACTION_PAUSE || r.flags & FLAG_PAUSE != 0;
+        if (pauses) _pause(r);
+        if (r.action == ACTION_PAY) _pay(r);
+        else if (r.action == ACTION_SWEEP || r.action == ACTION_EVACUATE) {
+            if (!pauses) _move(r);
+            // A protective report must not lose its pause because the movement failed.
+            else if (gasleft() < MOVEMENT_GAS) revert InsufficientGas();
+            else try this.moveFunds(r) {} catch (bytes memory reason) {
+                emit MovementFailed(r.runId, r.revision, r.policyHash, r.action, reason);
+            }
+        }
+    }
+    /// @dev Only callable by this contract, so a pausing report can isolate a failed movement.
+    function moveFunds(Report calldata r) external {
+        if (msg.sender != address(this)) revert Unauthorized();
+        _move(r);
+    }
+    function _move(Report memory r) internal {
         if (r.action == ACTION_SWEEP) _sweep(r);
-        else if (r.action == ACTION_PAY) _pay(r);
-        else if (r.action == ACTION_EVACUATE) _evacuate(r);
+        else _evacuate(r);
+    }
+    /// @dev Keystone metadata after the forwarder strips its own header:
+    /// workflowId (32) | workflowName (10) | workflowOwner (20) | reportId (2).
+    function _checkWorkflow(bytes calldata metadata) internal view {
+        if (metadata.length < 62) revert UnauthorizedWorkflow();
+        bytes10 name = bytes10(metadata[32:42]);
+        address sender = address(bytes20(metadata[42:62]));
+        if (sender != workflowOwner || (workflowName != bytes10(0) && name != workflowName)) revert UnauthorizedWorkflow();
     }
 
     function _pause(Report memory r) internal {
@@ -188,12 +244,13 @@ contract GrantVault {
         if (ccipRouter == address(0)) revert EvacuationDisabled();
         if (r.destinationChainSelector != ccipDestination) revert WrongDestination();
         if (r.amount == 0 || r.amount > BPS) revert InvalidAmount();
+        if (lastEvacuationAt != 0 && block.timestamp < lastEvacuationAt + minEvacuationInterval) revert EvacuationTooSoon();
         uint256 tokens = IERC20Minimal(ccipToken).balanceOf(address(this)) * r.amount / BPS;
         if (tokens == 0) revert NothingToMove();
         CcipClient.EVMTokenAmount[] memory amounts = new CcipClient.EVMTokenAmount[](1);
         amounts[0] = CcipClient.EVMTokenAmount({token: ccipToken, amount: tokens});
         CcipClient.EVM2AnyMessage memory message = CcipClient.EVM2AnyMessage({
-            receiver: abi.encode(reserve),
+            receiver: abi.encode(ccipReceiver),
             data: "",
             tokenAmounts: amounts,
             feeToken: address(0),
@@ -201,12 +258,37 @@ contract GrantVault {
             extraArgs: abi.encodeWithSelector(CcipClient.GENERIC_EXTRA_ARGS_V2_TAG, uint256(0), true)
         });
         uint256 fee = ICcipRouter(ccipRouter).getFee(ccipDestination, message);
+        if (fee > maxCcipFeeWei) revert FeeTooHigh();
         if (fee > address(this).balance) revert InsufficientFee();
+        lastEvacuationAt = block.timestamp;
         if (!IERC20Minimal(ccipToken).approve(ccipRouter, tokens)) revert TransferFailed();
         bytes32 messageId = ICcipRouter(ccipRouter).ccipSend{value: fee}(ccipDestination, message);
         emit TreasuryEvacuated(r.runId, r.revision, r.policyHash, messageId, ccipDestination, ccipToken, tokens, fee);
     }
 
+    /// @notice Everything a workflow needs to know, in one read, before it asks this vault to move funds:
+    /// whether `payeeId` is registered, the payment cap and next allowed payment time, and whether an
+    /// evacuation is possible now (CCIP configured, token balance, fee allowance, next allowed time).
+    function terms(bytes32 payeeId) external view returns (
+        bool paused_, address payee, uint256 maxPaymentWei_, uint256 nextPaymentAt,
+        bool ccipConfigured, uint256 tokenBalance, uint256 maxCcipFeeWei_, uint256 nextEvacuationAt
+    ) {
+        paused_ = paused;
+        payee = payees[payeeId];
+        maxPaymentWei_ = maxPaymentWei;
+        nextPaymentAt = lastPaymentAt == 0 ? 0 : lastPaymentAt + minPaymentInterval;
+        ccipConfigured = ccipRouter != address(0);
+        tokenBalance = ccipToken == address(0) ? 0 : IERC20Minimal(ccipToken).balanceOf(address(this));
+        maxCcipFeeWei_ = maxCcipFeeWei;
+        nextEvacuationAt = lastEvacuationAt == 0 ? 0 : lastEvacuationAt + minEvacuationInterval;
+    }
+    /// @notice Accept reports only from this workflow owner (and name, unless zero). Zero owner turns the check off.
+    function setWorkflowIdentity(address owner_, bytes10 name_) external {
+        if (msg.sender != owner) revert Unauthorized();
+        workflowOwner = owner_;
+        workflowName = name_;
+        emit WorkflowIdentitySet(owner_, name_);
+    }
     function setPayee(bytes32 payeeId, address payable payee) external {
         if (msg.sender != owner) revert Unauthorized();
         payees[payeeId] = payee;

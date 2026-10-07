@@ -13,7 +13,10 @@ const proc=Bun.spawn(['forge','build','--root','contracts'],{stdout:'inherit',st
 if(await proc.exited!==0) throw new Error('Contract compilation failed');
 const treasury=await deployLocalTreasury(publicClient,wallet);
 // Earlier vaults stay on chain with their receipts; keep their addresses so old evidence stays traceable.
-const previous=await Bun.file('contracts/deployment.local.json').json().catch(()=>null);
+// A restarted Anvil is a new chain: the old record points at nothing, so its history is dropped.
+const recorded=await Bun.file('contracts/deployment.local.json').json().catch(()=>null);
+const onThisChain=recorded?.address?((await publicClient.getCode({address:recorded.address}).catch(()=>undefined))?.length??0)>2:false;
+const previous=onThisChain?recorded:null;
 const previousDeployments=previous?[...(previous.previousDeployments??[]),{address:previous.address,forwarder:previous.forwarder,reportVersion:previous.reportVersion??1,deploymentHash:previous.deploymentHash,blockNumber:previous.blockNumber,createdAt:previous.createdAt}]:[];
 const deployment={...treasury,owner:account.address,chainId:31337,rpcUrl,mode:'local-evm-rehearsal',createdAt:new Date().toISOString(),previousDeployments};
 await Bun.write('contracts/deployment.local.json',JSON.stringify(deployment,null,2));

@@ -5,9 +5,9 @@ import {resolve} from 'node:path';
 import {specificationSchema,PRICE_URL,parsePrice,type ExecutionSpecification} from './spec';
 import {joinEvidenceChunks,EVIDENCE_CHUNK_TAG} from './evidence-log';
 import {
-  evaluateGraph,collectSources,sourceIdentity,describeSource,readsVault,explainNoop,encodeReportFor,reportRefusal,actionTerms,actionPauses,isSimulatedAction,runIdHash,payeeId,formatUsd,toBps,
-  NETWORKS,CCIP_DESTINATIONS,LENDING_REGISTRY,ccipExplorer,
-  type Source,type FeedSource,type ChainSource,type Observation,type ConditionEvidence,type PauseReport,type Reading,type VaultAction,type PolicyAction,
+  evaluateGraph,collectSources,sourceIdentity,describeSource,readsVault,explainNoop,encodeReportFor,reportRefusal,actionTerms,actionPauses,isSimulatedAction,runIdHash,payeeId,formatUsd,formatWei,toBps,termsFromTuple,
+  NETWORKS,CCIP_DESTINATIONS,LENDING_REGISTRY,ZERO_BYTES32,ccipExplorer,vaultTermsAbi,
+  type Source,type FeedSource,type ChainSource,type Observation,type ConditionEvidence,type PauseReport,type Reading,type VaultAction,type PolicyAction,type VaultTerms,
 } from './graph';
 
 /** Supplied by the backend, which owns RPC access for each source network. */
@@ -17,9 +17,15 @@ export type ExchangeFetcher=()=>Promise<Observation>;
 export type ExecutionMode='cre-local-simulation'|'local-evm-rehearsal'|'fixture-rehearsal';
 export type SimulatedOrder={simulated:true;venue:string;side:'sell';symbol:string;amount:number;referencePriceUsd:number;notionalUsd:number;referenceSource:string;observedAt:string;placedAt:string};
 export type SimulatedRebalance={simulated:true;venue:'mock-venue';asset:string;from:string;to:string;fraction:number;fromAprPercent?:number;toAprPercent?:number;placedAt:string};
-export interface VaultRead {address:string;chainId:number;paused:boolean;balanceWei:string;reportVersion:number|null;tokenBalance?:string}
+export interface VaultRead {address:string;chainId:number;paused:boolean;balanceWei:string;reportVersion:number|null;
+  /** terms(payeeId), read for a payment or an evacuation. */
+  terms?:VaultTerms;
+  /** CCIP token balance (also in terms); kept for evidence written before terms(). */
+  tokenBalance?:string}
+/** Which terms a run needs: the payee's, for a payment; the CCIP route's, for an evacuation. */
+export type TermsRequest={payee?:string};
 /** What the receiver did for this run, decoded from its own events. */
-export interface ReceiverEffects {paused?:boolean;sweptWei?:string;reserve?:string;paidWei?:string;payee?:string;payeeId?:string;ccipMessageId?:string;ccipAmount?:string;ccipFee?:string;destinationChainSelector?:string;ccipExplorerUrl?:string}
+export interface ReceiverEffects {paused?:boolean;movementFailed?:boolean;sweptWei?:string;reserve?:string;paidWei?:string;payee?:string;payeeId?:string;ccipMessageId?:string;ccipAmount?:string;ccipFee?:string;destinationChainSelector?:string;ccipExplorerUrl?:string}
 export interface TransactionEvidence {hash:string;blockNumber:number;status:string;receiverConfirmed:boolean;pausedAfter:boolean;effects?:ReceiverEffects}
 /** Fixture rehearsal: in-memory effects only. */
 export interface FixtureEffects {paused?:boolean;sweptEth?:number;paidEth?:number;payee?:string;evacuatedTokens?:number}
@@ -34,6 +40,9 @@ export interface ExecutionEvidence {
   root:boolean;
   decision:'act'|'noop';
   action:PolicyAction['type'];
+  /** Present when only the pause of a protective sweep or evacuation was sent: nothing could move. */
+  effectiveAction?:VaultAction;
+  degradedReason?:string;
   noopReason?:string;
   decidedAt:string;
   dryRun?:boolean;
@@ -55,7 +64,7 @@ export interface ExecutionEvidence {
 /** What a runner needs from the world. Each mode supplies its own; the decision logic is shared. */
 export interface PolicyEnvironment {
   mode:ExecutionMode;
-  readVault(options?:{tokenBalance?:boolean}):Promise<VaultRead>;
+  readVault(options?:{terms?:TermsRequest}):Promise<VaultRead>;
   readSource(source:Exclude<Source,{type:'vault-balance'}>):Promise<Observation>;
   /** Reference price for a simulated sell whose asset the policy did not read. */
   referencePrice?(symbol:string):Promise<Observation>;
@@ -71,14 +80,13 @@ const vaultAbi=parseAbi([
   'function paused() view returns (bool)',
   'function reportVersion() view returns (uint256)',
   'function processedRuns(bytes32) view returns (bool)',
-  'function ccipToken() view returns (address)',
   'function resume()',
   'event SpendingPaused(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,uint256 decidedAt)',
   'event ReserveSwept(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,address reserve,uint256 amount)',
   'event GrantStreamed(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,bytes32 payeeId,address payee,uint256 amount)',
   'event TreasuryEvacuated(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,bytes32 messageId,uint64 destinationChainSelector,address token,uint256 amount,uint256 fee)',
+  'event MovementFailed(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,uint256 action,bytes reason)',
 ]);
-const erc20BalanceAbi=parseAbi(['function balanceOf(address) view returns (uint256)']);
 const forwarderAbi=parseAbi(['function deliver(address receiver,bytes report)']);
 // Public Anvil development key; deliberately accepted only when chain ID is 31337.
 const LOCAL_DEV_KEY='0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
@@ -104,7 +112,8 @@ export async function executePolicy(input:ExecutionSpecification,env:PolicyEnvir
 
   let vault:VaultRead|null=null;
   if(readsVault(graph)) {
-    vault=await env.readVault({tokenBalance:graph.action.type==='evacuate'});
+    const action=graph.action;
+    vault=await env.readVault(action.type==='pay'?{terms:{payee:action.payee}}:action.type==='evacuate'?{terms:{}}:{});
     log(`Read vault ${vault.paused?'paused':'active'} on chain ${vault.chainId}`);
     if(!isSimulatedAction(graph.action)) {
       const refusal=reportRefusal(vault.reportVersion,graph.action.type);
@@ -124,12 +133,12 @@ export async function executePolicy(input:ExecutionSpecification,env:PolicyEnvir
   const readings:Record<string,Reading>=Object.fromEntries(observations.map(o=>[o.key,{value:o.value??o.usd,observedAt:o.observedAt}]));
   const nowMs=Date.now();
   const result=evaluateGraph(graph,{
-    readings,vaultPaused:vault?.paused??null,vaultBalanceEth:vault?Number(BigInt(vault.balanceWei))/1e18:null,
-    vaultTokenBalance:vault?.tokenBalance!==undefined?Number(BigInt(vault.tokenBalance))/1e18:null,exchangeMaxAgeSeconds:spec.maxAgeSeconds,
+    readings,vaultPaused:vault?.paused??null,vaultBalanceWei:vault?BigInt(vault.balanceWei):null,vaultTerms:vault?.terms??null,exchangeMaxAgeSeconds:spec.maxAgeSeconds,
   },nowMs);
   const evidence:ExecutionEvidence={
     runId:spec.runId,revision:spec.revision,policyHash:spec.policyHash,mode:env.mode,observations,vault,
     conditions:result.conditions,root:result.root,decision:result.decision,action:graph.action.type,decidedAt:new Date(nowMs).toISOString(),logs,
+    ...(result.effectiveAction?{effectiveAction:result.effectiveAction,degradedReason:result.degradedBy?.detail}:{}),
   };
   for(const c of result.conditions) log(`${c.passed?'PASS':'STOP'} ${c.role==='node'?c.nodeId:c.nodeId.replace(/^guard:/,'')}: ${c.detail}`);
   if(result.decision==='noop') {evidence.noopReason=explainNoop(result);log(`No action. ${evidence.noopReason}`);return evidence;}
@@ -154,7 +163,9 @@ export async function executePolicy(input:ExecutionSpecification,env:PolicyEnvir
     log(`SIMULATED rebalance of ${toBps(action.fraction)/100}% ${action.asset} from ${LENDING_REGISTRY[action.from].label} to ${LENDING_REGISTRY[action.to].label}; no transaction, no asset moved`);
     return evidence;
   }
-  const action=graph.action;
+  // The action as written, or only its pause when nothing could move.
+  const action=result.effectiveAction??graph.action;
+  if(result.effectiveAction) log(`Sending only the pause: ${result.degradedBy?.detail}`);
   if(spec.broadcast===false) {evidence.dryRun=true;log('Policy passed; dry run, no report submitted');return evidence;}
   if(env.fixtureAct) {
     const effects=await env.fixtureAct(action);
@@ -181,8 +192,9 @@ const describeFixture=(effects:FixtureEffects)=>[
   effects.paidEth!==undefined&&`${effects.paidEth} ETH paid to the ${effects.payee}`,effects.evacuatedTokens!==undefined&&`${effects.evacuatedTokens} CCIP-BnM queued for CCIP`,
 ].filter(Boolean).join(', ')||'no change';
 export const describeEffects=(effects:ReceiverEffects|undefined)=>!effects?'no receiver effects decoded':[
-  effects.paused&&'spending paused',effects.sweptWei&&`${Number(effects.sweptWei)/1e18} ETH swept to reserve ${effects.reserve}`,
-  effects.paidWei&&`${Number(effects.paidWei)/1e18} ETH paid to ${effects.payee}`,effects.ccipMessageId&&`CCIP message ${effects.ccipMessageId}`,
+  effects.paused&&'spending paused',effects.sweptWei&&`${formatWei(BigInt(effects.sweptWei))} swept to reserve ${effects.reserve}`,
+  effects.paidWei&&`${formatWei(BigInt(effects.paidWei))} paid to ${effects.payee}`,effects.ccipMessageId&&`CCIP message ${effects.ccipMessageId}`,
+  effects.movementFailed&&'the movement failed on chain (MovementFailed)',
 ].filter(Boolean).join(', ')||'no change';
 
 /** What must be true of a delivered report for the action to count as done. */
@@ -198,6 +210,7 @@ export function effectFailures(action:VaultAction,tx:TransactionEvidence):string
   if(action.type==='sweep'&&!(effects.sweptWei&&BigInt(effects.sweptWei)>0n)) failures.push('no ReserveSwept event for this run');
   if(action.type==='pay'&&(effects.paidWei!==terms.amount.toString()||effects.payeeId?.toLowerCase()!==payeeId(action.payee).toLowerCase())) failures.push('no GrantStreamed event paying this payee this amount');
   if(action.type==='evacuate'&&!effects.ccipMessageId) failures.push('no TreasuryEvacuated event with a CCIP message ID');
+  if(effects.movementFailed) failures.push(`the ${action.type} itself failed on chain (MovementFailed); the pause stands`);
   return failures;
 }
 
@@ -213,6 +226,7 @@ export function receiverEffects(logs:readonly {address:string;data:Hex;topics:re
     if(!('runId' in args)||args.runId!==id||args.revision!==BigInt(revision)||String(args.policyHash).toLowerCase()!==policyHash.toLowerCase()) continue;
     effects.matched=true;
     if(event.eventName==='SpendingPaused') effects.paused=true;
+    if(event.eventName==='MovementFailed') effects.movementFailed=true;
     if(event.eventName==='ReserveSwept') {effects.sweptWei=args.amount.toString();effects.reserve=args.reserve;}
     if(event.eventName==='GrantStreamed') {effects.paidWei=args.amount.toString();effects.payee=args.payee;effects.payeeId=args.payeeId;}
     if(event.eventName==='TreasuryEvacuated') {
@@ -239,18 +253,19 @@ async function receiptEvidence(client:PublicClient,vault:Address,receipt:{transa
   return {hash:receipt.transactionHash,blockNumber:Number(receipt.blockNumber),status:receipt.status,receiverConfirmed:Boolean(processed),pausedAfter,effects};
 }
 
-export async function readVaultState(client:PublicClient,address:Address,chainId:number,options:{tokenBalance?:boolean}={}):Promise<VaultRead> {
+export async function readVaultState(client:PublicClient,address:Address,chainId:number,options:{terms?:TermsRequest}={}):Promise<VaultRead> {
   const [paused,balance,reportVersion]=await Promise.all([
     client.readContract({address,abi:vaultAbi,functionName:'paused'}),
     client.getBalance({address}),
     client.readContract({address,abi:vaultAbi,functionName:'reportVersion'}).then(Number).catch(()=>null),
   ]);
-  let tokenBalance:string|undefined;
-  if(options.tokenBalance) {
-    const token=await client.readContract({address,abi:vaultAbi,functionName:'ccipToken'}).catch(()=>null);
-    tokenBalance=token&&token!=='0x0000000000000000000000000000000000000000'?(await client.readContract({address:token,abi:erc20BalanceAbi,functionName:'balanceOf',args:[address]})).toString():'0';
+  let terms:VaultTerms|undefined;
+  // Only v3 vaults have terms(); older ones are refused before a payment or evacuation anyway.
+  if(options.terms&&reportVersion===3) {
+    const id=options.terms.payee?payeeId(options.terms.payee):ZERO_BYTES32;
+    terms=termsFromTuple(await client.readContract({address,abi:vaultTermsAbi,functionName:'terms',args:[id]}) as any);
   }
-  return {address,chainId,paused,balanceWei:balance.toString(),reportVersion,...(tokenBalance!==undefined?{tokenBalance}:{})};
+  return {address,chainId,paused,balanceWei:balance.toString(),reportVersion,...(terms?{terms,tokenBalance:terms.tokenBalance}:{})};
 }
 
 export async function fetchExchangeTrade():Promise<Observation> {
@@ -404,7 +419,8 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
   if(evidence.runId!==spec.runId||evidence.revision!==spec.revision||evidence.policyHash!==spec.policyHash) throw new Error('CRE execution evidence correlation failed');
   evidence.logs=cleanOutput.split('\n').filter(line=>line.includes('ORIGINS_')&&!line.includes(EVIDENCE_CHUNK_TAG)).map(line=>line.slice(line.indexOf('ORIGINS_')));
   for(const message of evidence.logs) progress?.(message.length>240?`${message.slice(0,240)}…`:message);
-  const action=spec.graph.action as VaultAction;
+  // Verify what was actually sent: the action, or only its pause when nothing could move.
+  const action=evidence.effectiveAction??spec.graph.action as VaultAction;
   if(evidence.transaction?.hash) {
     const client=createPublicClient({chain:sepolia,transport:http(process.env.ORIGINS_SEPOLIA_RPC||'https://ethereum-sepolia-rpc.publicnode.com')});
     const receipt=await client.waitForTransactionReceipt({hash:evidence.transaction.hash as Hex,timeout:90000});
@@ -451,6 +467,7 @@ const diagnosticAbi=parseAbi([
   'function forwarder() view returns (address)',
   'error Unauthorized()','error InvalidReport()','error UnsupportedReport()','error WrongTarget()','error UnsupportedAction()','error StaleReport()',
   'error SpendingIsPaused()','error InvalidAmount()','error NothingToMove()','error UnknownPayee()','error PaymentTooSoon()','error EvacuationDisabled()','error WrongDestination()','error InsufficientFee()','error TransferFailed()',
+  'error FeeTooHigh()','error EvacuationTooSoon()','error UnauthorizedWorkflow()',
 ]);
 const revertData=(error:any):Hex|undefined=>{
   for(let e=error;e;e=e.cause) {
@@ -476,7 +493,7 @@ export async function diagnoseReport(client:PublicClient,vault:Address,receipt:{
   const trusted=await client.readContract({address:vault,abi:diagnosticAbi,functionName:'forwarder'});
   notes.push(`vault trusts forwarder ${trusted}${receipt.to&&receipt.to.toLowerCase()!==trusted.toLowerCase()?` — but the CRE transaction went to ${receipt.to}; redeploy with ORIGINS_SEPOLIA_FORWARDER=${receipt.to}`:''}`);
   const version=evidence.vault?.reportVersion??await client.readContract({address:vault,abi:vaultAbi,functionName:'reportVersion'}).then(Number).catch(()=>null);
-  const report=encodeReportFor(version,spec.graph.action as VaultAction,{target:vault,chainId:NETWORKS['ethereum-sepolia'].chainId,runId:spec.runId,revision:spec.revision,policyHash:spec.policyHash as Hex,decidedAt:Math.floor(Date.parse(evidence.decidedAt)/1000)});
+  const report=encodeReportFor(version,evidence.effectiveAction??spec.graph.action as VaultAction,{target:vault,chainId:NETWORKS['ethereum-sepolia'].chainId,runId:spec.runId,revision:spec.revision,policyHash:spec.policyHash as Hex,decidedAt:Math.floor(Date.parse(evidence.decidedAt)/1000)});
   for(const sender of [...new Set([trusted,receipt.to].filter(Boolean) as string[])]) {
     try {
       await client.call({account:sender as Address,to:vault,data:encodeFunctionData({abi:diagnosticAbi,functionName:'onReport',args:['0x',report]}),blockNumber:receipt.blockNumber-1n});

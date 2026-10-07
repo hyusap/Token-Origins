@@ -18,7 +18,7 @@ export const solanaExplorer = (signature: string, cluster = 'devnet') => `https:
 
 const discriminator = (name: string) => hexToBytes(sha256(toBytes(name))).slice(0, 8);
 const IX = { initialize: discriminator('global:initialize'), payGrant: discriminator('global:pay_grant'), resume: discriminator('global:resume'), configureReserve: discriminator('global:configure_reserve') };
-const EVENT = { paused: discriminator('event:SpendingPaused'), resumed: discriminator('event:SpendingResumed'), grant: discriminator('event:GrantPaid'), swept: discriminator('event:ReserveSwept') };
+const EVENT = { paused: discriminator('event:SpendingPaused'), resumed: discriminator('event:SpendingResumed'), grant: discriminator('event:GrantPaid'), swept: discriminator('event:ReserveSwept'), sweepFailed: discriminator('event:SweepFailed') };
 const VAULT_ACCOUNT = discriminator('account:Vault');
 const TREASURY_ACCOUNT = discriminator('account:TreasuryConfig');
 const equal = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -32,8 +32,8 @@ export const forwarderAuthority = (forwarderProgram: PublicKey, state: PublicKey
 export const treasuryPda = (vault: PublicKey, programId = SOTTO_VAULT_PROGRAM_ID) =>
   PublicKey.findProgramAddressSync([Buffer.from('treasury'), vault.toBuffer()], programId)[0];
 
-/** Owner-only, once per vault: where sweeps may send SOL, and the largest share per report. */
-export function configureReserveIx(vault: PublicKey, owner: PublicKey, reserve: PublicKey, maxSweepBps: number, programId = SOTTO_VAULT_PROGRAM_ID) {
+/** Owner-only, once per vault: where sweeps may send SOL, the largest share per report, and the forwarder state sweeps must arrive through. */
+export function configureReserveIx(vault: PublicKey, owner: PublicKey, reserve: PublicKey, maxSweepBps: number, forwarderState: PublicKey = SIMULATION_FORWARDER.state, programId = SOTTO_VAULT_PROGRAM_ID) {
   const bps = Buffer.alloc(2); bps.writeUInt16LE(maxSweepBps);
   return new TransactionInstruction({
     programId,
@@ -41,17 +41,17 @@ export function configureReserveIx(vault: PublicKey, owner: PublicKey, reserve: 
       { pubkey: vault, isSigner: false, isWritable: false }, { pubkey: treasuryPda(vault, programId), isSigner: false, isWritable: true },
       { pubkey: owner, isSigner: true, isWritable: true }, { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    data: Buffer.concat([IX.configureReserve, reserve.toBuffer(), bps]),
+    data: Buffer.concat([IX.configureReserve, reserve.toBuffer(), bps, forwarderState.toBuffer()]),
   });
 }
-export interface TreasuryConfig { vault: string; reserve: string; maxSweepBps: number }
+export interface TreasuryConfig { vault: string; reserve: string; forwarderState: string; maxSweepBps: number }
 /** The vault's sweep configuration, or null when the program predates sweeps or it was never configured. */
 export async function readTreasuryConfig(connection: Connection, vault: PublicKey, commitment: Commitment = 'confirmed'): Promise<TreasuryConfig | null> {
   const info = await connection.getAccountInfo(treasuryPda(vault), commitment);
   if (!info || !info.owner.equals(SOTTO_VAULT_PROGRAM_ID)) return null;
   const data = new Uint8Array(info.data);
-  if (data.length < 8 + 32 + 32 + 2 || !equal(data.slice(0, 8), TREASURY_ACCOUNT)) return null;
-  return { vault: new PublicKey(data.slice(8, 40)).toBase58(), reserve: new PublicKey(data.slice(40, 72)).toBase58(), maxSweepBps: new DataView(data.buffer, data.byteOffset).getUint16(72, true) };
+  if (data.length < 8 + 32 + 32 + 32 + 2 || !equal(data.slice(0, 8), TREASURY_ACCOUNT)) return null;
+  return { vault: new PublicKey(data.slice(8, 40)).toBase58(), reserve: new PublicKey(data.slice(40, 72)).toBase58(), forwarderState: new PublicKey(data.slice(72, 104)).toBase58(), maxSweepBps: new DataView(data.buffer, data.byteOffset).getUint16(104, true) };
 }
 
 export function initializeIx(vault: PublicKey, owner: PublicKey, forwarderProgram: PublicKey, maxReportAgeSeconds: number, programId = SOTTO_VAULT_PROGRAM_ID) {
@@ -103,7 +103,8 @@ export type SolanaVaultEvent =
   | { name: 'SpendingPaused'; vault: string; runId: Hex; revision: number; policyHash: Hex; decidedAt: number }
   | { name: 'SpendingResumed'; vault: string }
   | { name: 'GrantPaid'; vault: string; recipient: string; amount: number }
-  | { name: 'ReserveSwept'; vault: string; runId: Hex; revision: number; policyHash: Hex; reserve: string; amount: number };
+  | { name: 'ReserveSwept'; vault: string; runId: Hex; revision: number; policyHash: Hex; reserve: string; amount: number }
+  | { name: 'SweepFailed'; vault: string; runId: Hex; revision: number; policyHash: Hex };
 /** Anchor events appear in transaction logs as "Program data: <base64>". */
 export function parseVaultEvents(logs: readonly string[]): SolanaVaultEvent[] {
   const events: SolanaVaultEvent[] = [];
@@ -120,6 +121,8 @@ export function parseVaultEvents(logs: readonly string[]): SolanaVaultEvent[] {
     else if (equal(head, EVENT.grant)) events.push({ name: 'GrantPaid', vault: key(8), recipient: key(40), amount: Number(view.getBigUint64(72, true)) });
     else if (equal(head, EVENT.swept) && data.length >= 8 + 32 + 32 + 8 + 32 + 32 + 8)
       events.push({ name: 'ReserveSwept', vault: key(8), runId: bytesToHex(data.slice(40, 72)), revision: Number(view.getBigUint64(72, true)), policyHash: bytesToHex(data.slice(80, 112)), reserve: key(112), amount: Number(view.getBigUint64(144, true)) });
+    else if (equal(head, EVENT.sweepFailed) && data.length >= 8 + 32 + 32 + 8 + 32)
+      events.push({ name: 'SweepFailed', vault: key(8), runId: bytesToHex(data.slice(40, 72)), revision: Number(view.getBigUint64(72, true)), policyHash: bytesToHex(data.slice(80, 112)) });
   }
   return events;
 }
@@ -143,7 +146,9 @@ export async function verifySolanaPause(connection: Connection, signature: strin
   const ours = (e: SolanaVaultEvent) => 'runId' in e && e.vault === vault.toBase58() && e.runId === runIdHash(runId) && e.revision === revision && e.policyHash.toLowerCase() === policyHash.toLowerCase();
   const sweep = events.find((e): e is Extract<SolanaVaultEvent, { name: 'ReserveSwept' }> => e.name === 'ReserveSwept' && ours(e));
   // A pause event is only expected when the vault was active; a sweep always emits.
-  const event = (!expect.pause || events.some((e) => e.name === 'SpendingPaused' && ours(e))) && (!expect.sweep || Boolean(sweep));
+  // A pause emits only when the vault was active; "already paused" with this run recorded counts too.
+  const paused = events.some((e) => e.name === 'SpendingPaused' && ours(e)) || logs.some((line) => line.includes('already paused'));
+  const event = (!expect.pause || paused) && (!expect.sweep || Boolean(sweep));
   const state = await readSolanaVault(connection, vault);
   return { signature, succeeded, event, pausedAfter: expect.pause ? state.paused : true, lastRunMatches: state.lastRun === runIdHash(runId), slot: tx.slot, ...(tx.meta?.err ? { error: JSON.stringify(tx.meta.err) } : {}), logs, ...(sweep ? { swept: { reserve: sweep.reserve, lamports: sweep.amount } } : {}) };
 }

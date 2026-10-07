@@ -11,7 +11,7 @@ import bs58 from "bs58";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SOTTO_VAULT_PROGRAM_ID, SOLANA_DEVNET_RPC, configureReserveIx, readSolanaVault, readTreasuryConfig, type TreasuryConfig } from "../cre/solana-vault";
+import { SOTTO_VAULT_PROGRAM_ID, SIMULATION_FORWARDER, SOLANA_DEVNET_RPC, configureReserveIx, readSolanaVault, readTreasuryConfig, type TreasuryConfig } from "../cre/solana-vault";
 
 export interface EnableSweepOptions {
   connection: Connection;
@@ -21,6 +21,8 @@ export interface EnableSweepOptions {
   reserve: PublicKey;
   binary?: string;
   programId?: PublicKey;
+  /** The forwarder state sweeps must arrive through (default: CRE's devnet simulation forwarder). */
+  forwarderState?: PublicKey;
   log?: (message: string) => void;
 }
 /** Upgrades the program if its deployed bytes differ from the local build, then configures the vault's reserve. */
@@ -74,7 +76,7 @@ export async function enableSweep(options: EnableSweepOptions): Promise<{ upgrad
   let config = await readTreasuryConfig(connection, vault);
   if (config) log(`Vault ${vault.toBase58()} already sweeps to ${config.reserve} (at most ${config.maxSweepBps / 100}% per report).`);
   else {
-    const signature = await sendAndConfirmTransaction(connection, new Transaction().add(configureReserveIx(vault, owner.publicKey, reserve, 10_000, programId)), [owner], { commitment: "confirmed" });
+    const signature = await sendAndConfirmTransaction(connection, new Transaction().add(configureReserveIx(vault, owner.publicKey, reserve, 10_000, options.forwarderState ?? SIMULATION_FORWARDER.state, programId)), [owner], { commitment: "confirmed" });
     config = await readTreasuryConfig(connection, vault);
     if (!config || config.reserve !== reserve.toBase58()) throw new Error("Treasury config did not verify");
     log(`Vault ${vault.toBase58()} now sweeps to ${config.reserve} (configure tx ${signature}).`);

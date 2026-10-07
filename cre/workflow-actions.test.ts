@@ -9,7 +9,7 @@ import {chainReadCost} from './onchain-reads';
 import {encodeSolanaActionReport,encodeSolanaPauseReport} from './solana-report';
 
 const vaultAddress='0x0000000000000000000000000000000000001234';
-const tokenAddress='0x0000000000000000000000000000000000005678';
+const granteeAddress='0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
 const sepolia=BigInt(NETWORKS['ethereum-sepolia'].chainSelector);
 const mainnet=BigInt(NETWORKS['ethereum-mainnet'].chainSelector);
 const baseConfig={vaultAddress,chainSelector:NETWORKS['ethereum-sepolia'].chainSelector,gasLimit:'2000000'};
@@ -23,19 +23,22 @@ const payload=(input:unknown):HTTPPayload=>({$typeName:'capabilities.networking.
 const v3Layout=parseAbiParameters('uint256,address,uint256,bytes32,uint256,bytes32,uint256,uint256,uint256,bytes32,uint256,uint64');
 const feedAbi=parseAbi(['function latestRoundData() view returns (uint80 roundId,int256 answer,uint256 startedAt,uint256 updatedAt,uint80 answeredInRound)']);
 
-function setup({reportVersion=3,paused=false,balanceWei=2_000_000_000_000_000_000n,tokens=3_000_000_000_000_000_000n,config={} as Record<string,unknown>}={}) {
+function setup({reportVersion=3,paused=false,balanceWei=2_000_000_000_000_000_000n,tokens=3_000_000_000_000_000_000n,ccip=true,config={} as Record<string,unknown>}={}) {
   const runtime=newTestRuntime(null,{timeProvider:()=>now},{...baseConfig,...config});
   const http=HttpActionsMock.testInstance();
   let httpCalls=0;
   http.sendRequest=()=>{httpCalls++;return {statusCode:200,body:Buffer.from(JSON.stringify({price:'2500',time:'2026-10-06T04:39:55Z'})).toString('base64')};};
   const evm=EvmMock.testInstance(sepolia);
-  const vault=addContractMock(evm,{address:vaultAddress,abi:parseAbi(['function paused() view returns (bool)','function reportVersion() view returns (uint256)','function ccipToken() view returns (address)'])});
+  const vault=addContractMock(evm,{address:vaultAddress,abi:parseAbi(['function paused() view returns (bool)','function reportVersion() view returns (uint256)',
+    'function terms(bytes32) view returns (bool,address,uint256,uint256,bool,uint256,uint256,uint256)'])});
   let vaultReads=0;
   vault.paused=()=>{vaultReads++;return paused;};
   vault.reportVersion=()=>{vaultReads++;return BigInt(reportVersion);};
-  vault.ccipToken=()=>{vaultReads++;return tokenAddress;};
-  const token=addContractMock(evm,{address:tokenAddress,abi:parseAbi(['function balanceOf(address) view returns (uint256)'])});
-  token.balanceOf=()=>tokens;
+  vault.terms=(...args:readonly unknown[])=>{
+    vaultReads++;
+    const payee=args[0]===payeeId('grantee')?granteeAddress:'0x0000000000000000000000000000000000000000';
+    return [paused,payee,50_000_000_000_000_000n,0n,ccip,ccip?tokens:0n,10_000_000_000_000_000n,0n];
+  };
   evm.balanceAt=()=>({balance:bigintToProtoBigInt(balanceWei)});
   const writes:Uint8Array[]=[];
   evm.writeReport=(request)=>{writes.push(request.report!.rawReport!);return {txStatus:'TX_STATUS_SUCCESS',receiverContractExecutionStatus:'RECEIVER_CONTRACT_EXECUTION_STATUS_SUCCESS',txHash:Buffer.alloc(32,2).toString('base64')};};
@@ -111,7 +114,7 @@ test('treasury value reads the vault balance once and multiplies it by the ETH f
   expect(t.writes).toHaveLength(1);
 });
 
-test('pay sends the payee id and wei amount; an evacuation reads the vault token balance and names the CCIP lane',()=>{
+test('pay sends the payee id and wei amount; an evacuation reads the vault terms once and names the CCIP lane',()=>{
   const t=setup();
   mainnetReads();
   const ethLow=(action:unknown)=>specFor({nodes:[{id:'eth',kind:'price',source:{type:'chainlink-feed',symbol:'ETH'}},{id:'low',kind:'compare',input:'eth',op:'<',value:3000}],root:'low',action},{runId:`run-${Math.random().toString(36).slice(2)}`});
@@ -120,19 +123,23 @@ test('pay sends the payee id and wei amount; an evacuation reads the vault token
   expect([pay[6],pay[8],pay[9],pay[10]]).toEqual([3n,0n,payeeId('grantee'),10_000_000_000_000_000n]);
   const before=t.vaultReads();
   const result=JSON.parse(onHttp(t.runtime,payload(ethLow({type:'evacuate',destination:'base-sepolia',fraction:1}))));
-  expect(t.vaultReads()-before).toBe(3); // reportVersion, paused, ccipToken
+  expect(t.vaultReads()-before).toBe(3); // reportVersion, paused, terms
   expect(result.vault.tokenBalance).toBe('3000000000000000000');
+  expect(result.vault.terms).toMatchObject({ccipConfigured:true,maxCcipFeeWei:'10000000000000000',nextEvacuationAt:0});
   const evacuate=lastV3(t.writes);
   expect([evacuate[6],evacuate[8],evacuate[10],evacuate[11]]).toEqual([4n,1n,10000n,BigInt(CCIP_DESTINATIONS['base-sepolia'].chainSelector)]);
 });
 
-test('guards stop real actions before any write: no funds, no tokens, paused spending for a payment',()=>{
+test('guards stop real actions before any write: no funds, no tokens, paused spending, unknown payee, no CCIP route',()=>{
   mainnetReads();
   const ethLow=(action:unknown)=>specFor({nodes:[{id:'eth',kind:'price',source:{type:'chainlink-feed',symbol:'ETH'}},{id:'low',kind:'compare',input:'eth',op:'<',value:3000}],root:'low',action});
   for(const [opts,action,reason] of [
-    [{balanceWei:0n},{type:'sweep',fraction:1},'Vault holds no ETH to sweep.'],
-    [{tokens:0n},{type:'evacuate',destination:'base-sepolia',fraction:1},'Vault holds no CCIP-BnM to evacuate.'],
+    [{balanceWei:0n},{type:'sweep',fraction:1,pause:false},'Vault holds no ETH to sweep.'],
+    [{tokens:0n},{type:'evacuate',destination:'base-sepolia',fraction:1,pause:false},'Vault holds no CCIP-BnM to evacuate.'],
+    [{ccip:false},{type:'evacuate',destination:'base-sepolia',fraction:1,pause:false},'This vault has no CCIP route configured.'],
     [{paused:true},{type:'pay',payee:'grantee',amountEth:0.01},'Vault spending is paused; no payment is made.'],
+    [{},{type:'pay',payee:'insured',amountEth:0.01},'No payee named "insured" is registered on the vault; the owner registers payees.'],
+    [{},{type:'pay',payee:'grantee',amountEth:0.06},"0.06 ETH is over the vault's 0.05 ETH payment cap."],
   ] as const) {
     const t=setup(opts as any);
     const result=JSON.parse(onHttp(t.runtime,payload(ethLow(action))));
@@ -140,6 +147,17 @@ test('guards stop real actions before any write: no funds, no tokens, paused spe
     expect(result.noopReason).toBe(reason);
     expect(t.writes).toHaveLength(0);
   }
+});
+
+test('a protective sweep with nothing to move sends only the pause, and the evidence says so',()=>{
+  mainnetReads();
+  const t=setup({balanceWei:0n});
+  const spec=specFor({nodes:[{id:'eth',kind:'price',source:{type:'chainlink-feed',symbol:'ETH'}},{id:'low',kind:'compare',input:'eth',op:'<',value:3000}],root:'low',action:{type:'sweep',fraction:1}});
+  const result=JSON.parse(onHttp(t.runtime,payload(spec)));
+  expect(result).toMatchObject({decision:'act',action:'sweep',effectiveAction:{type:'pause-vault'},degradedReason:'Vault holds no ETH to sweep'});
+  expect(result.report).toMatchObject({action:1,flags:0,amount:'0'});
+  const [,,,,,policy,action]=lastV3(t.writes);
+  expect([policy,action]).toEqual([spec.policyHash,1n]);
 });
 
 test('a v2 vault still gets v2 pause reports, and refuses every new action before reading sources',()=>{

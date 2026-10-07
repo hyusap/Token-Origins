@@ -4,7 +4,8 @@
 // The key must belong to a funded Sepolia test wallet; it becomes the vault owner
 // (the only address that can resume spending or register payees). It is read from
 // the environment only. Optional:
-//   ORIGINS_RESERVE_ADDRESS   where sweeps and CCIP evacuations go (default: the owner)
+//   ORIGINS_RESERVE_ADDRESS   where sweeps and CCIP evacuations go (default: the owner; the
+//                             same address receives the bridged tokens on Base Sepolia)
 //   ORIGINS_GRANTEE_ADDRESS   payee "grantee" (default: the owner)
 //   ORIGINS_INSURED_ADDRESS   payee "insured" (default: the owner)
 //   ORIGINS_VAULT_FUND_ETH    ETH sent to the vault at deploy (default 0.01)
@@ -35,10 +36,12 @@ const pick = (name: string) => {
 const reserve = pick("ORIGINS_RESERVE_ADDRESS");
 const payees = { grantee: pick("ORIGINS_GRANTEE_ADDRESS"), insured: pick("ORIGINS_INSURED_ADDRESS") };
 const fund = parseEther(process.env.ORIGINS_VAULT_FUND_ETH || "0.01");
-// Bounds every report is held to, fixed at deploy.
+// Bounds every report is held to, fixed at deploy. A CCIP evacuation pays at most
+// 0.005 ETH in fees and runs at most once every 5 minutes.
 const limits = {
   reserve, maxSweepBps: 10_000n, maxPaymentWei: parseEther("0.002"), minPaymentInterval: 60n,
   ccipRouter: CCIP_SEPOLIA.router as Address, ccipToken: CCIP_SEPOLIA.bnm as Address, ccipDestination: BigInt(CCIP_DESTINATIONS["base-sepolia"].chainSelector),
+  ccipReceiver: reserve, maxCcipFeeWei: parseEther("0.005"), minEvacuationInterval: 300n,
 };
 
 const client = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
@@ -90,7 +93,9 @@ const previous = await Bun.file("contracts/deployment.sepolia.json").json().catc
 const deployment = {
   address, forwarder, owner, chainId: 11155111, rpcUrl, mode: "cre-sepolia", reportVersion: Number(version),
   maxReportAgeSeconds: Number(maxReportAge), reserve, payees, maxSweepBps: Number(limits.maxSweepBps), maxPaymentWei: limits.maxPaymentWei.toString(),
-  minPaymentIntervalSeconds: Number(limits.minPaymentInterval), ccip: { router: limits.ccipRouter, token: limits.ccipToken, destination: "base-sepolia", destinationChainSelector: limits.ccipDestination.toString(), tokenBalance: tokens.toString() },
+  minPaymentIntervalSeconds: Number(limits.minPaymentInterval),
+  ccip: { router: limits.ccipRouter, token: limits.ccipToken, destination: "base-sepolia", destinationChainSelector: limits.ccipDestination.toString(), receiver: limits.ccipReceiver,
+    maxFeeWei: limits.maxCcipFeeWei.toString(), minEvacuationIntervalSeconds: Number(limits.minEvacuationInterval), tokenBalance: tokens.toString() },
   fundedWei: fund.toString(), deploymentHash: hash, blockNumber: Number(receipt.blockNumber),
   explorer: `${NETWORKS["ethereum-sepolia"].explorer}/address/${address}`, createdAt: new Date().toISOString(),
   // Earlier vaults stay on chain with their receipts; recorded evidence keeps pointing at them.

@@ -6,10 +6,10 @@ import { encodeFunctionData, decodeFunctionResult, parseAbi, zeroAddress, type A
 import { z } from 'zod';
 import { specificationSchema, PRICE_URL, parsePrice } from '../spec';
 import { evidenceChunks } from '../evidence-log';
-import { readChainSourceSync, chainReadCost, erc20Abi } from '../onchain-reads';
+import { readChainSourceSync, chainReadCost } from '../onchain-reads';
 import {
   evaluateGraph, collectSources, sourceIdentity, describeSource, explainNoop, encodeReportFor, reportRefusal, actionTerms, actionPauses, isSimulatedAction, toBps,
-  NETWORKS, ACTION_SWEEP, ACTION_PAUSE, FLAG_PAUSE, type Observation, type Reading, type VaultAction, type Source,
+  payeeId, termsFromTuple, vaultTermsAbi, NETWORKS, ACTION_SWEEP, ACTION_PAUSE, FLAG_PAUSE, ZERO_BYTES32, type Observation, type Reading, type VaultAction, type VaultTerms, type Source,
 } from '../graph';
 
 const VAULT_NETWORK = 'ethereum-sepolia' as const;
@@ -35,7 +35,7 @@ export const configSchema = z.object({
   watch: z.object({ schedule: z.string().min(1).max(64), spec: z.unknown() }).strict().optional(),
 });
 export type Config = z.infer<typeof configSchema>;
-const vaultAbi = parseAbi(['function paused() view returns (bool)', 'function reportVersion() view returns (uint256)', 'function ccipToken() view returns (address)']);
+const vaultAbi = parseAbi(['function paused() view returns (bool)', 'function reportVersion() view returns (uint256)']);
 /** CRE's per-execution EVM read quota. */
 const READ_LIMIT = 15;
 
@@ -60,7 +60,8 @@ export function onCron(runtime: Runtime<Config>, _payload: CronPayload): string 
 /**
  * The CRE side of the shared decision path in cre/runner.ts. Inputs are read
  * through DON capabilities; evaluation, guards and the report layout come from
- * cre/graph.ts. Reads: up to 5 vault calls plus at most 2 per source
+ * cre/graph.ts. Reads: up to 4 vault calls (version, paused, balance, and
+ * terms() for a payment or evacuation) plus at most 2 per source
  * (≤ MAX_SOURCES), inside the 15-read quota.
  */
 function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | 'cron'): string {
@@ -87,7 +88,7 @@ function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | '
   const vaultAddress = runtime.config.vaultAddress as Address;
   const vaultSelector = runtime.config.chainSelector;
   const vaultChainId = NETWORKS[VAULT_NETWORK].chainId;
-  const vaultCall = (functionName: 'paused' | 'reportVersion' | 'ccipToken') =>
+  const vaultCall = (functionName: 'paused' | 'reportVersion') =>
     call(vaultSelector, vaultAddress, encodeFunctionData({ abi: vaultAbi, functionName }));
   let reportVersion: number | null = null;
   try {
@@ -102,10 +103,11 @@ function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | '
   reads++;
   const balance = clientFor(vaultSelector).balanceAt(runtime, { account: vaultAddress, blockNumber: LATEST_BLOCK_NUMBER }).result();
   const balanceWei = balance.balance ? protoBigIntToBigint(balance.balance) : 0n;
-  let tokenBalance: bigint | undefined;
-  if (action.type === 'evacuate') {
-    const token = decodeFunctionResult({ abi: vaultAbi, functionName: 'ccipToken', data: vaultCall('ccipToken') });
-    tokenBalance = decodeFunctionResult({ abi: erc20Abi, functionName: 'balanceOf', data: call(vaultSelector, token, encodeFunctionData({ abi: erc20Abi, functionName: 'balanceOf', args: [vaultAddress] })) });
+  // One read of everything the vault will check before it pays or bridges.
+  let terms: VaultTerms | undefined;
+  if (action.type === 'pay' || action.type === 'evacuate') {
+    const args = [action.type === 'pay' ? payeeId(action.payee) : ZERO_BYTES32] as const;
+    terms = termsFromTuple(decodeFunctionResult({ abi: vaultTermsAbi, functionName: 'terms', data: call(vaultSelector, vaultAddress, encodeFunctionData({ abi: vaultTermsAbi, functionName: 'terms', args })) }));
   }
 
   const fetchedAt = runtime.now().toISOString();
@@ -132,21 +134,23 @@ function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | '
   const readings: Record<string, Reading> = Object.fromEntries(observations.map((o) => [o.key, { value: o.value, observedAt: o.observedAt }]));
   const nowMs = runtime.now().getTime();
   const result = evaluateGraph(graph, {
-    readings, vaultPaused: paused, vaultBalanceEth: Number(balanceWei) / 1e18,
-    vaultTokenBalance: tokenBalance === undefined ? null : Number(tokenBalance) / 1e18,
+    readings, vaultPaused: paused, vaultBalanceWei: balanceWei, vaultTerms: terms ?? null,
     exchangeMaxAgeSeconds: spec.maxAgeSeconds,
   }, nowMs);
+  // What is actually sent: the action as written, or only its pause when nothing can move.
+  const sent = result.effectiveAction ?? action;
   const evidence: any = {
     runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash, mode: 'cre-local-simulation', trigger, observations,
-    vault: { address: vaultAddress, chainId: vaultChainId, paused, balanceWei: balanceWei.toString(), reportVersion, ...(tokenBalance !== undefined ? { tokenBalance: tokenBalance.toString() } : {}) },
+    vault: { address: vaultAddress, chainId: vaultChainId, paused, balanceWei: balanceWei.toString(), reportVersion, ...(terms ? { terms, tokenBalance: terms.tokenBalance } : {}) },
     conditions: result.conditions, root: result.root, decision: result.decision, action: action.type, decidedAt: new Date(nowMs).toISOString(), logs: [],
+    ...(result.effectiveAction ? { effectiveAction: result.effectiveAction, degradedReason: result.degradedBy?.detail } : {}),
   };
   if (result.decision === 'noop') evidence.noopReason = explainNoop(result);
   if (result.decision === 'act' && spec.broadcast === false) evidence.dryRun = true;
   if (result.decision === 'act' && spec.broadcast !== false) {
-    const terms = actionTerms(action);
-    const encoded = encodeReportFor(reportVersion, action, { target: vaultAddress, chainId: vaultChainId, runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash as Hex, decidedAt: Math.floor(nowMs / 1000) });
-    evidence.report = { version: reportVersion, action: terms.action, flags: terms.flags, payeeId: terms.payeeId, amount: terms.amount.toString(), destinationChainSelector: terms.destinationChainSelector.toString() };
+    const reportTerms = actionTerms(sent);
+    const encoded = encodeReportFor(reportVersion, sent, { target: vaultAddress, chainId: vaultChainId, runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash as Hex, decidedAt: Math.floor(nowMs / 1000) });
+    evidence.report = { version: reportVersion, action: reportTerms.action, flags: reportTerms.flags, payeeId: reportTerms.payeeId, amount: reportTerms.amount.toString(), destinationChainSelector: reportTerms.destinationChainSelector.toString() };
     const report = runtime.report({ encodedPayload: hexToBase64(encoded), encoderName: 'evm', signingAlgo: 'ecdsa', hashingAlgo: 'keccak256' }).result();
     const tx = clientFor(vaultSelector).writeReport(runtime, { receiver: vaultAddress, report, gasConfig: { gasLimit: runtime.config.gasLimit } }).result();
     const receiverConfirmed = tx.receiverContractExecutionStatus === EVM_PB.ReceiverContractExecutionStatus.SUCCESS;
@@ -155,7 +159,7 @@ function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | '
     // The same decision lands on Solana: one run, one policy hash, two treasuries.
     const solana = runtime.config.solana;
     if (solana) {
-      const plan = solanaPlan(action, solana);
+      const plan = solanaPlan(sent, solana);
       if (plan.write) evidence.solana = writeSolanaReport(runtime, solana, plan, spec.runId, spec.revision, spec.policyHash as Hex, Math.floor(nowMs / 1000));
       else evidence.solanaSkipped = plan.reason;
     }

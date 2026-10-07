@@ -140,9 +140,9 @@ test.skipIf(!enabled)("a configured vault sweeps a share of its SOL to the reser
   const reserve = Keypair.generate().publicKey;
   await send([initializeIx(treasury.publicKey, payer.publicKey, MOCK_FORWARDER, 300), SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: treasury.publicKey, lamports: 2 * LAMPORTS_PER_SOL })], [payer, treasury]);
   // Before configure_reserve, a sweep is refused: there is nowhere it may go.
-  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "sweep-0", 5000), undefined, [{ pubkey: treasuryPda(treasury.publicKey), isWritable: false }, { pubkey: reserve, isWritable: true }])], [payer]))).toContain("ReserveNotConfigured");
-  await send([configureReserveIx(treasury.publicKey, payer.publicKey, reserve, 5000)], [payer]);
-  expect(await readTreasuryConfig(connection, treasury.publicKey)).toEqual({ vault: treasury.publicKey.toBase58(), reserve: reserve.toBase58(), maxSweepBps: 5000 });
+  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "sweep-0", 5000, 0), undefined, [{ pubkey: treasuryPda(treasury.publicKey), isWritable: false }, { pubkey: reserve, isWritable: true }])], [payer]))).toContain("ReserveNotConfigured");
+  await send([configureReserveIx(treasury.publicKey, payer.publicKey, reserve, 5000, forwarderState.publicKey)], [payer]);
+  expect(await readTreasuryConfig(connection, treasury.publicKey)).toEqual({ vault: treasury.publicKey.toBase58(), reserve: reserve.toBase58(), forwarderState: forwarderState.publicKey.toBase58(), maxSweepBps: 5000 });
   const accounts = [{ pubkey: treasuryPda(treasury.publicKey), isWritable: false }, { pubkey: reserve, isWritable: true }];
   const before = await connection.getBalance(treasury.publicKey);
   const signature = await send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "sweep-1", 5000), undefined, accounts)], [payer]);
@@ -160,21 +160,57 @@ test.skipIf(!enabled)("sweeps respect the cap, the configured reserve, and only 
   const treasury = Keypair.generate();
   const reserve = Keypair.generate().publicKey;
   await send([initializeIx(treasury.publicKey, payer.publicKey, MOCK_FORWARDER, 300), SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: treasury.publicKey, lamports: LAMPORTS_PER_SOL })], [payer, treasury]);
-  await send([configureReserveIx(treasury.publicKey, payer.publicKey, reserve, 2500)], [payer]);
+  await send([configureReserveIx(treasury.publicKey, payer.publicKey, reserve, 2500, forwarderState.publicKey)], [payer]);
   const accounts = (to = reserve) => [{ pubkey: treasuryPda(treasury.publicKey), isWritable: false }, { pubkey: to, isWritable: true }];
-  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "cap", 2501), undefined, accounts())], [payer]))).toContain("InvalidAmount");
-  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "thief", 1000), undefined, accounts(Keypair.generate().publicKey))], [payer]))).toContain("WrongReserve");
+  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "cap", 2501, 0), undefined, accounts())], [payer]))).toContain("InvalidAmount");
+  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "thief", 1000, 0), undefined, accounts(Keypair.generate().publicKey))], [payer]))).toContain("WrongReserve");
   expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "pay", 1000, 0, 3))], [payer]))).toContain("UnsupportedAction");
   // The owner configures once; a stranger cannot configure at all.
-  expect(await failure(send([configureReserveIx(treasury.publicKey, payer.publicKey, Keypair.generate().publicKey, 10000)], [payer]))).not.toBe("succeeded");
+  expect(await failure(send([configureReserveIx(treasury.publicKey, payer.publicKey, Keypair.generate().publicKey, 10000, forwarderState.publicKey)], [payer]))).not.toBe("succeeded");
   const stranger = Keypair.generate();
   await connection.confirmTransaction(await connection.requestAirdrop(stranger.publicKey, LAMPORTS_PER_SOL), "confirmed");
   const other = Keypair.generate();
   await send([initializeIx(other.publicKey, payer.publicKey, MOCK_FORWARDER, 300)], [payer, other]);
-  expect(await failure(send([configureReserveIx(other.publicKey, stranger.publicKey, stranger.publicKey, 10000)], [stranger]))).not.toBe("succeeded");
+  expect(await failure(send([configureReserveIx(other.publicKey, stranger.publicKey, stranger.publicKey, 10000, forwarderState.publicKey)], [stranger]))).not.toBe("succeeded");
   // A sweep without the pause flag leaves spending on; a v3 pause report pauses like v2 did.
   await send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "quiet-sweep", 2500, 0), undefined, accounts())], [payer]);
   expect((await readSolanaVault(connection, treasury.publicKey)).paused).toBe(false);
   await send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "v3-pause", 0, 0, ACTION_PAUSE))], [payer]);
   expect((await readSolanaVault(connection, treasury.publicKey)).paused).toBe(true);
 }, 90_000);
+
+test.skipIf(!enabled)("review fixes: sweeps only through the bound forwarder state, a pausing sweep keeps its pause, and older runs cannot replay", async () => {
+  const treasury = Keypair.generate();
+  const reserve = Keypair.generate().publicKey;
+  await send([initializeIx(treasury.publicKey, payer.publicKey, MOCK_FORWARDER, 300), SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: treasury.publicKey, lamports: LAMPORTS_PER_SOL })], [payer, treasury]);
+  // The vault cannot be its own reserve.
+  expect(await failure(send([configureReserveIx(treasury.publicKey, payer.publicKey, treasury.publicKey, 10000, forwarderState.publicKey)], [payer]))).toContain("InvalidConfiguration");
+  await send([configureReserveIx(treasury.publicKey, payer.publicKey, reserve, 10000, forwarderState.publicKey)], [payer]);
+  const accounts = [{ pubkey: treasuryPda(treasury.publicKey), isWritable: false }, { pubkey: reserve, isWritable: true }];
+  // A stranger's forwarder state under the same forwarder program is refused for sweeps.
+  const rogueState = Keypair.generate();
+  await send([new TransactionInstruction({ programId: MOCK_FORWARDER, keys: [
+    { pubkey: rogueState.publicKey, isSigner: true, isWritable: true }, { pubkey: payer.publicKey, isSigner: true, isWritable: true }, { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ], data: disc("global:init_state") })], [payer, rogueState]);
+  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "rogue-sweep", 5000, 0), rogueState.publicKey, accounts)], [payer]))).toContain("MismatchedForwarderState");
+  // Dust that would leave the reserve below rent: a pausing sweep still pauses.
+  const dust = sweepReport(treasury.publicKey, "dust-sweep", 1, FLAG_PAUSE);
+  const signature = await send([forwardIx(treasury.publicKey, dust, undefined, accounts)], [payer]);
+  const logs = (await connection.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }))!.meta!.logMessages!;
+  expect(parseVaultEvents(logs).map((e) => e.name)).toEqual(["SpendingPaused", "SweepFailed"]);
+  expect((await readSolanaVault(connection, treasury.publicKey)).paused).toBe(true);
+  expect(await connection.getBalance(reserve)).toBe(0);
+  // Without the pause flag the same failure fails the report.
+  await send([resumeIx(treasury.publicKey, payer.publicKey)], [payer]);
+  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "dust-2", 1, 0), undefined, accounts)], [payer]))).toContain("NothingToMove");
+  // Run A, then a newer run B, then A again: the replay is refused as stale.
+  // Decision times after everything above (within the 60 s clock-skew allowance).
+  const now = Math.floor(Date.now() / 1000) + 20;
+  const at = (runId: string, decidedAt: number) => encodeSolanaActionReport({ vault: treasury.publicKey.toBytes(), runId, revision: 3, policyHash: POLICY, decidedAt, action: ACTION_SWEEP, flags: 0, bps: 1000 });
+  const a = at("run-a", now - 20);
+  await send([forwardIx(treasury.publicKey, a, undefined, accounts)], [payer]);
+  await send([forwardIx(treasury.publicKey, at("run-b", now - 10), undefined, accounts)], [payer]);
+  const swept = await connection.getBalance(reserve);
+  expect(await failure(send([forwardIx(treasury.publicKey, a, undefined, accounts)], [payer]))).toContain("StaleReport");
+  expect(await connection.getBalance(reserve)).toBe(swept);
+}, 120_000);

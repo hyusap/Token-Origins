@@ -11,8 +11,12 @@
 //! * While paused, `pay_grant` refuses to move funds. Only the owner resumes.
 //! * Report v3 adds a sweep: move a share of the vault's SOL to the reserve the
 //!   owner fixed with `configure_reserve`, capped by `max_sweep_bps`, optionally
-//!   pausing in the same delivery. v2 pause reports are still accepted, so a
+//!   pausing in the same delivery. Sweeps are accepted only through the
+//!   forwarder state the owner bound there. A pausing sweep keeps its pause
+//!   even when nothing can move. v2 pause reports are still accepted, so a
 //!   vault created before this upgrade keeps working unchanged.
+//! * Reports must not go back in time: an older run cannot be replayed after a
+//!   newer one, even within `max_report_age`.
 
 #![allow(deprecated)] // anchor-lang 0.31 #[program] uses AccountInfo::realloc
 #![allow(unexpected_cfgs)]
@@ -74,7 +78,10 @@ pub mod sotto_vault {
                 report.decided_at <= now + MAX_CLOCK_SKEW && now - report.decided_at <= vault.max_report_age,
                 VaultError::StaleReport
             );
+            // Only the last run is remembered, so order reports by decision time instead.
+            require!(report.decided_at >= vault.last_decided_at, VaultError::StaleReport);
             vault.last_run = report.run_id;
+            vault.last_decided_at = report.decided_at;
             if report.action == ACTION_PAUSE || report.flags & FLAG_PAUSE != 0 {
                 if vault.paused {
                     msg!("sotto_vault already paused; no second pause");
@@ -82,7 +89,6 @@ pub mod sotto_vault {
                     vault.paused = true;
                     vault.last_policy_hash = report.policy_hash;
                     vault.last_revision = report.revision;
-                    vault.last_decided_at = report.decided_at;
                     vault.pause_count = vault.pause_count.saturating_add(1);
                     emit!(SpendingPaused {
                         vault: vault.key(),
@@ -95,20 +101,31 @@ pub mod sotto_vault {
             }
         }
         if report.action == ACTION_SWEEP {
-            sweep_to_reserve(&ctx.accounts.vault, ctx.remaining_accounts, &report)?;
+            match sweep_to_reserve(&ctx.accounts.vault, &ctx.accounts.state.key(), ctx.remaining_accounts, &report) {
+                Ok(()) => {}
+                // A protective report keeps its pause even when nothing can move.
+                Err(error) if report.flags & FLAG_PAUSE != 0 => {
+                    msg!("sotto_vault sweep did not move funds; the pause stands: {:?}", error);
+                    emit!(SweepFailed { vault: ctx.accounts.vault.key(), run_id: report.run_id, revision: report.revision, policy_hash: report.policy_hash });
+                }
+                Err(error) => return Err(error),
+            }
         }
         Ok(())
     }
 
-    /// Owner-only, once per vault: fixes where sweeps may send SOL and the
-    /// largest share one report may move. Creates the PDA ["treasury", vault].
-    pub fn configure_reserve(ctx: Context<ConfigureReserve>, reserve: Pubkey, max_sweep_bps: u16) -> Result<()> {
-        require!(reserve != Pubkey::default(), VaultError::InvalidConfiguration);
+    /// Owner-only, once per vault: fixes where sweeps may send SOL, the largest
+    /// share one report may move, and the one forwarder state account sweeps
+    /// may arrive through. Creates the PDA ["treasury", vault].
+    pub fn configure_reserve(ctx: Context<ConfigureReserve>, reserve: Pubkey, max_sweep_bps: u16, forwarder_state: Pubkey) -> Result<()> {
+        require!(reserve != Pubkey::default() && reserve != ctx.accounts.vault.key(), VaultError::InvalidConfiguration);
+        require!(forwarder_state != Pubkey::default(), VaultError::InvalidConfiguration);
         require!(max_sweep_bps > 0 && max_sweep_bps as u64 <= BPS, VaultError::InvalidConfiguration);
         let treasury = &mut ctx.accounts.treasury;
         treasury.vault = ctx.accounts.vault.key();
         treasury.reserve = reserve;
         treasury.max_sweep_bps = max_sweep_bps;
+        treasury.forwarder_state = forwarder_state;
         treasury.bump = ctx.bumps.treasury;
         Ok(())
     }
@@ -182,13 +199,14 @@ fn decode_report(bytes: &[u8]) -> Result<ActionReport> {
 }
 
 /// Moves `bps` of the vault's spendable SOL (above rent) to the configured reserve.
-fn sweep_to_reserve<'info>(vault: &Account<'info, Vault>, remaining: &'info [AccountInfo<'info>], report: &ActionReport) -> Result<()> {
+fn sweep_to_reserve<'info>(vault: &Account<'info, Vault>, state: &Pubkey, remaining: &'info [AccountInfo<'info>], report: &ActionReport) -> Result<()> {
     require!(remaining.len() >= 2, VaultError::ReserveNotConfigured);
     let (config_info, reserve_info) = (&remaining[0], &remaining[1]);
     let (expected, _) = Pubkey::find_program_address(&[b"treasury", vault.key().as_ref()], &crate::ID);
     require_keys_eq!(config_info.key(), expected, VaultError::ReserveNotConfigured);
     let config: Account<'info, TreasuryConfig> = Account::try_from(config_info).map_err(|_| error!(VaultError::ReserveNotConfigured))?;
     require_keys_eq!(config.vault, vault.key(), VaultError::ReserveNotConfigured);
+    require_keys_eq!(*state, config.forwarder_state, VaultError::MismatchedForwarderState);
     require_keys_eq!(reserve_info.key(), config.reserve, VaultError::WrongReserve);
     require!(reserve_info.is_writable, VaultError::WrongReserve);
     require!(report.bps > 0 && report.bps <= config.max_sweep_bps, VaultError::InvalidAmount);
@@ -198,6 +216,9 @@ fn sweep_to_reserve<'info>(vault: &Account<'info, Vault>, remaining: &'info [Acc
     let spendable = vault_info.lamports().saturating_sub(rent);
     let amount = (spendable as u128 * report.bps as u128 / BPS as u128) as u64;
     require!(amount > 0, VaultError::NothingToMove);
+    // The reserve must end rent-exempt, or the runtime rejects the whole transaction.
+    let reserve_floor = Rent::get()?.minimum_balance(reserve_info.data_len());
+    require!(reserve_info.lamports().saturating_add(amount) >= reserve_floor, VaultError::NothingToMove);
     **vault_info.try_borrow_mut_lamports()? = vault_info.lamports().checked_sub(amount).ok_or(VaultError::InsufficientFunds)?;
     **reserve_info.try_borrow_mut_lamports()? = reserve_info.lamports().checked_add(amount).ok_or(VaultError::InvalidAmount)?;
     emit!(ReserveSwept {
@@ -251,8 +272,10 @@ pub enum VaultError {
     ReserveNotConfigured,
     #[msg("Reserve account is not the configured, writable reserve")]
     WrongReserve,
-    #[msg("Nothing to sweep above the rent reserve")]
+    #[msg("Nothing to sweep above the rent reserve, or too little to leave the reserve rent-exempt")]
     NothingToMove,
+    #[msg("Sweeps are accepted only through the forwarder state bound in the treasury config")]
+    MismatchedForwarderState,
 }
 
 #[event]
@@ -271,6 +294,13 @@ pub struct ReserveSwept {
     pub policy_hash: [u8; 32],
     pub reserve: Pubkey,
     pub amount: u64,
+}
+#[event]
+pub struct SweepFailed {
+    pub vault: Pubkey,
+    pub run_id: [u8; 32],
+    pub revision: u64,
+    pub policy_hash: [u8; 32],
 }
 #[event]
 pub struct SpendingResumed {
@@ -303,6 +333,7 @@ pub struct Vault {
 pub struct TreasuryConfig {
     pub vault: Pubkey,
     pub reserve: Pubkey,
+    pub forwarder_state: Pubkey,
     pub max_sweep_bps: u16,
     pub bump: u8,
 }

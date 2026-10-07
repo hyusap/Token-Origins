@@ -149,7 +149,7 @@ test.skipIf(!enabled)("the vault pauses when delivered through Chainlink's MockK
   const mock = await Bun.file("contracts/out/MockKeystoneForwarderCopy.sol/MockKeystoneForwarderCopy.json").json();
   const vaultArtifact = await Bun.file("contracts/out/GrantVault.sol/GrantVault.json").json();
   const forwarder = (await client.waitForTransactionReceipt({ hash: await wallet.deployContract({ abi: mock.abi, bytecode: mock.bytecode.object, args: [] }) })).contractAddress!;
-  const limits = { reserve: LOCAL_RESERVE, maxSweepBps: 10_000n, maxPaymentWei: 0n, minPaymentInterval: 0n, ccipRouter: "0x0000000000000000000000000000000000000000", ccipToken: "0x0000000000000000000000000000000000000000", ccipDestination: 0n };
+  const limits = { reserve: LOCAL_RESERVE, maxSweepBps: 10_000n, maxPaymentWei: 0n, minPaymentInterval: 0n, ccipRouter: "0x0000000000000000000000000000000000000000", ccipToken: "0x0000000000000000000000000000000000000000", ccipDestination: 0n, ccipReceiver: "0x0000000000000000000000000000000000000000", maxCcipFeeWei: 0n, minEvacuationInterval: 0n };
   const vault = (await client.waitForTransactionReceipt({ hash: await wallet.deployContract({ abi: vaultArtifact.abi, bytecode: vaultArtifact.bytecode.object, args: [forwarder, 300n, limits] }) })).contractAddress!;
   // Keystone metadata: version, execution id, timestamp, DON id, config version, workflow id, name, owner, report id = 109 bytes.
   const metadata = concat(["0x01", keccak256(toBytes("execution")), pad("0x01", { size: 4 }), pad("0x01", { size: 4 }), pad("0x01", { size: 4 }), keccak256(toBytes("workflow")), pad(toHex("origins"), { size: 10, dir: "right" }), "0x000000000000000000000000000000000000beef", "0x0001"]);
@@ -194,13 +194,17 @@ test.skipIf(!enabled)("sweep moves half the vault to the reserve and pauses, ver
   await resume();
 });
 
-test.skipIf(!enabled)("pay sends exactly the amount to the registered payee; unknown payees revert on chain and fail the run", async () => {
+test.skipIf(!enabled)("pay sends exactly the amount to the registered payee; an unknown payee is refused from the vault's own terms before anything is sent", async () => {
   ethUsd = 2500;
   const before = await client.getBalance({ address: LOCAL_PAYEES.grantee });
   const evidence = await run(ethBelow({ type: "pay", payee: "grantee", amountEth: 0.01 }), "pay");
   expect(evidence.transaction!.effects).toMatchObject({ paidWei: parseEther("0.01").toString(), payee: LOCAL_PAYEES.grantee });
   expect(await client.getBalance({ address: LOCAL_PAYEES.grantee })).toBe(before + parseEther("0.01"));
-  await expect(run(ethBelow({ type: "pay", payee: "stranger", amountEth: 0.01 }), "pay-unknown")).rejects.toThrow();
+  const block = await client.getBlockNumber();
+  const unknown = await run(ethBelow({ type: "pay", payee: "stranger", amountEth: 0.01 }), "pay-unknown");
+  expect(unknown.noopReason).toBe('No payee named "stranger" is registered on the vault; the owner registers payees.');
+  expect(unknown.vault!.terms).toMatchObject({ payee: "0x0000000000000000000000000000000000000000", maxPaymentWei: parseEther("0.05").toString() });
+  expect(await client.getBlockNumber()).toBe(block);
   expect(await isPaused()).toBe(false);
 });
 
@@ -215,10 +219,16 @@ test.skipIf(!enabled)("evacuate hands the vault's tokens to the CCIP router with
   expect(effects.ccipMessageId).toMatch(/^0x[0-9a-f]{64}$/);
   expect(effects.ccipExplorerUrl).toBe(`https://ccip.chain.link/msg/${effects.ccipMessageId}`);
   expect(await client.readContract({ address: treasury.ccipToken, abi: balanceOf, functionName: "balanceOf", args: [treasury.ccipRouter] })).toBe(parseEther("2"));
-  // Nothing left to send: the guard stops the next evacuation before any report.
+  // Nothing left to bridge: the protective evacuation still pauses, and only the pause is sent.
   await resume();
   const empty = await run(ethBelow({ type: "evacuate", destination: "base-sepolia", fraction: 1 }), "evacuate-empty");
-  expect(empty.noopReason).toBe("Vault holds no CCIP-BnM to evacuate.");
+  expect(empty).toMatchObject({ decision: "act", effectiveAction: { type: "pause-vault" }, degradedReason: "Vault holds no CCIP-BnM to evacuate" });
+  expect(empty.transaction).toMatchObject({ pausedAfter: true, effects: { paused: true } });
+  expect(empty.transaction!.effects!.ccipMessageId).toBeUndefined();
+  // Without a pause to send, the same empty vault is a plain no-op.
+  await resume();
+  const plain = await run(ethBelow({ type: "evacuate", destination: "base-sepolia", fraction: 1, pause: false }), "evacuate-empty-nopause");
+  expect(plain.noopReason).toBe("Vault holds no CCIP-BnM to evacuate.");
 });
 
 test.skipIf(!enabled)("the v2 vault already on Sepolia still gets pause reports, and refuses new actions before anything is sent", async () => {
