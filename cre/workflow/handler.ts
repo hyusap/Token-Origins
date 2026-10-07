@@ -3,6 +3,7 @@ import { EVM_PB } from '@chainlink/cre-sdk/pb';
 import { encodeFunctionData, decodeFunctionResult, parseAbi, zeroAddress, type Address, type Hex } from 'viem';
 import { z } from 'zod';
 import { specificationSchema, PRICE_URL, parsePrice } from '../spec';
+import { evidenceChunks } from '../evidence-log';
 import {
   evaluateGraph, collectSources, sourceKey, sourceIdentity, describeSource, explainNoop, encodePauseReport,
   NETWORKS, REPORT_VERSION, FEED_DECIMALS, type Observation, type PriceReading,
@@ -96,6 +97,7 @@ export function onHttp(runtime: Runtime<Config>, payload: HTTPPayload): string {
     evidence.transaction = { hash: tx.txHash ? bytesToHex(tx.txHash) : null, status: tx.txStatus === TxStatus.SUCCESS ? 'success' : 'failed', receiverConfirmed };
     if (tx.txStatus !== TxStatus.SUCCESS || !receiverConfirmed) throw new Error(`Report did not execute successfully: ${tx.errorMessage || tx.receiverContractExecutionStatus}`);
   }
-  runtime.log(`ORIGINS_EVIDENCE ${JSON.stringify(evidence)}`);
-  return JSON.stringify(evidence);
+  const json = JSON.stringify(evidence);
+  for (const chunk of evidenceChunks(json)) runtime.log(chunk);
+  return json;
 }

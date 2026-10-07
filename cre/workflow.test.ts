@@ -5,6 +5,7 @@ import {parseAbi,decodeAbiParameters,parseAbiParameters,keccak256,toBytes,type H
 import {onHttp} from './workflow/handler';
 import {policyHash,legacyGraph,policyGraphSchema,NETWORKS,FEED_REGISTRY} from './graph';
 import {assertCreSupports} from './runner';
+import {joinEvidenceChunks,evidenceChunks} from './evidence-log';
 
 const vaultAddress='0x0000000000000000000000000000000000001234';
 const sepolia=BigInt(NETWORKS['ethereum-sepolia'].chainSelector);
@@ -138,4 +139,25 @@ test('J7: a network the CRE project has no RPC for is refused before simulation'
 test('the project configures RPCs for both feed networks',async()=>{
   const {configuredCreChains}=await import('./runner');
   expect((await configuredCreChains()).sort()).toEqual(['ethereum-mainnet','ethereum-testnet-sepolia']);
+});
+
+test('evidence leaves the workflow in log lines under the 1 KB CRE limit and reassembles exactly',()=>{
+  const t=setup(2700);
+  withFeed(mainnet,FEED_REGISTRY['ethereum-mainnet'].BTC!,8_500_000_000_000n,Math.floor(now/1000)-2400);
+  const logs:string[]=[];
+  const original=t.runtime.log.bind(t.runtime);
+  t.runtime.log=(message:string)=>{logs.push(message);original(message);};
+  const returned=onHttp(t.runtime,payload(specFor(crossChain)));
+  expect(returned.length).toBeGreaterThan(1024);
+  for(const line of logs) expect(new TextEncoder().encode(line).length).toBeLessThan(1024);
+  // The CLI decorates and interleaves lines; reassembly must not care.
+  const transcript=logs.map((line,i)=>`2026-10-07T05:00:0${i%10}Z [USER LOG] ${line}`).reverse().join('\n');
+  expect(joinEvidenceChunks(transcript)).toBe(returned);
+});
+
+test('a missing or inconsistent evidence chunk is an error, never partial evidence',()=>{
+  const chunks=evidenceChunks(JSON.stringify({big:'x'.repeat(3000)}));
+  expect(chunks.length).toBeGreaterThan(3);
+  expect(()=>joinEvidenceChunks(chunks.filter((_,i)=>i!==1).join('\n'))).toThrow(/chunk 2\/\d+ is missing/);
+  expect(()=>joinEvidenceChunks('no evidence here')).toThrow(/no structured execution evidence/);
 });

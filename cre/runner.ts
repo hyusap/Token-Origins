@@ -3,6 +3,7 @@ import {privateKeyToAccount} from 'viem/accounts';
 import {sepolia} from 'viem/chains';
 import {resolve} from 'node:path';
 import {specificationSchema,PRICE_URL,parsePrice,type ExecutionSpecification} from './spec';
+import {joinEvidenceChunks,EVIDENCE_CHUNK_TAG} from './evidence-log';
 import {
   evaluateGraph,collectSources,sourceKey,sourceIdentity,describeSource,readsVault,explainNoop,encodePauseReport,runIdHash,formatUsd,
   NETWORKS,REPORT_VERSION,type PriceSource,type FeedSource,type Observation,type ConditionEvidence,type PauseReport,type PriceReading,
@@ -254,11 +255,15 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
   const redact=(text:string)=>{for(const secret of [process.env.CRE_API_KEY,process.env.CRE_ETH_PRIVATE_KEY]) if(secret) text=text.split(secret).join('[redacted]');return text.replace(/(0x)?[a-fA-F0-9]{64}/g,'[redacted]');};
   if(code!==0) throw new Error(`CRE execution failed (${code}): ${redact(stderr||stdout).slice(-1500)}`);
   const cleanOutput=stdout.replace(/\u001b\[[0-9;]*m/g,'');
-  const line=cleanOutput.split('\n').reverse().find(line=>line.includes('ORIGINS_EVIDENCE '));
-  if(!line) throw new Error('CRE returned no correlated structured execution evidence');
-  const evidence=JSON.parse(line.slice(line.indexOf('ORIGINS_EVIDENCE ')+17)) as ExecutionEvidence;
+  // Keep the last CLI transcript (secrets removed) for diagnosis.
+  let transcript=cleanOutput;
+  for(const secret of [process.env.CRE_API_KEY,process.env.CRE_ETH_PRIVATE_KEY]) if(secret) transcript=transcript.split(secret).join('[redacted]');
+  await Bun.write(resolve(root,'../.data/cre-last-run.log'),transcript).catch(()=>{});
+  let evidence:ExecutionEvidence;
+  try {evidence=JSON.parse(joinEvidenceChunks(cleanOutput)) as ExecutionEvidence;}
+  catch(error) {throw new Error(`${error instanceof Error?error.message:String(error)}; the CLI transcript is in .data/cre-last-run.log`);}
   if(evidence.runId!==spec.runId||evidence.revision!==spec.revision||evidence.policyHash!==spec.policyHash) throw new Error('CRE execution evidence correlation failed');
-  evidence.logs=cleanOutput.split('\n').filter(line=>line.includes('ORIGINS_')).map(line=>line.slice(line.indexOf('ORIGINS_')));
+  evidence.logs=cleanOutput.split('\n').filter(line=>line.includes('ORIGINS_')&&!line.includes(EVIDENCE_CHUNK_TAG)).map(line=>line.slice(line.indexOf('ORIGINS_')));
   for(const message of evidence.logs) progress?.(message.length>240?`${message.slice(0,240)}…`:message);
   if(evidence.transaction?.hash) {
     const client=createPublicClient({chain:sepolia,transport:http(process.env.ORIGINS_SEPOLIA_RPC||'https://ethereum-sepolia-rpc.publicnode.com')});
