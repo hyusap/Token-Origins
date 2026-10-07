@@ -12,7 +12,8 @@
     "test": "bun test",
     "mcp": "bun run scripts/mcp.ts",
     "rehearse": "bun run scripts/rehearse.ts",
-    "demo": "bun run scripts/rehearse.ts --auto"
+    "demo": "bun run scripts/rehearse.ts --auto",
+    "share": "vite --config vite.share.config.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

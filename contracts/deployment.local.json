@@ -5,7 +5,7 @@
   "chainId": 31337,
   "rpcUrl": "http://127.0.0.1:8545",
   "mode": "local-evm-rehearsal",
-  "deploymentHash": "0xd4be2d7375043028a75b2ee15dae7bf87e63f174e619b892f5ecbfa40620fe8b",
+  "deploymentHash": "0xe81d8fedbf2b923a552dc3140401b9ec3979b5b44fc2293f1508decea6b382b3",
   "blockNumber": 2,
-  "createdAt": "2026-10-06T04:39:20.182Z"
+  "createdAt": "2026-10-07T06:37:02.929Z"
 }
