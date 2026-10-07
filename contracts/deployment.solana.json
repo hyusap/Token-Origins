@@ -1,0 +1,13 @@
+{
+  "network": "solana-devnet",
+  "programId": "8g87GMMGr4JrzJpfh8v9oxyy8mwDRGawBRFJR8c1hqYD",
+  "vault": "7593tF3wMY5bT9hLv6hGgMXanRkgG7p48jsA6JcpXWtE",
+  "owner": "8fpTkkssEBAczMJvWEWEu3pZ1qvhv2nimYqNiWFzu18R",
+  "forwarderProgram": "7kuEAA3mSC1Tz8gQjnvH7bKFda9xSPRRin9SZbH49cNK",
+  "forwarderState": "5Tipz3yhTBdVsDbaBxZkrp7Gjf3brGq5SKkxReefPMP7",
+  "maxReportAgeSeconds": 300,
+  "depositSol": 0.5,
+  "initSignature": "5pQMQubP93E1ShwAWLaafWrERXMT6ebicoxthNWJDG3fAub64izZJWEVrSccov7Wmc2sBc5FEe2ozH173HmCWfXq",
+  "explorer": "https://explorer.solana.com/tx/5pQMQubP93E1ShwAWLaafWrERXMT6ebicoxthNWJDG3fAub64izZJWEVrSccov7Wmc2sBc5FEe2ozH173HmCWfXq?cluster=devnet",
+  "createdAt": "2026-10-07T09:03:01.470Z"
+}
