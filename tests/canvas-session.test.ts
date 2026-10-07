@@ -43,8 +43,9 @@ test("React Flow adapter retains authoritative relationships and immutable execu
   const graph = canvasFlow(state);
   const ids = new Set(graph.nodes.map(n => n.id));
   expect(graph.edges.every(edge => ids.has(edge.source) && ids.has(edge.target))).toBe(true);
-  expect(graph.edges.find(e => e.id === "freshness")?.targetHandle).toBe("freshness");
-  expect(graph.edges.find(e => e.id === "conditions-output")?.data?.relationshipIds).toEqual(["and1", "and2"]);
+  expect(graph.edges.find(e => e.id === "graph:root-action")?.source).toBe("condition:" + state.workflow.graph.root);
+  expect(graph.nodes.filter(node => node.data.graphNode).map(node => node.data.graphNode!.id).sort())
+    .toEqual(state.workflow.graph.nodes.map(node => node.id).sort());
   expect(JSON.stringify(state)).toBe(before);
 });
 test("semantic viewport navigation changes no draft or execution data", async () => {

@@ -65,7 +65,6 @@ body { margin: 0; overflow: hidden; }
 .command-response { font: 12px/1.5 var(--bab-sans); color: var(--bab-text-mute); max-width: 600px; margin: auto; max-height: 58px; overflow-y: auto; scrollbar-width: thin; }
 .command-response strong { font-weight: 500; color: var(--bab-text-dim); }
 .command-response code { font: 11px var(--bab-mono); }
-.cue-progress { color: var(--bab-text-faint); font-size: 9px; margin-top: 10px; }
 .policy-line { flex: none; min-height: 42px; display: flex; gap: 20px; align-items: center; padding: 8px 24px; border-top: 1px solid var(--bab-line-soft); }
 .policy-line > .mono { flex: none; font-size: 9px; color: var(--bab-text-mute); }
 .policy-line p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--bab-text-dim); }
@@ -144,6 +143,22 @@ body { margin: 0; overflow: hidden; }
 .flow-canvas .react-flow { width: 100%; height: 100%; background: var(--bab-black); }
 .flow-canvas .react-flow__node-instrument { border: 0; background: none; }
 .flow-instrument { position: relative; width: 100%; }
+.flow-section { border-bottom: 1px solid var(--bab-line); padding-bottom: 12px; color: var(--bab-text-dim); font-size: 12px; }
+.flow-view-actions { display: flex; align-items: center; gap: 20px; pointer-events: auto; }
+.flow-view-actions button { border: 0; border-bottom: 1px solid var(--bab-line-lit); background: none; padding: 0 0 4px; font: inherit; color: var(--bab-white); cursor: pointer; }
+.flow-view-actions button:hover { border-color: var(--bab-gold); }
+.flow-instrument.market-observation .node-head { color: var(--bab-text-mute); }
+.flow-instrument .node-body { padding-left: 20px; padding-right: 20px; }
+.flow-instrument .price-value, .flow-instrument .vault-balance { font-size: 42px; }
+.flow-instrument .condition-row > div > span { font-size: 14px; }
+.flow-instrument .condition-row strong { font-size: 18px; }
+.flow-instrument .condition-bottom, .flow-instrument .receiver-guards { font-size: 12px; line-height: 1.5; }
+.flow-instrument .node-head, .flow-instrument .node-foot { font-size: 11px; }
+@media (max-width: 700px) {
+  .flow-view-actions { gap: 12px; }
+  .flow-view-actions > span { display: none; }
+}
+.policy-restriction { margin: 12px 0 0; color: var(--bab-text-dim); font-size: 11px; line-height: 1.5; }
 .flow-instrument .graph-node, .flow-instrument .run-evidence { margin: 0; width: 100%; animation: none; transform: none; }
 .flow-canvas .react-flow__handle { width: 4px; height: 4px; border-radius: 0; border: 1px solid var(--bab-line-lit); background: var(--bab-black); }
 .flow-canvas .react-flow__edge-path { stroke-width: 1; }
@@ -167,3 +182,37 @@ body { margin: 0; overflow: hidden; }
   .flow-instrument .price-chart { height: 62px; }
   .flow-instrument .price-chart svg { height: 43px; }
 }
+/* Graph expressions and archived execution results share the engine's vocabulary. */
+.flow-instrument .condition-node .node-body { min-height: 150px; padding: 22px; }
+.flow-instrument .condition-node h3 { font: 400 23px/1.25 var(--bab-sans); margin: 0 0 14px; overflow-wrap: anywhere; }
+.flow-instrument .condition-node .node-foot { white-space: normal; line-height: 1.5; }
+.condition-value, .intermediate-false { color: var(--bab-text-dim); }
+.flow-instrument .run-evidence { min-width: 280px; }
+.frozen-rule { display: block; padding: 16px; }
+.frozen-rule p { margin: 8px 0; line-height: 1.5; }
+.run-outcome { padding: 0 16px; line-height: 1.5; }
+.archived-observations { display: grid; gap: 16px; padding: 16px; border-top: 1px solid var(--bab-line); }
+.archived-observation { display: grid; gap: 6px; font-size: 12px; line-height: 1.5; }
+.archived-observation .mono { font-size: 10px; color: var(--bab-text-dim); overflow-wrap: anywhere; }
+.observation-address { word-break: break-all; }
+.result-role { display: block; font-size: 9px; color: var(--bab-text-dim); margin-bottom: 4px; text-transform: uppercase; }
+.decision { align-items: start; grid-template-columns: 14px minmax(0, 1fr) auto; }
+.decision > span:nth-child(2) { white-space: normal; line-height: 1.5; overflow-wrap: anywhere; }
+.decision-root, .decision-guard { border-left: 1px solid var(--bab-line-lit); padding-left: 8px; }
+.simulation-receipt { padding: 16px; border-top: 1px solid var(--bab-line); line-height: 1.5; }
+.simulation-receipt p { font-size: 12px; }
+.policy-hash { padding: 12px 16px; color: var(--bab-text-dim); font-size: 10px; }
+.policy-line p { overflow-wrap: anywhere; }
+.fixture-banner { color: var(--bab-gold); font: 11px var(--bab-mono); padding: 8px 20px; border-bottom: 1px solid var(--bab-line); }
+.conversation-caption { padding: 12px 24px; border-top: 1px solid var(--bab-line); font-size: 13px; line-height: 1.6; }
+.conversation-caption p { display: flex; gap: 16px; margin: 0; }
+.conversation-caption .mono { min-width: 45px; font-size: 10px; color: var(--bab-text-dim); }
+.utterance-caption { color: var(--bab-text-dim); }
+.completion-caption { color: var(--bab-text); }
+.proof-control { color: var(--bab-text-dim); background: none; border: 0; font: inherit; cursor: pointer; }
+.proof-control[aria-pressed="true"] { color: var(--bab-gold); }
+.workbench .observatory { inset: 0; }
+.workbench .inspector { bottom: 0; }
+.conversation-caption, .fixture-banner { flex: none; }
+.flow-instrument .run-evidence { max-height: 620px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--bab-line-lit) transparent; }
+.flow-instrument .run-evidence .evidence-title { position: sticky; top: 0; z-index: 1; background: var(--bab-black); }
