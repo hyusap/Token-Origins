@@ -143,3 +143,23 @@ test.skipIf(!enabled)("a pause that does not verify is diagnosed: wrong forwarde
   expect(text).toContain(`replaying this report from ${rogue} before that block reverts Unauthorized`);
   expect(await isPaused()).toBe(false);
 });
+
+test.skipIf(!enabled)("the vault pauses when delivered through Chainlink's MockKeystoneForwarder logic (CRE simulation path)", async () => {
+  const { encodePauseReport } = await import("../cre/graph");
+  const { concat, pad, toHex, keccak256, toBytes, encodeFunctionData, decodeEventLog } = await import("viem");
+  const mock = await Bun.file("contracts/out/MockKeystoneForwarderCopy.sol/MockKeystoneForwarderCopy.json").json();
+  const vaultArtifact = await Bun.file("contracts/out/GrantVault.sol/GrantVault.json").json();
+  const forwarder = (await client.waitForTransactionReceipt({ hash: await wallet.deployContract({ abi: mock.abi, bytecode: mock.bytecode.object, args: [] }) })).contractAddress!;
+  const vault = (await client.waitForTransactionReceipt({ hash: await wallet.deployContract({ abi: vaultArtifact.abi, bytecode: vaultArtifact.bytecode.object, args: [forwarder, 300n] }) })).contractAddress!;
+  // Keystone metadata: version, execution id, timestamp, DON id, config version, workflow id, name, owner, report id = 109 bytes.
+  const metadata = concat(["0x01", keccak256(toBytes("execution")), pad("0x01", { size: 4 }), pad("0x01", { size: 4 }), pad("0x01", { size: 4 }), keccak256(toBytes("workflow")), pad(toHex("origins"), { size: 10, dir: "right" }), "0x000000000000000000000000000000000000beef", "0x0001"]);
+  const spec = specOf(composedPause(3000, "ethereum-mainnet"), `mock-forwarder-${Date.now()}`, 2);
+  const payload = encodePauseReport({ target: vault, chainId: 31337, runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash as any, decidedAt: Math.floor(Date.now() / 1000) });
+  const hash = await wallet.sendTransaction({ to: forwarder, gas: 350_000n, data: encodeFunctionData({ abi: mock.abi, functionName: "report", args: [vault, concat([metadata, payload]), "0x", []] }) });
+  const receipt = await client.waitForTransactionReceipt({ hash });
+  const processed = receipt.logs.filter((log) => log.address.toLowerCase() === forwarder.toLowerCase()).map((log) => decodeEventLog({ abi: mock.abi, data: log.data, topics: log.topics }) as any);
+  expect(processed[0].args.result).toBe(true);
+  expect(await client.readContract({ address: vault, abi: vaultAbi, functionName: "paused" })).toBe(true);
+  const { matchPauseEvent } = await import("../cre/runner");
+  expect(matchPauseEvent(receipt.logs, vault, spec.runId, spec.revision, spec.policyHash)).toBe(true);
+});
