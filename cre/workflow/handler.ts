@@ -4,7 +4,7 @@ import { encodeSolanaPauseReport, encodeSolanaActionReport } from '../solana-rep
 import { EVM_PB } from '@chainlink/cre-sdk/pb';
 import { encodeFunctionData, decodeFunctionResult, parseAbi, zeroAddress, type Address, type Hex } from 'viem';
 import { z } from 'zod';
-import { specificationSchema, PRICE_URL, parsePrice } from '../spec';
+import { specificationSchema, PRICE_URL, priceUrl, parsePrice } from '../spec';
 import { evidenceChunks } from '../evidence-log';
 import { readChainSourceSync, chainReadCost } from '../onchain-reads';
 import {
@@ -46,10 +46,10 @@ const multicallAbi = parseAbi(['function getEthBalance(address) view returns (ui
 /** CRE's per-execution EVM read quota. */
 const READ_LIMIT = 15;
 
-function fetchPrice(sender: HTTPSendRequester): { usd: number; observedAt: number } {
-  const reply = sender.sendRequest({ url: PRICE_URL, method: 'GET', headers: { Accept: 'application/json' } }).result();
+function fetchPrice(sender: HTTPSendRequester, url = PRICE_URL): { usd: number; observedAt: number } {
+  const reply = sender.sendRequest({ url, method: 'GET', headers: { Accept: 'application/json' } }).result();
   if (reply.statusCode !== 200) throw new Error(`Price source returned ${reply.statusCode}`);
-  const price = parsePrice(JSON.parse(new TextDecoder().decode(reply.body)));
+  const price = parsePrice(JSON.parse(new TextDecoder().decode(reply.body)),url);
   return { usd: price.usd, observedAt: Date.parse(price.observedAt) };
 }
 
@@ -75,9 +75,11 @@ function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | '
   // Full validation: shape, cycles, connectivity, units, registries, and policy hash.
   const spec = specificationSchema.parse(input);
   const graph = spec.graph;
-  // Simulated actions stop here, before any read or write.
+  // Simulated actions and direct signer actions stop here, before any read or write.
   if (isSimulatedAction(graph.action))
     throw new Error('Simulated sells run only in local rehearsal (as do simulated rebalances); CRE delivers only real vault actions. Nothing was submitted.');
+  if (graph.action.type === 'solana-transfer')
+    throw new Error('Unsupported action; CRE delivers vault reports only. Nothing was submitted.');
   const action = graph.action as VaultAction;
 
   const clients = new Map<string, EVMClient>();
@@ -122,7 +124,7 @@ function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | '
     const identity = sourceIdentity(source);
     runtime.log(`ORIGINS_SOURCE Reading ${describeSource(source)}${identity.address ? ` at ${identity.address}` : ''}`);
     if (source.type === 'exchange-trade') {
-      const trade = new HTTPClient().sendRequest(runtime, fetchPrice, ConsensusAggregationByFields<{ usd: number; observedAt: number }>({ usd: median<number>, observedAt: median<number> }))().result();
+      const trade = new HTTPClient().sendRequest(runtime, (sender) => fetchPrice(sender, priceUrl(source.pair)), ConsensusAggregationByFields<{ usd: number; observedAt: number }>({ usd: median<number>, observedAt: median<number> }))().result();
       observations.push({ ...identity, value: trade.usd, usd: trade.usd, raw: String(trade.usd), observedAt: new Date(trade.observedAt).toISOString(), fetchedAt });
     } else if (source.type === 'vault-balance') {
       const eth = Number(balanceWei) / 1e18;
@@ -159,6 +161,7 @@ function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | '
     evidence.report = { version: reportVersion, action: reportTerms.action, flags: reportTerms.flags, payeeId: reportTerms.payeeId, amount: reportTerms.amount.toString(), destinationChainSelector: reportTerms.destinationChainSelector.toString() };
     const report = runtime.report({ encodedPayload: hexToBase64(encoded), encoderName: 'evm', signingAlgo: 'ecdsa', hashingAlgo: 'keccak256' }).result();
     const tx = clientFor(vaultSelector).writeReport(runtime, { receiver: vaultAddress, report, gasConfig: { gasLimit: runtime.config.gasLimit } }).result();
+    if(tx.txHash) runtime.log("ORIGINS_SUBMITTED "+JSON.stringify({hash:bytesToHex(tx.txHash),runId:spec.runId,revision:spec.revision,policyHash:spec.policyHash}));
     const receiverConfirmed = tx.receiverContractExecutionStatus === EVM_PB.ReceiverContractExecutionStatus.SUCCESS;
     evidence.transaction = { hash: tx.txHash ? bytesToHex(tx.txHash) : null, status: tx.txStatus === TxStatus.SUCCESS ? 'success' : 'failed', receiverConfirmed };
     if (tx.txStatus !== TxStatus.SUCCESS || !receiverConfirmed) throw new Error(`Report did not execute successfully: ${tx.errorMessage || tx.receiverContractExecutionStatus}`);

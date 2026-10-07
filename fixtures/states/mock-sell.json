@@ -35,11 +35,11 @@
   },
   "state": {
     "stateVersion": 2,
-    "sessionId": "bf388abd-d1f1-46d3-aa67-3d90947c005a",
+    "sessionId": "b4b9ee90-3822-4060-8813-eddbbbecc01e",
     "seq": 11,
     "mode": "run",
     "focus": {
-      "objectId": "run:run-25ac6851-1359-48df-9f12-a17f2830ee3e",
+      "objectId": "run:run-120086fc-844f-41b0-b235-a1ff4406a9e9",
       "label": "Execution v01"
     },
     "previousFocus": [
@@ -49,12 +49,12 @@
       {
         "name": "Treasury policy",
         "objectId": "workflow:treasury",
-        "at": "2026-10-07T11:03:27.475Z"
+        "at": "2026-10-07T14:06:08.102Z"
       },
       {
         "name": "Execution v01",
-        "objectId": "run:run-25ac6851-1359-48df-9f12-a17f2830ee3e",
-        "at": "2026-10-07T11:03:27.476Z"
+        "objectId": "run:run-120086fc-844f-41b0-b235-a1ff4406a9e9",
+        "at": "2026-10-07T14:06:08.103Z"
       }
     ],
     "objects": [
@@ -72,8 +72,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T11:03:23.474Z",
-          "fetchedAt": "2026-10-07T11:03:27.474Z"
+          "observedAt": "2026-10-07T14:06:04.101Z",
+          "fetchedAt": "2026-10-07T14:06:08.101Z"
         },
         "visible": false,
         "pinned": false
@@ -96,8 +96,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T11:03:23.474Z",
-          "fetchedAt": "2026-10-07T11:03:27.474Z"
+          "observedAt": "2026-10-07T14:06:04.101Z",
+          "fetchedAt": "2026-10-07T14:06:08.101Z"
         },
         "visible": true,
         "pinned": false
@@ -119,8 +119,8 @@
           "source": "Local rehearsal fixture",
           "kind": "fixture",
           "label": "Fixture vault · no deployed contract",
-          "observedAt": "2026-10-07T11:03:27.474Z",
-          "fetchedAt": "2026-10-07T11:03:27.474Z"
+          "observedAt": "2026-10-07T14:06:08.101Z",
+          "fetchedAt": "2026-10-07T14:06:08.101Z"
         },
         "visible": true,
         "pinned": false
@@ -142,8 +142,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T11:03:27.475Z",
-          "fetchedAt": "2026-10-07T11:03:27.475Z",
+          "observedAt": "2026-10-07T14:06:08.102Z",
+          "fetchedAt": "2026-10-07T14:06:08.102Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -163,8 +163,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T11:03:27.475Z",
-          "fetchedAt": "2026-10-07T11:03:27.475Z",
+          "observedAt": "2026-10-07T14:06:08.102Z",
+          "fetchedAt": "2026-10-07T14:06:08.102Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -180,21 +180,22 @@
           "decimals": 8,
           "answer": "8500000000000",
           "roundId": "110680464442257320164",
-          "ageSeconds": 1500,
+          "ageSeconds": 1500.002,
           "ageLabel": "25 min ago",
           "feedAddress": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
           "description": "BTC / USD",
-          "network": "ethereum-mainnet"
+          "network": "ethereum-mainnet",
+          "raw": "8500000000000"
         },
         "provenance": {
-          "source": "Chainlink Data Feed",
+          "source": "Chainlink BTC/USD (mainnet)",
           "url": "https://etherscan.io/address/0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c#readContract",
           "kind": "chain",
           "chainId": 1,
           "address": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
           "label": "Chainlink BTC / USD aggregator · Ethereum mainnet",
-          "observedAt": "2026-10-07T10:38:27.488Z",
-          "fetchedAt": "2026-10-07T11:03:27.488Z"
+          "observedAt": "2026-10-07T13:41:08.115Z",
+          "fetchedAt": "2026-10-07T14:06:08.115Z"
         },
         "visible": true,
         "pinned": false
@@ -226,7 +227,7 @@
       "threshold": 3000,
       "maxAgeSeconds": null,
       "skipPaused": false,
-      "createdAt": "2026-10-07T11:03:27.475Z",
+      "createdAt": "2026-10-07T14:06:08.102Z",
       "reason": "Composed condition graph",
       "graph": {
         "nodes": [
@@ -263,7 +264,7 @@
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T11:03:27.475Z",
+          "createdAt": "2026-10-07T14:06:08.102Z",
           "reason": "Composed condition graph",
           "graph": {
             "nodes": [
@@ -299,14 +300,14 @@
     },
     "runs": [
       {
-        "id": "run-25ac6851-1359-48df-9f12-a17f2830ee3e",
+        "id": "run-120086fc-844f-41b0-b235-a1ff4406a9e9",
         "revision": 1,
         "snapshot": {
           "revision": 1,
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T11:03:27.475Z",
+          "createdAt": "2026-10-07T14:06:08.102Z",
           "reason": "Composed condition graph",
           "graph": {
             "nodes": [
@@ -339,9 +340,10 @@
         },
         "policyHash": "0x2e654a5d3330f74a0d2dc7ba8d981e340d88b43d88336ae3383ffd3c06650e59",
         "action": "sell",
+        "evaluationOnly": false,
         "trigger": "manual",
         "status": "confirmed",
-        "startedAt": "2026-10-07T11:03:27.476Z",
+        "startedAt": "2026-10-07T14:06:08.103Z",
         "executionMode": "Local policy rehearsal · fixture vault · no transaction",
         "decisions": [
           {
@@ -371,42 +373,42 @@
         ],
         "logs": [
           {
-            "at": "2026-10-07T11:03:27.476Z",
+            "at": "2026-10-07T14:06:08.103Z",
             "stage": "queued",
             "message": "Frozen draft revision 1"
           },
           {
-            "at": "2026-10-07T11:03:27.486Z",
+            "at": "2026-10-07T14:06:08.113Z",
             "stage": "fetching",
             "message": "Fetching fresh execution inputs"
           },
           {
-            "at": "2026-10-07T11:03:27.487Z",
+            "at": "2026-10-07T14:06:08.114Z",
             "stage": "reporting",
             "message": "Fixture rehearsal · live inputs, in-memory vault, no transaction"
           },
           {
-            "at": "2026-10-07T11:03:27.488Z",
+            "at": "2026-10-07T14:06:08.114Z",
             "stage": "fetching",
             "message": "Fetching Chainlink BTC/USD (mainnet)"
           },
           {
-            "at": "2026-10-07T11:03:27.488Z",
+            "at": "2026-10-07T14:06:08.115Z",
             "stage": "evaluating",
             "message": "PASS drop: Chainlink BTC/USD (mainnet) $85,000.00 < $90,000.00"
           },
           {
-            "at": "2026-10-07T11:03:27.488Z",
+            "at": "2026-10-07T14:06:08.115Z",
             "stage": "evaluating",
             "message": "PASS root: Policy condition evaluated true"
           },
           {
-            "at": "2026-10-07T11:03:27.489Z",
+            "at": "2026-10-07T14:06:08.116Z",
             "stage": "evaluating",
             "message": "PASS source:chainlink-feed:ethereum-mainnet:BTC: Chainlink BTC/USD (mainnet) observed 1500.0s ago; limit 93600s"
           },
           {
-            "at": "2026-10-07T11:03:27.489Z",
+            "at": "2026-10-07T14:06:08.116Z",
             "stage": "reporting",
             "message": "SIMULATED sell 0.5 BTC at $85,000.00 reference (mock-venue); no transaction, no asset moved"
           }
@@ -425,8 +427,8 @@
             "usd": 85000,
             "raw": "8500000000000",
             "roundId": "110680464442257320164",
-            "observedAt": "2026-10-07T10:38:27.488Z",
-            "fetchedAt": "2026-10-07T11:03:27.488Z"
+            "observedAt": "2026-10-07T13:41:08.115Z",
+            "fetchedAt": "2026-10-07T14:06:08.115Z"
           }
         ],
         "evidence": {
@@ -439,41 +441,41 @@
             "referencePriceUsd": 85000,
             "notionalUsd": 42500,
             "referenceSource": "Chainlink BTC/USD (mainnet)",
-            "observedAt": "2026-10-07T10:38:27.488Z",
-            "placedAt": "2026-10-07T11:03:27.489Z"
+            "observedAt": "2026-10-07T13:41:08.115Z",
+            "placedAt": "2026-10-07T14:06:08.116Z"
           },
           "verification": "Simulated order; no transaction and no asset moved"
         },
-        "completedAt": "2026-10-07T11:03:27.489Z"
+        "completedAt": "2026-10-07T14:06:08.117Z"
       }
     ],
     "conversation": [
       {
-        "id": "397a76b4-8963-48d8-a17c-b4eca37dee31",
+        "id": "3ddda0b2-d87d-4bce-b79a-30b024f60b9d",
         "role": "assistant",
-        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T11:03:23.474Z); Grant vault.",
-        "at": "2026-10-07T11:03:27.474Z",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T14:06:04.101Z); Grant vault.",
+        "at": "2026-10-07T14:06:08.101Z",
         "source": "mcp"
       },
       {
-        "id": "006d5af7-978a-40bd-bc6d-c9262da5488d",
+        "id": "9363ad42-a0c3-402e-8f9d-8cdd2b5d5887",
         "role": "assistant",
         "text": "Revision 1. Submit a simulated sell of 0.5 BTC when Chainlink BTC/USD (mainnet) < $90,000. Execution fetches Chainlink BTC/USD (mainnet). The sell is simulated and runs only in local rehearsal; no asset moves.",
-        "at": "2026-10-07T11:03:27.475Z",
+        "at": "2026-10-07T14:06:08.102Z",
         "source": "mcp"
       },
       {
-        "id": "16226e56-349a-460c-a80f-ea6ec8f62cca",
+        "id": "8366a2d0-ca58-4fb5-a1f2-73d67c7a226a",
         "role": "assistant",
-        "text": "Run run-25ac6851-1359-48df-9f12-a17f2830ee3e started against immutable revision 1.",
-        "at": "2026-10-07T11:03:27.476Z",
+        "text": "Run run-120086fc-844f-41b0-b235-a1ff4406a9e9 started against immutable revision 1.",
+        "at": "2026-10-07T14:06:08.103Z",
         "source": "mcp"
       },
       {
-        "id": "0b21d7cb-5840-41f0-867d-e398d46fd9bd",
+        "id": "880cedb8-a82d-40c8-97ec-992552d39105",
         "role": "assistant",
         "text": "Revision 1: simulated sell of 0.5 BTC; no transaction, no asset moved.",
-        "at": "2026-10-07T11:03:27.489Z",
+        "at": "2026-10-07T14:06:08.117Z",
         "source": "mcp"
       }
     ],
@@ -486,33 +488,168 @@
       {
         "operationId": "d",
         "tool": "discover_objects",
-        "receivedAt": "2026-10-07T11:03:27.474Z",
-        "committedAt": "2026-10-07T11:03:27.474Z",
-        "commitMs": 0.13
+        "receivedAt": "2026-10-07T14:06:08.101Z",
+        "committedAt": "2026-10-07T14:06:08.101Z",
+        "commitMs": 0.17
       },
       {
         "operationId": "c",
         "tool": "compose_graph",
-        "receivedAt": "2026-10-07T11:03:27.474Z",
-        "committedAt": "2026-10-07T11:03:27.475Z",
-        "commitMs": 1.02
+        "receivedAt": "2026-10-07T14:06:08.101Z",
+        "committedAt": "2026-10-07T14:06:08.102Z",
+        "commitMs": 0.72
       },
       {
         "operationId": "r",
         "tool": "run_workflow",
-        "receivedAt": "2026-10-07T11:03:27.476Z",
-        "committedAt": "2026-10-07T11:03:27.476Z",
-        "commitMs": 0.07
+        "receivedAt": "2026-10-07T14:06:08.103Z",
+        "committedAt": "2026-10-07T14:06:08.103Z",
+        "commitMs": 0.11
       }
     ],
     "capabilities": {
       "price": "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
       "vault": "Fixture vault · no deployed contract",
       "execution": "Local policy rehearsal · fixture vault · no transaction",
-      "voice": "Planned utterances · actual desktop voice unverified",
-      "mcp": "Semantic tools · official MCP stdio transport"
+      "voice": "Browser mic → local Whisper dictation → semantic operator; Codex desktop voice separate/unverified",
+      "mcp": "Semantic tools · official MCP stdio transport",
+      "supported": {
+        "executionAuthority": "Chainlink CRE only; no direct wallet signer fallback",
+        "sources": [
+          {
+            "type": "exchange-trade",
+            "provider": "Coinbase via CRE HTTP capability",
+            "market": "exact online SYMBOL-USD"
+          },
+          {
+            "type": "chainlink-feed",
+            "provider": "Chainlink Data Feeds via CRE EVM capability",
+            "market": "configured USD feed on explicitly selected Ethereum mainnet or Sepolia",
+            "freshness": "Mandatory 26-hour feed age cap; explicit freshness nodes may tighten it"
+          },
+          {
+            "type": "proof-of-reserve",
+            "provider": "Chainlink Proof of Reserve via CRE EVM capability",
+            "market": "registered reserve feeds (WBTC)"
+          },
+          {
+            "type": "token-supply",
+            "provider": "ERC-20 totalSupply via CRE EVM capability",
+            "market": "registered tokens (WBTC)"
+          },
+          {
+            "type": "lending-rate",
+            "provider": "Aave v3 and Compound v3 contracts via CRE EVM capability",
+            "market": "USDC supply APR"
+          },
+          {
+            "type": "vault-balance",
+            "provider": "The grant vault's own ETH balance via CRE EVM capability"
+          }
+        ],
+        "nodes": [
+          "price",
+          "reading",
+          "math",
+          "compare",
+          "freshness",
+          "vault-paused",
+          "time",
+          "and",
+          "or",
+          "not"
+        ],
+        "comparators": [
+          "<",
+          "<=",
+          ">",
+          ">="
+        ],
+        "actions": [
+          {
+            "type": "pause-vault",
+            "effect": "CRE evaluates the frozen policy and delivers its bound report through CRE EVM write to the grant vault receiver (report v2 or v3); verified receipt/event and vault state required"
+          },
+          {
+            "type": "sweep",
+            "effect": "A share of the vault's ETH to the reserve fixed at deploy, optionally pausing in the same report (report v3)"
+          },
+          {
+            "type": "pay",
+            "effect": "A payee the vault owner registered, capped per payment and rate-limited on chain, never while paused (report v3)"
+          },
+          {
+            "type": "evacuate",
+            "effect": "The vault's CCIP-BnM to the reserve on Base Sepolia through Chainlink CCIP, fee capped, optionally pausing (report v3)"
+          }
+        ],
+        "solana": "When configured, the same CRE decision pauses (or sweeps) the Solana devnet vault through CRE's Solana write; the program accepts reports only from its bound CRE forwarder",
+        "utilities": [
+          {
+            "name": "read_price_feed",
+            "network": "Ethereum mainnet or Sepolia",
+            "effect": "Chainlink oracle observation with exact feed/network identity and age; a read does not execute a policy"
+          },
+          {
+            "name": "list_price_feeds",
+            "network": "Ethereum mainnet and Sepolia",
+            "effect": "Configured Chainlink source discovery; availability is explicit"
+          }
+        ],
+        "limits": {
+          "nodes": 40,
+          "booleanInputs": 8,
+          "sourcesPerDiscovery": 12,
+          "thresholdMaxUsd": 10000000,
+          "executionSources": 5,
+          "exchangeMaxAgeSeconds": 120,
+          "feedMaxAgeSeconds": 93600,
+          "freshnessNodeMaxAgeSeconds": 86400
+        },
+        "triggers": "run_workflow evaluates once through CRE; watch_policy runs a standing policy through the CRE workflow's own cron trigger (every 30 seconds or slower); evaluationOnly:true freezes no-broadcast authority and never submits a report even when the root passes. activate_policy explicitly schedules repeated CRE evaluations of a frozen pause policy while the backend runs, stopping after one verified pause. This backend scheduler is not a deployed DON trigger; restarts pause or mark jobs uncertain.",
+        "monitoring": {
+          "activate": "activate_policy",
+          "deactivate": "deactivate_policy",
+          "inspect": "get_monitors",
+          "reconcile": "reconcile_policy",
+          "maxActiveMonitors": 8,
+          "maxConsecutiveObservationFailures": 5,
+          "defaultIntervalSeconds": 30,
+          "minIntervalSeconds": 15,
+          "maxIntervalSeconds": 3600,
+          "survivesRestart": "Persisted evidence; no automatic resumption"
+        },
+        "safeguards": [
+          "Mandatory provider-specific freshness gates for every source",
+          "Already-paused no-op guard",
+          "Immutable revision and bound policy report",
+          "Operation-id deduplication",
+          "CRE executor required before execution; direct signing forbidden"
+        ],
+        "receiver": "Version 2 binds run, revision, policy hash, target vault and chain; local CRE simulation, broadcast and actual DON execution must be described separately",
+        "unsupported": [
+          "copy-trading without an implemented CRE receiver",
+          "standalone EVM swaps or leader-following signers",
+          "direct Solana transfers",
+          "solana-transfer policies without a CRE receiver integration",
+          "mainnet signing",
+          "automatic asset or action substitution",
+          "arbitrary code",
+          "unconfigured chain/feed",
+          "monitoring while backend is offline"
+        ]
+      }
     },
-    "inspectedRunId": "run-25ac6851-1359-48df-9f12-a17f2830ee3e",
+    "monitors": [],
+    "tradeWatches": [],
+    "fixtureTreasury": {
+      "balanceEth": 0.12,
+      "tokens": 2,
+      "reserveEth": 0,
+      "lastPaymentAt": 0,
+      "lastEvacuationAt": 0
+    },
+    "inspectedRunId": "run-120086fc-844f-41b0-b235-a1ff4406a9e9",
     "canUndoClear": false
   }
 }

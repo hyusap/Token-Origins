@@ -1,5 +1,5 @@
 import {expect,test} from 'bun:test';
-import {specificationSchema,parsePrice} from './spec';
+import {specificationSchema,parsePrice,priceUrl} from './spec';
 import {policyHash,legacyGraph} from './graph';
 
 const graph=legacyGraph(3000);
@@ -35,4 +35,16 @@ test('invalid source data blocks rather than fabricating an observation',()=>{
   const parsed=parsePrice({price:'2700.00',time:'2026-10-06T04:39:30.123456789Z'});
   expect(parsed.usd).toBe(2700);
   expect(parsed.raw).toBe('2700.00');
+});
+
+
+test('exchange quote provenance identifies the exact requested market',()=>{
+  const url=priceUrl('SOL-USD');
+  expect(url).toBe('https://api.exchange.coinbase.com/products/SOL-USD/ticker');
+  expect(parsePrice({price:'150.00',time:'2026-10-06T04:39:30Z'},url).source).toBe(url);
+  for(const pair of ['SOL-USDC','../ETH-USD','sol-USD','ETH-USD?url=evil']) expect(()=>priceUrl(pair)).toThrow();
+});
+
+test('immutable execution specifications reject simulated action snapshots',()=>{
+  expect(()=>specificationSchema.parse({...spec,graph:{...graph,action:{type:'sell',symbol:'BTC',amount:1,venue:'mock-venue'}}})).toThrow();
 });

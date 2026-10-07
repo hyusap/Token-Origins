@@ -1,3 +1,7 @@
+import { creReadiness } from "./cre-status";
+import {createTradeTools} from './trade-tools';
+import {resolvePolicyTarget,executeDispatchedPolicy,recoverSolanaPolicy,recoveredSolanaEvidence,type PolicyExecutorDependencies} from './policy-executor';
+import {isEvmTarget,isSolanaTarget,sameExecutionTarget,assertSolanaSettlement,type ExecutionTarget} from '../shared/execution-target';
 import type {
   CanvasState,
   ExecutionRun,
@@ -7,8 +11,11 @@ import type {
   WatchState,
   WorkflowRevision,
 } from "../shared/types";
+import {inspectSolanaWallet,getSolanaDevnetWallet,getSolanaDevnetActionTarget,transferSolanaDevnet,reconcileSolanaDevnetTransfer} from "./solana";
+import {PolicyMonitorManager,type PolicyMonitor} from "./monitor";
 import { StateStore } from "./store";
 import { migrateState, STATE_VERSION } from "./migrate";
+import { supportedPolicyCapabilities, VAULT_TRIGGER_RESTRICTION } from "../shared/policy-capabilities";
 import { buildExecutionPrice } from "./execution-price";
 import { fetchPrice, fetchVault, loadDeployment, type Deployment } from "./sources";
 import {
@@ -21,7 +28,6 @@ import {
 } from "./chainlink";
 import {
   legacyGraph,
-  readsVault,
   DEFAULT_EXCHANGE_MAX_AGE_SECONDS,
   MAX_FEED_AGE_SECONDS,
   MAX_STATE_AGE_SECONDS,
@@ -30,11 +36,14 @@ import {
   phraseCondition,
   validateGraph,
   collectSources,
+  readsVault,
   describeSource,
   isLegacyShape,
   isSourceNode,
   isSimulatedAction,
   actionPauses,
+  isVaultAction,
+  reportedThreshold,
   policyHash,
   sourceIdentity,
   sourceSchema,
@@ -72,6 +81,8 @@ import { RECIPES, recipeById, recipeCatalog } from "./recipes";
 import { MIN_WATCH_SECONDS } from "./schemas";
 export { MIN_WATCH_SECONDS };
 const now = () => new Date().toISOString();
+const CURRENT_PRICE_CAPABILITY="Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback";
+const CURRENT_VAULT_CAPABILITY="CRE Sepolia receiver · live read required";
 const clone = <T>(v: T): T => structuredClone(v);
 const baseRevision = (): WorkflowRevision => ({
   revision: 0,
@@ -102,7 +113,7 @@ const READ_ONLY_TOOLS = ["get_context", "get_run", "describe_policy", "list_pric
 /** Archive form of an exchange trade object. */
 export function exchangeObservation(object: GraphObject): Observation {
   return {
-    ...sourceIdentity({ type: "exchange-trade", pair: "ETH-USD" }),
+    ...sourceIdentity({ type: "exchange-trade", pair: object.data.productId || object.id.slice(6).toUpperCase() }),
     value: Number(object.data.price),
     usd: Number(object.data.price),
     raw: String(object.data.price),
@@ -137,11 +148,12 @@ export function emptyState(): CanvasState {
     },
     latency: [],
     capabilities: {
-      price: "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
-      vault: "Fixture until local contract is deployed",
-      execution: "Local policy rehearsal · no blockchain evidence yet",
-      voice: "Planned utterances · actual desktop voice unverified",
+      price: CURRENT_PRICE_CAPABILITY,
+      vault: CURRENT_VAULT_CAPABILITY,
+      execution: "Chainlink CRE · sole execution authority · awaiting a verified run",
+      voice: "Browser mic → local Whisper dictation → semantic operator; Codex desktop voice separate/unverified",
       mcp: "Semantic tools · official MCP stdio transport",
+      supported: supportedPolicyCapabilities,
     },
   };
 }
@@ -158,6 +170,9 @@ export interface EngineSources {
   fetchReading: typeof fetchReading;
   /** Schedules a standing policy's next check; returns a cancel function. */
   schedule: (callback: () => void, ms: number) => () => void;
+  solanaTarget:typeof getSolanaDevnetActionTarget;
+  solanaTransfer:typeof transferSolanaDevnet;
+  solanaRecovery:typeof reconcileSolanaDevnetTransfer;
 }
 export class Engine {
   state: CanvasState;
@@ -177,6 +192,8 @@ export class Engine {
   executions: Promise<unknown> = Promise.resolve();
   cancelWatch?: () => void;
   sources: EngineSources;
+  monitors: PolicyMonitorManager;
+  tradeTools:ReturnType<typeof createTradeTools>;
   constructor(store = new StateStore(), sources: Partial<EngineSources> = {}) {
     this.sources = {
       fetchPrice,
@@ -187,27 +204,46 @@ export class Engine {
       findSubmittedPause,
       fetchReading,
       schedule: (callback, ms) => { const timer = setTimeout(callback, ms); return () => clearTimeout(timer); },
+      solanaTarget:getSolanaDevnetActionTarget,solanaTransfer:transferSolanaDevnet,solanaRecovery:reconcileSolanaDevnetTransfer,
       ...sources,
     };
     this.store = store;
     this.state = migrateState(store.load() as CanvasState) || emptyState();
+    this.state.capabilities ??= emptyState().capabilities;
+    this.state.capabilities.supported = supportedPolicyCapabilities;
+    this.state.capabilities.voice = "Browser mic → local Whisper dictation → semantic operator; Codex desktop voice separate/unverified";
+    if(!this.researchExecution) {
+      this.state.capabilities.execution="Chainlink CRE · sole product execution authority";
+      this.state.capabilities.vault=CURRENT_VAULT_CAPABILITY;
+      this.state.capabilities.price=CURRENT_PRICE_CAPABILITY;
+    }
     this.fixturePaused = Boolean(
       this.state.objects.find((x) => x.id === "vault:grant" && x.data.fixture)
         ?.data.paused,
     );
     let interruptedRun = false;
-    for (const run of this.state.runs)
+    for (const run of this.state.runs) {
+      // Older builds could fail after a durable submission while replaying later source logs.
+      // Recover that journal read-only even when the last visible stage was fetching/failed.
+      if(run.status==='failed'&&!run.evaluationOnly&&run.target&&run.evidence?.receiptStatus==='pending'&&(run.submissionPossible||run.evidence.transactionHash||run.evidence.submittedSignature)) {
+        run.uncertain=true;
+        run.submissionPossible=true;
+        interruptedRun=true;
+      }
       if (!TERMINAL.includes(run.status)) {
         // The report may or may not have landed. Never resubmit blindly:
         // hold new runs until the chain answers.
         interruptedRun = true;
+        if(run.status === "reporting"&&!run.evaluationOnly) run.submissionPossible=true;
         run.status = "failed";
-        run.uncertain = true;
-        run.error =
-          "Backend restarted during execution; checking the chain before allowing a retry";
+        run.uncertain = !run.evaluationOnly;
+        if(run.evaluationOnly)run.submissionPossible=false;
+        run.error = run.evaluationOnly ? "Backend restarted during a CRE evaluation; broadcast was disabled and no report was permitted." : "Backend restarted during execution; checking the chain before allowing a retry";
         run.completedAt = now();
         run.logs.push({ at: now(), stage: "failed", message: run.error });
       }
+    }
+    const interruptedWrite=this.state.runs.some(run=>run.uncertain);
     // A standing policy never resumes on its own after a restart.
     if (this.state.watch?.status === "watching")
       Object.assign(this.state.watch, { status: "stopped", stopReason: "The backend restarted; call watch_policy again to resume.", nextCheckAt: undefined });
@@ -215,11 +251,48 @@ export class Engine {
       ...this.state.activity,
       status: interruptedRun ? "error" : "idle",
       summary: interruptedRun
-        ? "Backend restarted during execution; checking the chain before allowing a retry"
+        ? interruptedWrite ? "Backend restarted during execution; checking the chain before allowing a retry" : "CRE evaluation interrupted; broadcast was disabled"
         : this.state.activity.summary,
     };
     this.store.save(this.state);
-    if (interruptedRun) this.reconcileQueued();
+    if (interruptedWrite) this.reconcileQueued();
+    this.monitors = new PolicyMonitorManager(this.store.db, async (spec,target,progress) => {
+      return executeDispatchedPolicy(spec,target,progress,this.policyDependencies());
+    },{onChange:monitor => {queueMicrotask(()=>void this.monitorChanged(monitor));}});
+    this.state.monitors = this.monitors.list(this.state.sessionId);
+    this.tradeTools=createTradeTools({db:this.store.db,onChange:()=>queueMicrotask(()=>{
+      if(!this.tradeTools)return;this.state.tradeWatches=this.tradeTools.listWatches(this.state.sessionId);this.commit();
+    })});
+    this.state.tradeWatches=this.tradeTools.listWatches(this.state.sessionId);
+  }
+  close(){this.monitors.close();this.tradeTools.close();this.store.db.close();}
+  get researchExecution(){return this.sources.fetchVault!==fetchVault||this.sources.executeRun!==executeCreRun||this.sources.solanaTransfer!==transferSolanaDevnet||this.sources.solanaTarget!==getSolanaDevnetActionTarget;}
+  policyDependencies():PolicyExecutorDependencies {
+    return {research:this.researchExecution,deployment:()=>this.sources.loadDeployment(),resolveFeed:source=>this.readFeed(source),resolveSource:source=>this.readChainSource(source),fetchExchange:async source=>{
+      const price=await this.sources.fetchPrice(source.pair);this.observePrice(price);return exchangeObservation(price);
+    },executeEvm:this.sources.executeRun,solanaTarget:this.sources.solanaTarget,transfer:this.sources.solanaTransfer,reconcileTransfer:this.sources.solanaRecovery};
+  }
+  async frozenTarget(graph:PolicyGraph,prior?:ExecutionTarget):Promise<ExecutionTarget> {
+    const current=await resolvePolicyTarget(graph,this.policyDependencies());
+    if(prior&&!sameExecutionTarget(prior,current))throw new Error('The frozen execution authority or vault input changed; compose a new explicit revision before running');
+    return prior??current;
+  }
+  async monitorChanged(monitor: PolicyMonitor) {
+    if (!this.monitors || monitor.sessionId !== this.state.sessionId) return;
+    this.state.monitors = this.monitors.list(this.state.sessionId);
+    const result = monitor.latestEvidence;
+    if (monitor.status === "completed" && (result?.transaction || result?.solanaTransfer) && !this.state.runs.some(run=>run.id===result.runId)) {
+      const snapshot = this.state.workflow.revisions.find(revision=>revision.policyHash===monitor.spec.policyHash && revision.revision===monitor.spec.revision);
+      if (snapshot) {
+        const run: ExecutionRun = {id:result.runId,revision:result.revision,snapshot:clone(snapshot),policyHash:result.policyHash,target:monitor.target,
+          action:result.action,status:"reporting",startedAt:monitor.updatedAt,completedAt:now(),executionMode:"Policy monitor",decisions:[],logs:monitor.logs.map(log=>({...log,stage:"monitor"}))};
+        this.state.runs.unshift(run);
+        try {await this.applyResult(run,result,await this.sources.loadDeployment());}
+        catch(error) {run.status="failed";run.error=String(error);}
+        this.say(`Monitor ${monitor.id}: ${this.completionSummary(run)}`);
+      }
+    }
+    this.commit();
   }
   /** Settles every interrupted run from chain state, inside the operation queue. */
   reconcileQueued() {
@@ -229,8 +302,16 @@ export class Engine {
   }
   async reconcileAll() {
     let changed = false;
-    for (const run of this.state.runs.filter((x) => x.uncertain))
-      changed = (await this.reconcile(run)) || changed;
+    const recovered=new Set<string>();
+    for (const run of this.state.runs.filter((x) => x.uncertain)) {
+      const updated=await this.reconcile(run);
+      if(updated)recovered.add(run.id);
+      changed = updated || changed;
+    }
+    const selected=this.state.inspectedRunId ? this.state.runs.find(run=>run.id===this.state.inspectedRunId) : this.state.runs[0];
+    if(selected&&recovered.has(selected.id)&&!selected.uncertain&&['confirmed','no-op'].includes(selected.status)) {
+      this.state.activity={...this.state.activity,status:'idle',summary:this.completionSummary(selected)};
+    }
     if (changed) this.commit();
   }
   async reconcile(run: ExecutionRun): Promise<boolean> {
@@ -238,17 +319,36 @@ export class Engine {
     const record = (message: string) =>
       run.logs.push({ at: now(), stage: "recovery", message });
     try {
+      if(run.target&&isSolanaTarget(run.target)) {
+        const recovered=await recoverSolanaPolicy(this.specFor(run),run.target,this.policyDependencies());
+        if(recovered.status==='confirmed'&&recovered.receipt) {
+          await this.applyResult(run,recoveredSolanaEvidence(this.specFor(run),run.target,recovered.receipt,{
+            vault:run.inputs?.vault ? {address:run.inputs.vault.data.address,chainId:run.inputs.vault.data.chainId,paused:run.inputs.vault.data.paused,balanceWei:run.inputs.vault.data.balanceWei,reportVersion:run.inputs.vault.data.reportVersion??null}:null,
+            observations:run.observations??[],conditions:run.decisions.filter(d=>d.nodeId&&d.role).map(d=>({nodeId:d.nodeId!,kind:d.id,role:d.role!,passed:d.passed,detail:d.detail})),
+          }),null);
+          run.uncertain=false;delete run.error;record(`Recovered exact Solana transfer ${recovered.receipt.signature}`);return true;
+        }
+        if(['not-submitted','expired','failed'].includes(recovered.status)) {
+          run.uncertain=false;run.status='failed';run.error=recovered.reason;record(recovered.reason);return true;
+        }
+        throw new Error(recovered.reason);
+      }
       const deployment = await this.sources.loadDeployment();
       if (!deployment) {
+        if (this.sources.fetchVault === fetchVault) throw new Error("Execution deployment is unavailable; chain outcome remains unknown");
         run.uncertain = false;
         run.error = "Backend restarted during a fixture rehearsal; nothing reached a chain. Safe to run again.";
         record(run.error);
         return true;
       }
-      const found = await this.sources.findSubmittedPause(run.id, deployment);
+      const target = run.target || (run.evidence?.contractAddress && run.evidence.chainId ? {address:run.evidence.contractAddress,chainId:run.evidence.chainId} : undefined);
+      if (target && isEvmTarget(target) && (target.address.toLowerCase() !== deployment.address.toLowerCase() || target.chainId !== deployment.chainId))
+        throw new Error("Execution target changed; restore this run's recorded chain and vault before recovery");
+      const found = await this.sources.findSubmittedPause(run.id, deployment, {revision:run.revision,policyHash:run.snapshot.policyHash || policyHash(run.snapshot.graph)},run.evidence?.transactionHash);
       run.uncertain = false;
       if (found.landed && found.transactionHash) {
         run.status = "confirmed";
+        if(run.target&&isEvmTarget(run.target)&&run.target.executor==='cre')run.executionMode='CRE local simulation · Sepolia broadcast · recovered receipt';
         delete run.error;
         run.evidence = {
           ...run.evidence,
@@ -271,6 +371,8 @@ export class Engine {
         run.noopReason = "This run's report landed before the restart, but no pause event was found for it; the vault was likely already paused.";
         record(run.noopReason);
       } else {
+        if(run.submissionPossible && !found.submissionSettled) {run.uncertain=true;throw new Error("No landed report found yet; an unconfirmed submission may still exist, so a new action remains blocked");}
+        if(found.submissionSettled) {run.submissionPossible=false;if(run.evidence)run.evidence.receiptStatus='not-landed';}
         run.error = "Backend restarted before this run's report landed; nothing reached the chain. Safe to run again.";
         record(run.error);
       }
@@ -432,6 +534,9 @@ export class Engine {
   updateGraph() {
     const w = this.state.workflow;
     if (!w.created) return;
+    const pair = collectSources(w.graph).find(s => s.type === "exchange-trade");
+    const priceId = pair?.type === "exchange-trade" ? "price:" + pair.pair.toLowerCase() : "";
+    const sourceId = priceId === "price:eth-usd" ? "source:coinbase" : "source:" + priceId;
     const provenance = {
       source: "Policy composition",
       observedAt: now(),
@@ -493,19 +598,25 @@ export class Engine {
       );
       // The id stays stable for the canvas; the label and data name the actual action.
       const action = graph.action;
+      const actionId = action.type === "solana-transfer" ? "action:solana-transfer" : "action:pause";
+      this.state.objects = this.state.objects.filter((x) => !x.id.startsWith("action:") || x.id === actionId);
       this.object({
-        id: "action:pause",
+        id: actionId,
         kind: "action",
         label: describeAction(action),
-        data: isSimulatedAction(action) ? { ...action, simulated: true } : { ...action, target: "vault:grant" },
+        data: isSimulatedAction(action) ? { ...action, simulated: true } : action.type === "solana-transfer" ? { ...action, target: action.recipient } : { ...action, target: "vault:grant" },
         visible: true,
         pinned: false,
         provenance,
       });
       w.summary = describeGraph(graph);
       const edges: CanvasState["edges"] = [];
-      if (collectSources(graph).some((source) => source.type === "exchange-trade"))
-        edges.push({ id: "e1", from: "source:coinbase", to: "price:eth-usd", label: "observes" });
+      for (const source of collectSources(graph)) {
+        if (source.type !== "exchange-trade") continue;
+        const priceId = readingObjectId(source);
+        const observed = this.state.objects.find((o) => o.id === priceId);
+        edges.push({ id: `observes-${priceId}`, from: observed?.data.sourceObjectId ?? "source:coinbase", to: priceId, label: "observes" });
+      }
       for (const node of graph.nodes) {
         if (isSourceNode(node)) continue;
         const to = `condition:${node.id}`;
@@ -518,8 +629,9 @@ export class Engine {
           (node.kind === "not" ? [node.input] : node.inputs).forEach((input, i) =>
             edges.push({ id: `in-${node.id}-${i}`, from: inputObject(input), to, label: node.kind === "not" ? "negates" : node.kind }));
       }
-      edges.push({ id: "out-root", from: `condition:${graph.root}`, to: "action:pause", label: "if true" });
-      edges.push({
+      edges.push({ id: "out-root", from: `condition:${graph.root}`, to: actionId, label: "if true" });
+      // A direct Solana transfer (research only) has no vault edge.
+      if (action.type !== "solana-transfer") edges.push({
         id: "e-act",
         from: "action:pause",
         to: "vault:grant",
@@ -587,18 +699,18 @@ export class Engine {
     // A composed graph describes itself; the scalar sentence only fits the
     // single-compare shape it was written for.
     w.summary = isLegacyShape(w.graph)
-      ? `When ETH / USD is below $${w.threshold.toLocaleString("en-US", { maximumFractionDigits: 2 })}${w.maxAgeSeconds !== null ? `, the observation is no more than ${w.maxAgeSeconds} seconds old` : ""}${w.skipPaused ? ", and the grant vault is not already paused" : ""}, pause grant vault spending.`
+      ? `When ${pair?.type === "exchange-trade" ? pair.pair.replace("-", " / ") : "Price"} is below $${w.threshold.toLocaleString("en-US", { maximumFractionDigits: 2 })}${w.maxAgeSeconds !== null ? `, the observation is no more than ${w.maxAgeSeconds} seconds old` : ""}${w.skipPaused ? ", and the grant vault is not already paused" : ""}, pause grant vault spending.`
       : describeGraph(w.graph);
     this.state.edges = [
       {
         id: "e1",
-        from: "source:coinbase",
-        to: "price:eth-usd",
+        from: sourceId,
+        to: priceId,
         label: "observes",
       },
       {
         id: "e2",
-        from: "price:eth-usd",
+        from: priceId,
         to: "condition:threshold",
         label: "compares",
       },
@@ -614,7 +726,7 @@ export class Engine {
       this.state.edges.push(
         {
           id: "e5",
-          from: "price:eth-usd",
+          from: priceId,
           to: "condition:freshness",
           label: "timestamp",
         },
@@ -653,6 +765,7 @@ export class Engine {
   async perform(tool: string, args: Record<string, any>): Promise<ToolResult> {
     const started = performance.now();
     const receivedAt = now();
+    if(!this.researchExecution&&['transfer_solana_devnet','copy_evm_swap','activate_evm_trade_watch'].includes(tool))return {ok:false,code:'CRE_EXECUTION_REQUIRED',summary:'This direct-signing action has no implemented CRE workflow and is disabled. All product writes require Chainlink CRE.',error:'CRE execution required',state:this.context()};
     const operationId = args.operationId || crypto.randomUUID();
     const signature = JSON.stringify({
       tool,
@@ -669,6 +782,13 @@ export class Engine {
           code: "OPERATION_CONFLICT",
           state: this.context(),
         };
+      if(tool==='copy_evm_swap'&&existing.result.ok) {
+        try {
+          const recovered=await this.tradeTools.invoke('reconcile_evm_copy_swap',{copyOperationId:operationId},this.state.sessionId);
+          if(recovered?.data.status!=='confirmed')throw new Error(recovered?.summary || 'Original copy receipt is not currently confirmed');
+          return {...existing.result,data:{receipt:recovered.data.receipt},summary:`Reverified the same canonical copy receipt for operation ${operationId}. No new transaction was sent.`,state:this.context(),duplicate:true};
+        }catch(error){const message=String(error);return {ok:false,summary:message,error:message,code:'COPY_RECEIPT_UNVERIFIED',state:this.context(),duplicate:true};}
+      }
       const run = existing.result.runId ? this.state.runs.find((x) => x.id === existing.result.runId) : undefined;
       return {
         ...existing.result,
@@ -679,8 +799,95 @@ export class Engine {
     }
     let summary = "";
     let runId: string | undefined;
+    let data: Record<string, unknown> | undefined;
     try {
       switch (tool) {
+        case "activate_policy": {
+          const workflow=this.state.workflow;
+          if (!workflow.created) throw new Error("Compose a policy before activating it");
+          if(args.expectedRevision!==workflow.revision) throw Object.assign(new Error("Draft changed; activate the explicit current revision"),{code:"REVISION_CONFLICT"});
+          const snapshot=clone(workflow.revisions.at(-1)!);
+          const target=await this.frozenTarget(snapshot.graph,snapshot.target);
+          const spec: ExecutionSpecification={version:2,runId:`monitor_${crypto.randomUUID().replaceAll("-","")}`,revision:snapshot.revision,graph:snapshot.graph,policyHash:snapshot.policyHash || policyHash(snapshot.graph),maxAgeSeconds:snapshot.maxAgeSeconds ?? 60,broadcast:true};
+          const monitor=this.monitors.activate({spec,target,activationId:operationId,sessionId:this.state.sessionId,intervalSeconds:args.intervalSeconds});
+          this.state.monitors=this.monitors.list(this.state.sessionId);
+          data={monitor};
+          summary=`Revision ${workflow.revision} is watching live inputs every ${monitor.intervalSeconds}s while this backend runs. Monitor ${monitor.id}; it stops after one verified action. Draft edits do not change its frozen rule.`;
+          break;
+        }
+        case "deactivate_policy": {
+          const monitor=this.monitors.get(String(args.monitorId));
+          if(monitor.sessionId!==this.state.sessionId) throw new Error("This monitor belongs to another canvas session");
+          const stopped=this.monitors.deactivate(monitor.id);
+          this.state.monitors=this.monitors.list(this.state.sessionId);
+          data={monitor:stopped};summary=`Monitor ${monitor.id}: ${stopped.status}. ${stopped.stopReason || "No further checks will run."}`;
+          break;
+        }
+        case "reconcile_policy": {
+          const original=this.monitors.get(String(args.monitorId));
+          if(original.sessionId!==this.state.sessionId) throw new Error("Monitor belongs to another canvas session");
+          const monitor=await this.monitors.reconcile(original.id,async frozen=>{
+            if(isSolanaTarget(frozen.target)) {
+              const spec={...frozen.spec,runId:frozen.lastRunId!};
+              const recovery=await recoverSolanaPolicy(spec,frozen.target,this.policyDependencies());
+              if(recovery.status==='confirmed'&&recovery.receipt)return {state:'confirmed' as const,evidence:recoveredSolanaEvidence(spec,frozen.target,recovery.receipt,frozen.latestEvidence)};
+              const identity={runId:spec.runId,revision:spec.revision,policyHash:spec.policyHash,target:frozen.target,checkedAt:recovery.checkedAt,journalVerified:true as const,chainVerified:true as const};
+              if(recovery.status==='not-submitted')return {state:'not-submitted' as const,...identity,processed:false as const};
+              if(recovery.status==='expired'&&recovery.signature)return {state:'expired' as const,...identity,signature:recovery.signature,lastValidBlockHeight:recovery.lastValidBlockHeight,blockHeight:recovery.currentBlockHeight};
+              if(recovery.status==='failed'&&recovery.signature)return {state:'failed' as const,...identity,signature:recovery.signature,transactionError:JSON.stringify(recovery.chainError)};
+              return {state:'unknown' as const,reason:recovery.reason};
+            }
+            const deployment=await this.sources.loadDeployment();
+            if(!deployment || deployment.chainId!==frozen.target.chainId || deployment.address.toLowerCase()!==frozen.target.address.toLowerCase())
+              return {state:"unknown" as const,reason:"Restore the monitor's original chain and vault before recovery"};
+            const found=await this.sources.findSubmittedPause(frozen.lastRunId!,deployment,{revision:frozen.spec.revision,policyHash:frozen.spec.policyHash},(frozen as any).submittedHash);
+            if(!found.landed && found.submissionSettled)
+              return {state:"not-submitted" as const,runId:frozen.lastRunId!,revision:frozen.spec.revision,policyHash:frozen.spec.policyHash,target:frozen.target,checkedAt:now(),processed:false as const};
+            if(!found.landed || !found.transactionHash || found.blockNumber===undefined || found.balanceWei===undefined || !found.decidedAt)
+              return {state:"unknown" as const,reason:"No matching confirmed pause event found yet; an in-flight report cannot be ruled out. No transaction was sent."};
+            const evidence:ExecutionEvidence={runId:frozen.lastRunId!,revision:frozen.spec.revision,policyHash:frozen.spec.policyHash,
+              mode:deployment.chainId===31337 ? "local-evm-rehearsal" : "cre-local-simulation",observations:[],conditions:[],root:true,decision:"act",action:"pause-vault",decidedAt:found.decidedAt,
+              vault:{address:deployment.address,chainId:deployment.chainId,paused:true,balanceWei:found.balanceWei,reportVersion:2},
+              transaction:{hash:found.transactionHash,blockNumber:found.blockNumber,status:"success",receiverConfirmed:true,pausedAfter:found.paused},
+              logs:["Recovered receiver receipt only; exact action observations were not recovered."]};
+            return {state:"confirmed" as const,evidence};
+          });
+          this.state.monitors=this.monitors.list(this.state.sessionId);
+          data={monitor};summary=`Monitor ${monitor.id}: ${monitor.status}. ${monitor.lastError || monitor.stopReason || "Recovery complete."}`;
+          break;
+        }
+        case "get_monitors": {
+          const monitors=args.monitorId ? [this.monitors.get(String(args.monitorId))] : this.monitors.list(this.state.sessionId);
+          if(monitors.some(monitor=>monitor.sessionId!==this.state.sessionId)) throw new Error("Monitor belongs to another canvas session");
+          return {ok:true,summary:monitors.length ? monitors.map(monitor=>`${monitor.id}: ${monitor.status}, ${monitor.checks} checks. ${monitor.lastError || monitor.stopReason || "Watching live inputs."}`).join(" ") : "No active policy monitors.",data:{monitors,...(args.monitorId ? {checks:this.monitors.checks(String(args.monitorId))} : {})},state:this.context()};
+        }
+
+        case "inspect_solana_wallet": {
+          const wallet = await inspectSolanaWallet({address:String(args.address),network:args.network,limit:args.limit});
+          data = {...wallet};
+          summary = `${wallet.address}: ${wallet.balanceSol} SOL on ${wallet.network}; ${wallet.activity.length} confirmed recent transactions inspected. ${wallet.explorerUrl}`;
+          break;
+        }
+        case "get_solana_devnet_wallet": {
+          const wallet = await getSolanaDevnetWallet();
+          return {ok:true,summary:`Task devnet wallet ${wallet.address}: ${wallet.balanceSol} SOL.`,data:{...wallet},state:this.context()};
+        }
+        case "transfer_solana_devnet": {
+          const receipt = await transferSolanaDevnet({recipient:String(args.recipient),amountSol:args.amountSol,idempotencyKey:operationId});
+          data = {...receipt};
+          summary = `Confirmed ${receipt.amountSol} SOL to ${receipt.recipient} on Solana devnet at slot ${receipt.slot}. ${receipt.explorerUrl}`;
+          break;
+        }
+
+        case "get_capabilities": {
+          const readiness = await creReadiness();
+          return {
+            ok: true,
+            summary: `Chainlink CRE is the sole product execution authority. ${readiness.reason} This application supports CRE-backed vault pauses; no direct signer fallback.`,
+            data: { ...supportedPolicyCapabilities, readiness },
+            state: this.context(),
+          };
+        }
         case "get_context":
           return {
             ok: true,
@@ -718,6 +925,12 @@ export class Engine {
           break;
         }
         case "list_price_feeds": {
+          if (args.network) {
+            const network = args.network as Network;
+            if (!NETWORKS[network]) throw new Error("Unsupported feed network");
+            summary = `Chainlink feeds on ${NETWORKS[network].label}: ${Object.entries(feedsOn(network)).map(([symbol,feed]) => `${symbol} (${feed.name})`).join(", ")}.`;
+            break;
+          }
           const mainnetFeeds = feedsOn("ethereum-mainnet");
           summary = `Chainlink mainnet feeds available: ${listFeedSymbols()
             .map((x) => `${x} (${mainnetFeeds[x]!.name})`)
@@ -754,6 +967,7 @@ export class Engine {
         case "read_price_feed": {
           const requested = String(args.symbol ?? "").trim();
           const network: Network = args.network ?? DEFAULT_FEED_NETWORK;
+          if (!NETWORKS[network]) throw new Error("Unsupported feed network");
           const feed = resolveFeedSymbol(requested);
           if (!feed || !feedsOn(network)[feed.symbol])
             throw new Error(
@@ -921,9 +1135,17 @@ export class Engine {
             );
           const patch = args.patch || {};
           const current = this.state.workflow;
+          const existingSource = collectSources(current.graph).find(source => source.type === "exchange-trade");
+          const selected = patch.priceReference ? this.resolve(patch.priceReference) :
+            !current.created ? this.state.objects.find(x => x.id === this.state.focus.objectId && x.kind === "price") ||
+              (this.state.objects.filter(x => x.kind === "price").length === 1 ? this.state.objects.find(x => x.kind === "price") : undefined) : undefined;
+          if (patch.priceReference && selected?.kind !== "price") throw new Error("Select a discovered exchange price observation");
+          if (!current.created && !selected && this.state.objects.filter(x => x.kind === "price").length > 1 && !patch.priceReference) throw new Error("Multiple price observations: specify priceReference to select the trigger");
+          const pair = selected ? (selected.data.productId || selected.id.slice(6).toUpperCase()) :
+            existingSource?.type === "exchange-trade" ? existingSource.pair : "ETH-USD";
           let threshold = patch.threshold ?? current.threshold;
           if (patch.thresholdAboveCurrent) {
-            const price = await this.sources.fetchPrice();
+            const price = await this.sources.fetchPrice(pair);
             this.object(price);
             threshold = Math.ceil(price.data.price * 1.05 * 100) / 100;
           }
@@ -953,14 +1175,14 @@ export class Engine {
           // composed graph only needs what it reads (a cap or guard edit).
           const scalar = isLegacyShape(current.graph);
           const needs = [
-            scalar && !this.state.objects.some((x) => x.id === "price:eth-usd") && 'the Coinbase ETH/USD price (discover_objects with tokens ["ETH"])',
+            scalar && !this.state.objects.some((x) => x.id === "price:" + pair.toLowerCase()) && `the Coinbase ${pair} price (discover_objects with tokens ["${pair.slice(0, -4)}"])`,
             (scalar || readsVault(current.graph)) && !this.state.objects.some((x) => x.kind === "vault") && 'the grant vault (discover_objects with objects ["vault"])',
           ].filter(Boolean);
           if (needs.length) throw new Error(`Discover ${needs.join(" and ")} before editing this policy`);
           // A scalar edit can only express the single-compare shape. Against a
           // composed graph it refuses, so branches the speaker added are never
           // discarded by a stray threshold tweak.
-          if (patch.threshold !== undefined || patch.thresholdAboveCurrent)
+          if (patch.threshold !== undefined || patch.thresholdAboveCurrent || patch.priceReference)
             if (!isLegacyShape(current.graph))
               throw new Error(
                 "This policy is a composed graph; revise it with compose_graph rather than a scalar threshold",
@@ -973,9 +1195,10 @@ export class Engine {
             createdAt: now(),
             reason: args.reason || "Voice policy revision",
             graph: isLegacyShape(current.graph)
-              ? legacyGraph(threshold)
+              ? legacyGraph(threshold, pair)
               : clone(current.graph),
           };
+          if(this.sources.fetchVault===fetchVault)revision.target=await this.frozenTarget(revision.graph);
           revision.policyHash = policyHash(revision.graph, revision.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS);
           current.revisions.push(revision);
           Object.assign(current, revision, { created: true });
@@ -1019,7 +1242,7 @@ export class Engine {
           // sources and oversized fetch plans. Nothing about execution depends
           // on node order: the receiver gets the structural policy hash.
           const { graph } = validateGraph(args.graph);
-          summary = this.composeRevision(graph, args.reason || "Composed condition graph", args.maxAgeSeconds);
+          summary = await this.composeRevision(graph, args.reason || "Composed condition graph", args.maxAgeSeconds);
           break;
         }
         case "list_recipes": {
@@ -1044,7 +1267,7 @@ export class Engine {
           const params = parsed.data;
           const { graph } = validateGraph(recipe.build(params));
           const credit = recipe.inspiredBy.map((x) => `${x.project} (${x.event}, ${x.award})`).join(" and ");
-          summary = `${this.composeRevision(graph, args.reason || `Recipe: ${recipe.title}`, args.maxAgeSeconds)} ${recipe.title}, inspired by ${credit}.${recipe.note ? ` ${recipe.note}` : ""}${recipe.watchSeconds ? ` To keep it running, call watch_policy with everySeconds ${recipe.watchSeconds}.` : ""}`;
+          summary = `${await this.composeRevision(graph, args.reason || `Recipe: ${recipe.title}`, args.maxAgeSeconds)} ${recipe.title}, inspired by ${credit}.${recipe.note ? ` ${recipe.note}` : ""}${recipe.watchSeconds ? ` To keep it running, call watch_policy with everySeconds ${recipe.watchSeconds}.` : ""}`;
           break;
         }
         case "undo_revision": {
@@ -1061,6 +1284,7 @@ export class Engine {
           const index = w.revisions.findIndex((x) => x.revision === effective);
           const target = index > 0 ? w.revisions[index - 1] : undefined;
           if (!target) throw new Error("No earlier revision to restore");
+          if(!this.researchExecution&&!isVaultAction(target.graph.action))throw Object.assign(new Error("This historical action is not executable through the current CRE product workflow"),{code:"CRE_EXECUTION_REQUIRED"});
           const revision: WorkflowRevision = {
             ...target,
             revision: w.revision + 1,
@@ -1091,22 +1315,25 @@ export class Engine {
             throw new Error(
               `Run ${unsettled.id} was interrupted by a restart and its outcome is still unknown; inspect it with get_run before running again.`,
             );
+          if(args.evaluationOnly!==undefined&&typeof args.evaluationOnly!=='boolean')throw new Error('evaluationOnly must be boolean');
+          const evaluationOnly=args.evaluationOnly===true;
           const inflight = this.state.runs.find(
             (x) => x.revision === w.revision && !TERMINAL.includes(x.status),
           );
+          if(inflight&&Boolean(inflight.evaluationOnly)!==evaluationOnly)throw Object.assign(new Error('This revision has an in-flight run with a different evaluation/broadcast mode; wait for it to complete'),{code:'EXECUTION_MODE_CONFLICT'});
           if (inflight) {
             runId = inflight.id;
             this.selectRun(inflight);
             summary = `Revision ${w.revision} is already executing as run ${inflight.id}; joined it without starting a duplicate.`;
             break;
           }
-          const run = this.startRun(w.revisions.at(-1)!, { trigger: "manual", prompt: "Run this version" });
+          const run = await this.startRun(w.revisions.at(-1)!, { trigger: "manual", prompt: "Run this version", evaluationOnly });
           runId = run.id;
           this.selectRun(run);
           const sessionId = this.state.sessionId;
           const waiting = this.state.runs.some((x) => x.id !== run.id && !TERMINAL.includes(x.status));
           setTimeout(() => void this.executeInTurn(run.id, sessionId), 10);
-          summary = `Run ${runId} started against immutable revision ${w.revision}.${waiting ? " It starts after the run already executing finishes." : ""}`;
+          summary = `Run ${runId} started against immutable revision ${w.revision}${evaluationOnly ? "; evaluation only, no report can be submitted" : ""}.${waiting ? " It starts after the run already executing finishes." : ""}`;
           break;
         }
         case "get_run": {
@@ -1192,6 +1419,14 @@ export class Engine {
           break;
         }
         case "navigate_canvas": {
+          if(args.action==='show_draft') {
+            delete this.state.inspectedRunId;
+            this.state.mode=this.state.workflow.created ? 'compose' : 'explore';
+            this.focus(this.state.workflow.id,this.state.workflow.created ? `Editable policy v${String(this.state.workflow.revision).padStart(2,'0')}` : 'Editable policy draft');
+            this.state.canvasView={action:'fit',sequence:(this.state.canvasView?.sequence||0)+1};
+            summary=this.state.workflow.created ? `Showing editable policy revision ${this.state.workflow.revision}.` : 'Showing the editable policy draft.';
+            break;
+          }
           if (!["fit", "zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down"].includes(args.action)) throw new Error("Unknown canvas navigation action.");
           this.state.canvasView = { action: args.action, sequence: (this.state.canvasView?.sequence || 0) + 1 };
           summary = args.action === "fit" ? "Framed the whole canvas." : `Canvas ${args.action.replaceAll("_", " ")}.`;
@@ -1202,12 +1437,16 @@ export class Engine {
             throw new Error("The session changed. Refresh before clearing the canvas.");
           if (this.state.runs.some(x => !["confirmed", "no-op", "failed"].includes(x.status)))
             throw new Error("A run is still executing; wait for completion before clearing the canvas.");
+          if (this.monitors.list(this.state.sessionId).some(monitor=>["active","checking","uncertain"].includes(monitor.status))) throw new Error("Stop or reconcile policy monitors before clearing their canvas session");
+          if(this.tradeTools.listWatches(this.state.sessionId).some(watch=>["active","checking","uncertain"].includes(watch.status)||watch.pendingAttemptId))throw new Error("Stop or reconcile trade watches before clearing their canvas session");;
           this.stopWatch("Canvas cleared");
           if (!this.isBlank()) this.store.archiveSession(this.state);
+          const seq = this.state.seq;
           const capabilities = clone(this.state.capabilities);
           const treasury = this.state.fixtureTreasury;
           const watched = this.state.watch?.stopReason === "Canvas cleared";
           this.state = emptyState();
+          this.state.seq = seq;
           this.state.capabilities = capabilities;
           if (treasury) this.state.fixtureTreasury = treasury;
           summary = `Canvas cleared.${watched ? " The standing policy stopped." : ""} Contract state is unchanged.`;
@@ -1220,7 +1459,9 @@ export class Engine {
           const archived = this.store.latestClearedSession();
           if (!archived) throw new Error("There is no cleared session to restore.");
           const treasury = this.state.fixtureTreasury;
+          const seq = this.state.seq;
           this.state = migrateState(clone(archived));
+          this.state.seq = seq;
           // The vault did not go back in time with the canvas.
           if (treasury) this.state.fixtureTreasury = treasury;
           this.state.sessionId = crypto.randomUUID();
@@ -1229,8 +1470,11 @@ export class Engine {
           summary = "Canvas restored. Contract state is unchanged.";
           break;
         }
-        default:
-          throw new Error(`Unknown semantic tool: ${tool}`);
+        default: {
+          const result=await this.tradeTools.invoke(tool,args,this.state.sessionId);
+          if(!result)throw new Error(`Unknown semantic tool: ${tool}`);
+          summary=result.summary;data=result.data;this.state.tradeWatches=this.tradeTools.listWatches(this.state.sessionId);break;
+        }
       }
       if (["focus_object", "inspect_object", "get_run"].includes(tool)) {
         const frameRule = ["workflow", "whole rule", "whole workflow", "treasury policy"].includes(String(args.reference || "").toLowerCase());
@@ -1264,6 +1508,7 @@ export class Engine {
         summary,
         state: this.context(),
         ...(runId ? { runId } : {}),
+        ...(data ? {data} : {}),
       };
       this.store.remember(operationId, signature, result);
       return result;
@@ -1291,14 +1536,18 @@ export class Engine {
     }
   }
   /** Validated graph → new draft revision. Shared by compose_graph and apply_recipe. */
-  composeRevision(graph: PolicyGraph, reason: string, maxAgeSeconds?: number | null): string {
+  async composeRevision(graph: PolicyGraph, reason: string, maxAgeSeconds?: number | null): Promise<string> {
     const w = this.state.workflow;
+    // The product writes only through CRE: simulated and direct-signer actions are research paths.
+    if (!this.researchExecution && !isVaultAction(graph.action))
+      throw Object.assign(new Error(graph.action.type === "solana-transfer"
+        ? "Only vault actions have an implemented CRE receiver workflow; direct Solana execution is disabled"
+        : `A simulated ${graph.action.type} has no CRE receiver; the product executes only pause, sweep, pay and evacuate through Chainlink CRE`), { code: "CRE_EXECUTION_REQUIRED" });
     // Require only what this policy uses: the vault when it acts on or reads
     // it, and the Coinbase trade when a branch uses it. Feeds and contract
     // readings are read at execution and shown as configured inputs until then.
     const missing = [
       readsVault(graph) && !this.state.objects.some((x) => x.kind === "vault") && 'the grant vault (discover_objects with objects ["vault"])',
-      collectSources(graph).some((source) => source.type === "exchange-trade") && !this.state.objects.some((x) => x.id === "price:eth-usd") && 'the Coinbase ETH/USD price (discover_objects with tokens ["ETH"])',
     ].filter(Boolean);
     if (missing.length) throw new Error(`Discover ${missing.join(" and ")} before composing this policy`);
     const inherited = maxAgeSeconds === undefined;
@@ -1315,6 +1564,7 @@ export class Engine {
       graph,
       policyHash: policyHash(graph, cap ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS),
     };
+    if (this.sources.fetchVault === fetchVault) revision.target = await this.frozenTarget(graph);
     w.revisions.push(revision);
     Object.assign(w, revision, { created: true });
     this.state.mode = "compose";
@@ -1381,22 +1631,29 @@ export class Engine {
     return ` The last watch (revision ${watch.revision}) stopped: ${watch.stopReason ?? "stopped"}.`;
   }
   /** Freezes a revision into a new queued run. */
-  startRun(revision: WorkflowRevision, options: { trigger: "manual" | "watch"; watchCheck?: number; prompt: string }): ExecutionRun {
+  async startRun(revision: WorkflowRevision, options: { trigger: "manual" | "watch"; watchCheck?: number; prompt: string; evaluationOnly?: boolean }): Promise<ExecutionRun> {
     const snapshot = clone(revision);
+    // Freeze the execution authority with the run: CRE against the Sepolia receiver in the product.
+    const deployment = readsVault(snapshot.graph) ? await this.sources.loadDeployment() : null;
+    const target = snapshot.graph.action.type === "solana-transfer" || deployment ? await this.frozenTarget(snapshot.graph, snapshot.target) : undefined;
+    if (!target && this.sources.fetchVault === fetchVault) throw new Error("Execution requires its real chain target");
     snapshot.policyHash ??= policyHash(snapshot.graph, snapshot.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS);
+    const evaluationOnly = options.evaluationOnly === true;
     const run: ExecutionRun = {
       id: `run-${crypto.randomUUID()}`,
       revision: snapshot.revision,
       snapshot,
       policyHash: snapshot.policyHash,
       action: snapshot.graph.action.type,
+      ...(target ? { target } : {}),
+      evaluationOnly,
       trigger: options.trigger,
       ...(options.watchCheck ? { watchCheck: options.watchCheck } : {}),
       status: "queued",
       startedAt: now(),
       executionMode: "Preparing execution",
       decisions: [],
-      logs: [{ at: now(), stage: "queued", message: options.trigger === "watch" ? `Watch check ${options.watchCheck}: frozen revision ${snapshot.revision}` : `Frozen draft revision ${snapshot.revision}` }],
+      logs: [{ at: now(), stage: "queued", message: `${options.trigger === "watch" ? `Watch check ${options.watchCheck}: frozen revision ${snapshot.revision}` : `Frozen draft revision ${snapshot.revision}`}${evaluationOnly ? " · evaluation only; broadcast disabled" : ""}` }],
     };
     this.state.runs.unshift(run);
     this.state.activity = { status: "executing", prompt: options.prompt, summary: `Running revision ${snapshot.revision}` };
@@ -1434,7 +1691,7 @@ export class Engine {
    * (unless told not to), after three failures in a row, or after its last check.
    */
   async tickWatch(watchId = this.state.watch?.id): Promise<ExecutionRun | undefined> {
-    const started = await this.enqueue(() => {
+    const started = await this.enqueue(async () => {
       const watch = this.state.watch;
       if (!watch || watch.id !== watchId || watch.status !== "watching") return undefined;
       if (this.state.runs.some((x) => x.uncertain)) {
@@ -1447,7 +1704,7 @@ export class Engine {
         return undefined;
       }
       watch.checks++;
-      const run = this.startRun(watch.snapshot, { trigger: "watch", watchCheck: watch.checks, prompt: `Watch check ${watch.checks} of ${watch.maxChecks}` });
+      const run = await this.startRun(watch.snapshot, { trigger: "watch", watchCheck: watch.checks, prompt: `Watch check ${watch.checks} of ${watch.maxChecks}` });
       watch.lastRunId = run.id;
       watch.nextCheckAt = undefined;
       this.commit();
@@ -1507,7 +1764,7 @@ export class Engine {
       graph,
       policyHash: run.snapshot.policyHash ?? policyHash(graph, run.snapshot.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS),
       maxAgeSeconds: run.snapshot.maxAgeSeconds ?? 60,
-      broadcast: true,
+      broadcast: !run.evaluationOnly,
     };
   }
   /** Reads a feed for execution and refreshes its canvas card with the same read. */
@@ -1518,6 +1775,7 @@ export class Engine {
   }
   /** No deployed vault: live inputs, the shared evaluator, and an in-memory vault. */
   fixtureEnvironment(): PolicyEnvironment {
+    if (this.sources.fetchVault === fetchVault) throw new Error("Execution requires a deployed vault; no fixture is substituted.");
     return {
       mode: "fixture-rehearsal",
       readVault: async (options) => {
@@ -1533,7 +1791,7 @@ export class Engine {
       },
       readSource: async (source) => {
         if (source.type !== "exchange-trade") return this.readChainSource(source);
-        const price = await this.sources.fetchPrice("ETH");
+        const price = await this.sources.fetchPrice(source.pair);
         this.observePrice(price);
         return exchangeObservation(price);
       },
@@ -1589,26 +1847,35 @@ export class Engine {
       };
       this.commit();
     };
-    const progress = (message: string) =>
+    const progress = (message: string) => {
+      if(message.startsWith("ORIGINS_SUBMITTED ")) {
+        if(run.evaluationOnly)throw new Error("Evaluation-only run emitted submission evidence; broadcast was disabled");
+        const submitted=JSON.parse(message.slice(18));
+        if(submitted.runId!==run.id || submitted.revision!==run.revision || submitted.policyHash!==run.snapshot.policyHash || !/^0x[a-fA-F0-9]{64}$/.test(submitted.hash)) throw new Error("Submission evidence does not match frozen execution");
+        run.submissionPossible=true;
+        run.evidence={...run.evidence,transactionHash:submitted.hash,contractAddress:(run.target&&isEvmTarget(run.target)?run.target.address:undefined),chainId:(run.target&&isEvmTarget(run.target)?run.target.chainId:undefined),receiptStatus:"pending",verification:"Submitted; awaiting receiver receipt verification"};
+      }
+      if(message.startsWith('ORIGINS_SOLANA_SUBMITTED ')) {
+        const submitted=JSON.parse(message.slice('ORIGINS_SOLANA_SUBMITTED '.length));
+        if(submitted.runId!==run.id||submitted.revision!==run.revision||submitted.policyHash!==run.snapshot.policyHash||!/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(submitted.signature))throw new Error('Solana submission does not match frozen policy');
+        run.submissionPossible=true;run.evidence={...run.evidence,submittedSignature:submitted.signature,receiptStatus:'pending',verification:'Signed transfer journaled; awaiting verified Solana receipt'};
+      }
       mark(
-        /report|deliver|transaction|Confirmed|SIMULATED|Fixture vault paused/i.test(message)
+        /report|deliver|transaction|Submitting|ORIGINS_SUBMITTED|ORIGINS_SOLANA_SUBMITTED|Confirmed|SIMULATED|Fixture vault paused/i.test(message)
           ? "reporting"
           : /PASS|STOP|No action|evaluat/i.test(message)
             ? "evaluating"
             : "fetching",
         message,
       );
+    };
     try {
       mark("fetching", "Fetching fresh execution inputs");
       const spec = this.specFor(run);
-      const deployment = await this.sources.loadDeployment();
-      const result = deployment
-        ? await this.sources.executeRun(spec, progress, {
-            resolveFeed: (source) => this.readFeed(source),
-            resolveSource: (source) => this.readChainSource(source),
-            ...(options.cron ? { trigger: "cron" as const, schedule: options.cron.schedule } : {}),
-          })
-        : await executePolicy(spec, this.fixtureEnvironment(), progress);
+      const deployment=readsVault(spec.graph)?await this.sources.loadDeployment():null;
+      const result=run.target
+        ? await executeDispatchedPolicy(spec,run.target,progress,this.policyDependencies(),options.cron ? { trigger: "cron", schedule: options.cron.schedule } : {})
+        : await executePolicy(spec,this.fixtureEnvironment(),progress);
       await this.applyResult(run, result, deployment);
       run.completedAt = now();
       if (!options.quiet) {
@@ -1621,7 +1888,9 @@ export class Engine {
       }
       this.commit();
     } catch (error) {
+      const mayHaveSubmitted=!run.evaluationOnly && Boolean(run.target) && Boolean(run.submissionPossible||run.evidence?.transactionHash||run.evidence?.submittedSignature||run.status === "reporting");
       run.status = "failed";
+      if(mayHaveSubmitted) {run.uncertain=true;run.submissionPossible=true;}
       run.error = error instanceof Error ? error.message : String(error);
       run.completedAt = now();
       if (run.executionMode === "Preparing execution") run.executionMode = "Not executed";
@@ -1635,6 +1904,7 @@ export class Engine {
         this.say(`Execution failed: ${run.error}`);
       }
       this.commit();
+      if(run.uncertain) void this.reconcileQueued();
     }
   }
   completionSummary(run: ExecutionRun): string {
@@ -1656,6 +1926,7 @@ export class Engine {
       const only = evidence.degradedReason ? ` Only the pause was sent: ${evidence.degradedReason}.` : "";
       return parts.length === 1 && parts[0] === "paused" ? `${v}: fixture vault paused in memory; no transaction.${only}` : `${v}: fixture vault ${parts.join(" and ")} in memory; no transaction.${only}`;
     }
+    if (evidence?.solanaTransfer) return `${v}: transferred ${evidence.solanaTransfer.amountSol} SOL on devnet; verified signature ${evidence.solanaTransfer.signature}.`;
     if (evidence?.transactionHash) {
       const effects = evidence.effects;
       const block = `at block ${evidence.blockNumber}`;
@@ -1675,14 +1946,15 @@ export class Engine {
   }
   /** Maps runner evidence onto the run record and the canvas. Throws if a claimed action is not verified. */
   async applyResult(run: ExecutionRun, result: ExecutionEvidence, deployment: Deployment | null) {
-    if (result.runId !== run.id || result.revision !== run.revision || result.policyHash !== (run.snapshot.policyHash ?? run.policyHash))
+    if (result.runId !== run.id || result.revision !== run.revision || result.policyHash !== (run.snapshot.policyHash ?? run.policyHash) || result.action!==run.snapshot.graph.action.type)
       throw new Error("Runner evidence does not match this run's identity and policy hash");
-    run.executionMode =
+    if(run.evaluationOnly&&(result.transaction||result.solanaTransfer||result.fixturePaused))throw new Error("Evaluation-only run returned action evidence; no submission was permitted");
+    run.executionMode = result.mode==='solana-devnet' ? (result.solanaTransfer ? "Solana devnet · verified on-chain transfer" : "Solana devnet · live policy evaluation") :
       result.mode === "cre-local-simulation"
-        ? deployment?.chainId === 11155111
-          ? "CRE local simulation · Sepolia broadcast"
-          : "CRE local simulation · local EVM"
-        : result.mode === "local-evm-rehearsal"
+        ? run.evaluationOnly || result.dryRun ? "CRE local simulation · evaluation only · no report submitted" : result.transaction
+          ? deployment?.chainId === 11155111 ? "CRE local simulation · Sepolia broadcast" : "CRE local simulation · local EVM"
+          : "CRE local simulation · live policy evaluation"
+        : result.mode === "testnet-evm" ? `${deployment?.name || "Public testnet"} · on-chain execution · no CRE consensus` : result.mode === "local-evm-rehearsal"
           ? "Local EVM rehearsal · no CRE consensus"
           : "Local policy rehearsal · fixture vault · no transaction";
     run.policyHash = result.policyHash;
@@ -1698,19 +1970,27 @@ export class Engine {
     }));
     if (result.noopReason) run.noopReason = result.noopReason;
     // Canvas compatibility: the exchange trade and vault as runner inputs.
-    const exchange = result.observations.find((o) => o.provider === "coinbase");
     if (result.trigger === "cron") run.logs.push({ at: now(), stage: "evaluating", message: "Evaluated by the CRE workflow's cron trigger" });
-    const priorPrice = this.state.objects.find((x) => x.id === "price:eth-usd");
     const priorVault = this.state.objects.find((x) => x.id === "vault:grant");
     let executionPrice: GraphObject | undefined;
-    if (exchange && priorPrice) {
-      const { input, canvas } = buildExecutionPrice(
-        priorPrice,
-        { usd: exchange.usd ?? exchange.value, observedAt: exchange.observedAt, source: exchange.url ?? exchange.label },
-        now(),
-      );
-      executionPrice = input;
-      this.object(canvas);
+    for (const observation of result.observations) {
+      const source = collectSources(run.snapshot.graph).find(source=>sourceIdentity(source).key===observation.key);
+      if (!source) throw new Error("Runner observation is outside the frozen policy sources");
+      // Contract readings refresh their own cards when execution reads them.
+      if (source.type!=="exchange-trade"&&source.type!=="chainlink-feed") continue;
+      const objectId=readingObjectId(source);
+      const prior=this.state.objects.find(object=>object.id===objectId);
+      if (!prior) continue;
+      if (source.type==="exchange-trade") {
+        const {input,canvas}=buildExecutionPrice(prior,{usd:observation.usd??observation.value!,observedAt:observation.observedAt,source:observation.url || observation.label},observation.fetchedAt);
+        executionPrice ??=input;
+        this.object(canvas);
+      } else {
+        const refreshed=clone(prior);
+        refreshed.data={...refreshed.data,price:observation.usd??observation.value,raw:observation.raw,roundId:observation.roundId,ageSeconds:Math.max(0,(Date.now()-Date.parse(observation.observedAt))/1000)};
+        refreshed.provenance={...refreshed.provenance,kind:"chain",source:observation.label,observedAt:observation.observedAt,fetchedAt:observation.fetchedAt,address:observation.address,chainId:observation.chainId};
+        this.object(refreshed);
+      }
     }
     let executionVault: GraphObject | undefined;
     if (priorVault && result.vault) {
@@ -1725,6 +2005,7 @@ export class Engine {
                 balanceWei: result.vault.balanceWei,
                 address: result.vault.address,
                 chainId: result.vault.chainId,
+                reportVersion:result.vault.reportVersion,
               },
               provenance: {
                 ...priorVault.provenance,
@@ -1734,8 +2015,15 @@ export class Engine {
               },
             };
     }
-    if (executionPrice && executionVault) run.inputs = { price: executionPrice, vault: executionVault };
-    if (result.transaction) {
+    if(executionVault||executionPrice)run.inputs={...(executionPrice?{price:executionPrice}:{}),...(executionVault?{vault:executionVault}:{})};
+    if(result.solanaTransfer) {
+      const receipt=result.solanaTransfer,action=run.snapshot.graph.action;
+      if(!run.target||result.mode!=='solana-devnet'||result.transaction)throw new Error('Solana settlement requires its frozen devnet authority');
+      assertSolanaSettlement(run.target,action,run.id,result.policyHash,receipt);
+      run.evidence={solanaTransfer:receipt,submittedSignature:receipt.signature,receiptStatus:'confirmed',policyHash:result.policyHash,explorerUrl:receipt.explorerUrl,verification:'Parsed System Program transfer and exact recipient balance delta verified on Solana devnet'};
+      run.status='confirmed';
+    } else if (result.transaction) {
+      if(run.snapshot.graph.action.type==='solana-transfer'||run.target&&isSolanaTarget(run.target))throw new Error('EVM receipt cannot settle a Solana action');
       const tx = result.transaction;
       run.evidence = {
         transactionHash: tx.hash,
@@ -1804,14 +2092,16 @@ export class Engine {
       };
       run.status = "confirmed";
     } else if (result.dryRun) {
-      run.noopReason = "Dry run: the policy passed; no report was submitted.";
+      run.noopReason = "CRE evaluation: the policy passed; broadcast was disabled and no report was submitted.";
+      run.evidence={evaluationOnly:true,verification:"CRE evaluated the frozen policy with fresh source reads; broadcast disabled"};
       run.status = "no-op";
     } else {
       if (result.decision === "act") throw new Error("Action decision returned without verified evidence");
       run.status = "no-op";
+      if(run.evaluationOnly)run.evidence={evaluationOnly:true,verification:"CRE evaluated the frozen policy with fresh source reads; broadcast disabled"};
     }
     if (executionVault && result.mode !== "fixture-rehearsal" && !result.transaction) this.object(executionVault);
-    this.state.capabilities.execution = run.executionMode;
+    this.state.capabilities.execution = this.researchExecution ? run.executionMode : "Chainlink CRE · sole product execution authority";
     const vaultObject = this.state.objects.find((x) => x.id === "vault:grant");
     if (vaultObject) this.state.capabilities.vault = vaultObject.provenance.label;
   }

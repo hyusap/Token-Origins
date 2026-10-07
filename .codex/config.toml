@@ -1,10 +1,10 @@
 # Project-only MCP connection for a future real Codex desktop voice session.
 # The rehearsal bridge passes an absolute executable/path at runtime for portability.
-[mcp_servers.sotto]
+[mcp_servers.woga]
 command = "bun"
 args = ["run", "scripts/mcp.ts"]
 startup_timeout_sec = 15
 tool_timeout_sec = 60
 
-[mcp_servers.sotto.env]
+[mcp_servers.woga.env]
 ORIGINS_BACKEND_URL = "http://127.0.0.1:4318"

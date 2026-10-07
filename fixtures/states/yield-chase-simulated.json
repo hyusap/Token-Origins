@@ -49,11 +49,11 @@
   },
   "state": {
     "stateVersion": 2,
-    "sessionId": "a8b5fab0-caed-4c40-81a0-951e6140f9bc",
+    "sessionId": "bd8d3865-ed09-4e78-a8f3-faed89688a6c",
     "seq": 13,
     "mode": "run",
     "focus": {
-      "objectId": "run:run-4b656b43-d6f7-488a-b02f-9201b42e1e23",
+      "objectId": "run:run-23f4e917-6abb-4e1e-b20c-7c488390847d",
       "label": "Execution v01"
     },
     "previousFocus": [
@@ -63,12 +63,12 @@
       {
         "name": "Treasury policy",
         "objectId": "workflow:treasury",
-        "at": "2026-10-07T11:03:27.580Z"
+        "at": "2026-10-07T14:06:08.219Z"
       },
       {
         "name": "Execution v01",
-        "objectId": "run:run-4b656b43-d6f7-488a-b02f-9201b42e1e23",
-        "at": "2026-10-07T11:03:27.580Z"
+        "objectId": "run:run-23f4e917-6abb-4e1e-b20c-7c488390847d",
+        "at": "2026-10-07T14:06:08.220Z"
       }
     ],
     "objects": [
@@ -86,8 +86,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T11:03:23.578Z",
-          "fetchedAt": "2026-10-07T11:03:27.578Z"
+          "observedAt": "2026-10-07T14:06:04.218Z",
+          "fetchedAt": "2026-10-07T14:06:08.218Z"
         },
         "visible": false,
         "pinned": false
@@ -110,8 +110,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T11:03:23.578Z",
-          "fetchedAt": "2026-10-07T11:03:27.578Z"
+          "observedAt": "2026-10-07T14:06:04.218Z",
+          "fetchedAt": "2026-10-07T14:06:08.218Z"
         },
         "visible": true,
         "pinned": false
@@ -133,8 +133,8 @@
           "source": "Local rehearsal fixture",
           "kind": "fixture",
           "label": "Fixture vault · no deployed contract",
-          "observedAt": "2026-10-07T11:03:27.578Z",
-          "fetchedAt": "2026-10-07T11:03:27.578Z"
+          "observedAt": "2026-10-07T14:06:08.218Z",
+          "fetchedAt": "2026-10-07T14:06:08.218Z"
         },
         "visible": true,
         "pinned": false
@@ -156,8 +156,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T11:03:27.579Z",
-          "fetchedAt": "2026-10-07T11:03:27.579Z",
+          "observedAt": "2026-10-07T14:06:08.219Z",
+          "fetchedAt": "2026-10-07T14:06:08.219Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -179,8 +179,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T11:03:27.579Z",
-          "fetchedAt": "2026-10-07T11:03:27.579Z",
+          "observedAt": "2026-10-07T14:06:08.219Z",
+          "fetchedAt": "2026-10-07T14:06:08.219Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -201,8 +201,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T11:03:27.579Z",
-          "fetchedAt": "2026-10-07T11:03:27.579Z",
+          "observedAt": "2026-10-07T14:06:08.219Z",
+          "fetchedAt": "2026-10-07T14:06:08.219Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -233,8 +233,8 @@
           "chainId": 1,
           "address": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
           "label": "Aave v3 USDC supply APR · Ethereum mainnet",
-          "observedAt": "2026-10-07T11:03:27.593Z",
-          "fetchedAt": "2026-10-07T11:03:27.593Z"
+          "observedAt": "2026-10-07T14:06:08.233Z",
+          "fetchedAt": "2026-10-07T14:06:08.233Z"
         },
         "visible": true,
         "pinned": false
@@ -265,8 +265,8 @@
           "chainId": 1,
           "address": "0xc3d688B66703497DAA19211EEdff47f25384cdc3",
           "label": "Compound v3 USDC supply APR · Ethereum mainnet",
-          "observedAt": "2026-10-07T11:03:27.593Z",
-          "fetchedAt": "2026-10-07T11:03:27.593Z"
+          "observedAt": "2026-10-07T14:06:08.233Z",
+          "fetchedAt": "2026-10-07T14:06:08.233Z"
         },
         "visible": true,
         "pinned": false
@@ -310,7 +310,7 @@
       "threshold": 3000,
       "maxAgeSeconds": null,
       "skipPaused": false,
-      "createdAt": "2026-10-07T11:03:27.579Z",
+      "createdAt": "2026-10-07T14:06:08.219Z",
       "reason": "Recipe: Yield chaser",
       "graph": {
         "nodes": [
@@ -364,7 +364,7 @@
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T11:03:27.579Z",
+          "createdAt": "2026-10-07T14:06:08.219Z",
           "reason": "Recipe: Yield chaser",
           "graph": {
             "nodes": [
@@ -417,14 +417,14 @@
     },
     "runs": [
       {
-        "id": "run-4b656b43-d6f7-488a-b02f-9201b42e1e23",
+        "id": "run-23f4e917-6abb-4e1e-b20c-7c488390847d",
         "revision": 1,
         "snapshot": {
           "revision": 1,
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T11:03:27.579Z",
+          "createdAt": "2026-10-07T14:06:08.219Z",
           "reason": "Recipe: Yield chaser",
           "graph": {
             "nodes": [
@@ -474,9 +474,10 @@
         },
         "policyHash": "0xbf3eba4011691ba915c2ea05e6cd560e2cb1852a6a06e9bd7f30b581bf8afc24",
         "action": "rebalance",
+        "evaluationOnly": false,
         "trigger": "manual",
         "status": "confirmed",
-        "startedAt": "2026-10-07T11:03:27.580Z",
+        "startedAt": "2026-10-07T14:06:08.220Z",
         "executionMode": "Local policy rehearsal · fixture vault · no transaction",
         "decisions": [
           {
@@ -514,52 +515,52 @@
         ],
         "logs": [
           {
-            "at": "2026-10-07T11:03:27.580Z",
+            "at": "2026-10-07T14:06:08.220Z",
             "stage": "queued",
             "message": "Frozen draft revision 1"
           },
           {
-            "at": "2026-10-07T11:03:27.590Z",
+            "at": "2026-10-07T14:06:08.230Z",
             "stage": "fetching",
             "message": "Fetching fresh execution inputs"
           },
           {
-            "at": "2026-10-07T11:03:27.592Z",
+            "at": "2026-10-07T14:06:08.232Z",
             "stage": "reporting",
             "message": "Fixture rehearsal · live inputs, in-memory vault, no transaction"
           },
           {
-            "at": "2026-10-07T11:03:27.592Z",
+            "at": "2026-10-07T14:06:08.232Z",
             "stage": "fetching",
             "message": "Fetching Aave v3 USDC supply APR"
           },
           {
-            "at": "2026-10-07T11:03:27.592Z",
+            "at": "2026-10-07T14:06:08.232Z",
             "stage": "fetching",
             "message": "Fetching Compound v3 USDC supply APR"
           },
           {
-            "at": "2026-10-07T11:03:27.593Z",
+            "at": "2026-10-07T14:06:08.233Z",
             "stage": "evaluating",
             "message": "PASS worthMoving: (Compound v3 USDC supply APR − Aave v3 USDC supply APR) 0.8% > 0.5%"
           },
           {
-            "at": "2026-10-07T11:03:27.593Z",
+            "at": "2026-10-07T14:06:08.233Z",
             "stage": "evaluating",
             "message": "PASS root: Policy condition evaluated true"
           },
           {
-            "at": "2026-10-07T11:03:27.594Z",
+            "at": "2026-10-07T14:06:08.234Z",
             "stage": "evaluating",
             "message": "PASS source:lending-rate:ethereum-mainnet:aave-v3:USDC: Aave v3 USDC supply APR observed 0.0s ago; limit 300s"
           },
           {
-            "at": "2026-10-07T11:03:27.594Z",
+            "at": "2026-10-07T14:06:08.234Z",
             "stage": "evaluating",
             "message": "PASS source:lending-rate:ethereum-mainnet:compound-v3:USDC: Compound v3 USDC supply APR observed 0.0s ago; limit 300s"
           },
           {
-            "at": "2026-10-07T11:03:27.594Z",
+            "at": "2026-10-07T14:06:08.235Z",
             "stage": "reporting",
             "message": "SIMULATED rebalance of 100% USDC from Aave v3 to Compound v3; no transaction, no asset moved"
           }
@@ -576,8 +577,8 @@
             "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             "value": 3.1,
             "raw": "3.1",
-            "observedAt": "2026-10-07T11:03:27.593Z",
-            "fetchedAt": "2026-10-07T11:03:27.593Z"
+            "observedAt": "2026-10-07T14:06:08.233Z",
+            "fetchedAt": "2026-10-07T14:06:08.233Z"
           },
           {
             "key": "lending-rate:ethereum-mainnet:compound-v3:USDC",
@@ -590,8 +591,8 @@
             "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             "value": 3.9,
             "raw": "3.9",
-            "observedAt": "2026-10-07T11:03:27.593Z",
-            "fetchedAt": "2026-10-07T11:03:27.593Z"
+            "observedAt": "2026-10-07T14:06:08.233Z",
+            "fetchedAt": "2026-10-07T14:06:08.233Z"
           }
         ],
         "evidence": {
@@ -604,40 +605,40 @@
             "fraction": 1,
             "fromAprPercent": 3.1,
             "toAprPercent": 3.9,
-            "placedAt": "2026-10-07T11:03:27.594Z"
+            "placedAt": "2026-10-07T14:06:08.234Z"
           },
           "verification": "Simulated rebalance; no transaction and no asset moved"
         },
-        "completedAt": "2026-10-07T11:03:27.595Z"
+        "completedAt": "2026-10-07T14:06:08.235Z"
       }
     ],
     "conversation": [
       {
-        "id": "da65c4f7-972d-495a-b3c1-bf9626a86661",
+        "id": "018edf21-b8fd-466b-928c-e61edb2361a7",
         "role": "assistant",
-        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T11:03:23.578Z); Grant vault.",
-        "at": "2026-10-07T11:03:27.578Z",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T14:06:04.218Z); Grant vault.",
+        "at": "2026-10-07T14:06:08.218Z",
         "source": "mcp"
       },
       {
-        "id": "4be7dbd8-1ddf-482b-a15f-a5555d40c4e9",
+        "id": "7aef1a78-24fd-49c2-9f00-38245d8b89ed",
         "role": "assistant",
         "text": "Revision 1. Submit a simulated rebalance of 100% of USDC from Aave v3 to Compound v3 when (Compound v3 USDC supply APR − Aave v3 USDC supply APR) > 0.5%. Execution fetches Aave v3 USDC supply APR and Compound v3 USDC supply APR. The rebalance is simulated and runs only in local rehearsal; no asset moves. Yield chaser, inspired by YieldCoin (Chromion 2025, Grand Prize) and Copil (Chromion 2025, Onchain Finance, 2nd place). The rates are real contract reads; the rebalance is a simulated order in local rehearsal (the vault holds test ETH, not USDC). To keep it running, call watch_policy with everySeconds 300.",
-        "at": "2026-10-07T11:03:27.580Z",
+        "at": "2026-10-07T14:06:08.219Z",
         "source": "mcp"
       },
       {
-        "id": "427c2695-574a-4c07-a29c-308984986fce",
+        "id": "15f771c5-e48e-4a7c-8e36-cfac9cce742b",
         "role": "assistant",
-        "text": "Run run-4b656b43-d6f7-488a-b02f-9201b42e1e23 started against immutable revision 1.",
-        "at": "2026-10-07T11:03:27.580Z",
+        "text": "Run run-23f4e917-6abb-4e1e-b20c-7c488390847d started against immutable revision 1.",
+        "at": "2026-10-07T14:06:08.220Z",
         "source": "mcp"
       },
       {
-        "id": "f809eb0f-bd11-4ae1-9e16-d07a4bbdc0c7",
+        "id": "5b8b3bde-76f2-4925-8165-3977ca36260e",
         "role": "assistant",
         "text": "Revision 1: simulated rebalance of 100% USDC from aave-v3 to compound-v3; no transaction, no asset moved.",
-        "at": "2026-10-07T11:03:27.595Z",
+        "at": "2026-10-07T14:06:08.235Z",
         "source": "mcp"
       }
     ],
@@ -650,33 +651,168 @@
       {
         "operationId": "d",
         "tool": "discover_objects",
-        "receivedAt": "2026-10-07T11:03:27.578Z",
-        "committedAt": "2026-10-07T11:03:27.578Z",
-        "commitMs": 0.19
+        "receivedAt": "2026-10-07T14:06:08.218Z",
+        "committedAt": "2026-10-07T14:06:08.218Z",
+        "commitMs": 0.16
       },
       {
         "operationId": "c",
         "tool": "apply_recipe",
-        "receivedAt": "2026-10-07T11:03:27.578Z",
-        "committedAt": "2026-10-07T11:03:27.580Z",
-        "commitMs": 1.31
+        "receivedAt": "2026-10-07T14:06:08.218Z",
+        "committedAt": "2026-10-07T14:06:08.219Z",
+        "commitMs": 1.19
       },
       {
         "operationId": "r",
         "tool": "run_workflow",
-        "receivedAt": "2026-10-07T11:03:27.580Z",
-        "committedAt": "2026-10-07T11:03:27.580Z",
-        "commitMs": 0.08
+        "receivedAt": "2026-10-07T14:06:08.220Z",
+        "committedAt": "2026-10-07T14:06:08.220Z",
+        "commitMs": 0.14
       }
     ],
     "capabilities": {
       "price": "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
       "vault": "Fixture vault · no deployed contract",
       "execution": "Local policy rehearsal · fixture vault · no transaction",
-      "voice": "Planned utterances · actual desktop voice unverified",
-      "mcp": "Semantic tools · official MCP stdio transport"
+      "voice": "Browser mic → local Whisper dictation → semantic operator; Codex desktop voice separate/unverified",
+      "mcp": "Semantic tools · official MCP stdio transport",
+      "supported": {
+        "executionAuthority": "Chainlink CRE only; no direct wallet signer fallback",
+        "sources": [
+          {
+            "type": "exchange-trade",
+            "provider": "Coinbase via CRE HTTP capability",
+            "market": "exact online SYMBOL-USD"
+          },
+          {
+            "type": "chainlink-feed",
+            "provider": "Chainlink Data Feeds via CRE EVM capability",
+            "market": "configured USD feed on explicitly selected Ethereum mainnet or Sepolia",
+            "freshness": "Mandatory 26-hour feed age cap; explicit freshness nodes may tighten it"
+          },
+          {
+            "type": "proof-of-reserve",
+            "provider": "Chainlink Proof of Reserve via CRE EVM capability",
+            "market": "registered reserve feeds (WBTC)"
+          },
+          {
+            "type": "token-supply",
+            "provider": "ERC-20 totalSupply via CRE EVM capability",
+            "market": "registered tokens (WBTC)"
+          },
+          {
+            "type": "lending-rate",
+            "provider": "Aave v3 and Compound v3 contracts via CRE EVM capability",
+            "market": "USDC supply APR"
+          },
+          {
+            "type": "vault-balance",
+            "provider": "The grant vault's own ETH balance via CRE EVM capability"
+          }
+        ],
+        "nodes": [
+          "price",
+          "reading",
+          "math",
+          "compare",
+          "freshness",
+          "vault-paused",
+          "time",
+          "and",
+          "or",
+          "not"
+        ],
+        "comparators": [
+          "<",
+          "<=",
+          ">",
+          ">="
+        ],
+        "actions": [
+          {
+            "type": "pause-vault",
+            "effect": "CRE evaluates the frozen policy and delivers its bound report through CRE EVM write to the grant vault receiver (report v2 or v3); verified receipt/event and vault state required"
+          },
+          {
+            "type": "sweep",
+            "effect": "A share of the vault's ETH to the reserve fixed at deploy, optionally pausing in the same report (report v3)"
+          },
+          {
+            "type": "pay",
+            "effect": "A payee the vault owner registered, capped per payment and rate-limited on chain, never while paused (report v3)"
+          },
+          {
+            "type": "evacuate",
+            "effect": "The vault's CCIP-BnM to the reserve on Base Sepolia through Chainlink CCIP, fee capped, optionally pausing (report v3)"
+          }
+        ],
+        "solana": "When configured, the same CRE decision pauses (or sweeps) the Solana devnet vault through CRE's Solana write; the program accepts reports only from its bound CRE forwarder",
+        "utilities": [
+          {
+            "name": "read_price_feed",
+            "network": "Ethereum mainnet or Sepolia",
+            "effect": "Chainlink oracle observation with exact feed/network identity and age; a read does not execute a policy"
+          },
+          {
+            "name": "list_price_feeds",
+            "network": "Ethereum mainnet and Sepolia",
+            "effect": "Configured Chainlink source discovery; availability is explicit"
+          }
+        ],
+        "limits": {
+          "nodes": 40,
+          "booleanInputs": 8,
+          "sourcesPerDiscovery": 12,
+          "thresholdMaxUsd": 10000000,
+          "executionSources": 5,
+          "exchangeMaxAgeSeconds": 120,
+          "feedMaxAgeSeconds": 93600,
+          "freshnessNodeMaxAgeSeconds": 86400
+        },
+        "triggers": "run_workflow evaluates once through CRE; watch_policy runs a standing policy through the CRE workflow's own cron trigger (every 30 seconds or slower); evaluationOnly:true freezes no-broadcast authority and never submits a report even when the root passes. activate_policy explicitly schedules repeated CRE evaluations of a frozen pause policy while the backend runs, stopping after one verified pause. This backend scheduler is not a deployed DON trigger; restarts pause or mark jobs uncertain.",
+        "monitoring": {
+          "activate": "activate_policy",
+          "deactivate": "deactivate_policy",
+          "inspect": "get_monitors",
+          "reconcile": "reconcile_policy",
+          "maxActiveMonitors": 8,
+          "maxConsecutiveObservationFailures": 5,
+          "defaultIntervalSeconds": 30,
+          "minIntervalSeconds": 15,
+          "maxIntervalSeconds": 3600,
+          "survivesRestart": "Persisted evidence; no automatic resumption"
+        },
+        "safeguards": [
+          "Mandatory provider-specific freshness gates for every source",
+          "Already-paused no-op guard",
+          "Immutable revision and bound policy report",
+          "Operation-id deduplication",
+          "CRE executor required before execution; direct signing forbidden"
+        ],
+        "receiver": "Version 2 binds run, revision, policy hash, target vault and chain; local CRE simulation, broadcast and actual DON execution must be described separately",
+        "unsupported": [
+          "copy-trading without an implemented CRE receiver",
+          "standalone EVM swaps or leader-following signers",
+          "direct Solana transfers",
+          "solana-transfer policies without a CRE receiver integration",
+          "mainnet signing",
+          "automatic asset or action substitution",
+          "arbitrary code",
+          "unconfigured chain/feed",
+          "monitoring while backend is offline"
+        ]
+      }
     },
-    "inspectedRunId": "run-4b656b43-d6f7-488a-b02f-9201b42e1e23",
+    "monitors": [],
+    "tradeWatches": [],
+    "fixtureTreasury": {
+      "balanceEth": 0.12,
+      "tokens": 2,
+      "reserveEth": 0,
+      "lastPaymentAt": 0,
+      "lastEvacuationAt": 0
+    },
+    "inspectedRunId": "run-23f4e917-6abb-4e1e-b20c-7c488390847d",
     "canUndoClear": false
   }
 }

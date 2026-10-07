@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { canvasFlow } from "../src/flow-model";
-import { policyView, graphInputs, runOutcome, decisionRole, isLegacyPolicy, settledExecutionReply } from "../src/policy-view";
+import { selectedRun, policyView, graphInputs, runOutcome, decisionRole, isLegacyPolicy, settledExecutionReply } from "../src/policy-view";
 import { describeGraph } from "../cre/graph";
 import type { CanvasState } from "../shared/types";
 
@@ -29,14 +29,15 @@ for (const name of names) test(`UI and voice honor the real engine fixture: ${na
     if (run.status==="no-op") expect(runOutcome(run)).toBe(run.noopReason!);
     if (run.status==="failed") expect(runOutcome(run)).toContain(run.error!);
     if (run.evidence?.simulatedOrder) {
-      expect(runOutcome(run)).toContain("Simulated sell");
-      expect(runOutcome(run)).toContain("no transaction, no asset moved");
+      expect(runOutcome(run)).toMatch(/simulated (sell|order)/i);
+      expect(runOutcome(run)).toMatch(/no asset moved/i);
       expect(runOutcome(run)).not.toMatch(/block|pause verified/i);
     }
     // Text/voice settling shares the same authoritative result vocabulary.
     const speaking = structuredClone(state);
     speaking.conversation.push({id:"voice-fixture",role:"user",text:expected.utterance,at:new Date(Date.parse(run.startedAt)+1000).toISOString(),source:"transcribed fixture"});
-    expect(settledExecutionReply(speaking,"Run queued; preparing")).toBe(runOutcome(run));
+    // The settled reply speaks only for the run the user selected (a quiet watch check is not selected).
+    expect(settledExecutionReply(speaking,"Run queued; preparing")).toBe(selectedRun(speaking)?.id===run.id ? runOutcome(run) : null);
   }
   expect(JSON.stringify(state)).toBe(before);
 });

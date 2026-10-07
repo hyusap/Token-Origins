@@ -16,12 +16,14 @@ const vaultAbi = parseAbi([
   // Report v1 receivers (historical evidence) and report v2 receivers emit different SpendingPaused layouts.
   "event SpendingPaused(bytes32 indexed runId,uint256 indexed revision,uint256 priceUsdCents,uint256 thresholdUsdCents,uint256 observedAt)",
   "event SpendingPaused(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,uint256 decidedAt)",
+  "event PolicySatisfied(bytes32 indexed runId,bytes32 indexed policyHash)",
 ]);
 type Candidate = {
   hash: string;
   source: string;
   runId?: string;
   revision?: number;
+  policyHash?: string;
   blockNumber?: number;
 };
 const candidates: Candidate[] = [];
@@ -76,6 +78,7 @@ function collectRuns(value: any, source: string) {
       source,
       runId: run.id,
       revision: run.revision,
+      policyHash: evidence.policyHash,
       blockNumber: Number(evidence.blockNumber),
     });
   }
@@ -96,9 +99,8 @@ for (const path of [
   } catch {}
 }
 try {
-  const evidence = (
-    await Bun.file(resolve(root, "contracts/evidence.local.json")).json()
-  ).trueResult;
+  const saved = await Bun.file(resolve(root, "contracts/evidence.local.json")).json();
+  const evidence = saved.trueResult ?? saved.cases?.trueCondition?.evidence;
   if (
     evidence?.vault?.chainId === 31337 &&
     evidence.vault.address?.toLowerCase() ===
@@ -112,6 +114,7 @@ try {
       source: "contracts/evidence.local.json",
       runId: evidence.runId,
       revision: evidence.revision,
+      policyHash: evidence.policyHash,
       blockNumber: Number(evidence.transaction.blockNumber),
     });
   }
@@ -143,9 +146,12 @@ for (const candidate of requested) {
   )
     continue;
   const log = receipt.logs.find(
-    (entry: any) =>
-      entry.address.toLowerCase() === deployment.address.toLowerCase() &&
-      entry.transactionHash.toLowerCase() === candidate.hash.toLowerCase(),
+    (entry: any) => {
+      if (entry.address.toLowerCase() !== deployment.address.toLowerCase() ||
+          entry.transactionHash.toLowerCase() !== candidate.hash.toLowerCase()) return false;
+      try { return decodeEventLog({ abi: vaultAbi, data: entry.data, topics: entry.topics }).eventName === "SpendingPaused"; }
+      catch { return false; }
+    },
   );
   if (!log) continue;
   try {
@@ -162,6 +168,25 @@ for (const candidate of requested) {
       (args.priceUsdCents === undefined && !args.policyHash)
     )
       continue;
+    // V2 reports attest a policy hash instead of one scalar comparison. Their
+    // compatibility SpendingPaused event has both scalar fields zero. Require
+    // its correlated policy attestation in this very receipt before accepting it.
+    if ('policyHash' in event.args) {
+      if (event.args.policyHash === `0x${"0".repeat(64)}`) continue;
+      if (candidate.policyHash && event.args.policyHash.toLowerCase() !== candidate.policyHash.toLowerCase()) continue;
+    } else if (event.args.priceUsdCents === 0n && event.args.thresholdUsdCents === 0n) {
+      const policyEvent = receipt.logs.some((entry: any) => {
+        if (entry.address.toLowerCase() !== deployment.address.toLowerCase() ||
+            entry.transactionHash.toLowerCase() !== candidate.hash.toLowerCase()) return false;
+        try {
+          const policy = decodeEventLog({ abi: vaultAbi, data: entry.data, topics: entry.topics });
+          return policy.eventName === "PolicySatisfied" && policy.args.runId === event.args.runId &&
+            policy.args.policyHash !== `0x${"0".repeat(64)}` &&
+            (!candidate.policyHash || policy.args.policyHash.toLowerCase() === candidate.policyHash.toLowerCase());
+        } catch { return false; }
+      });
+      if (!policyEvent) continue;
+    } else if (event.args.priceUsdCents <= 0n || event.args.priceUsdCents >= event.args.thresholdUsdCents) continue;
     if (
       candidate.runId &&
       event.args.runId !== keccak256(toBytes(candidate.runId))
@@ -194,6 +219,7 @@ if (!selected || !sourceReceipt || !sourceEvent)
   throw new Error(
     "No confirmed local pause receipt found. Run a true policy version first, or set ORIGINS_VERIFY_TX_HASH to its public transaction hash.",
   );
+if (sourceEvent.eventName !== "SpendingPaused") throw new Error("Selected receiver event is not SpendingPaused");
 const receiptHash = selected.hash;
 const receiptBlock = sourceReceipt.blockNumber;
 const receiptBlockNumber = Number(BigInt(receiptBlock));

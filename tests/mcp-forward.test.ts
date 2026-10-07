@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { forwardTool } from "../scripts/mcp-forward";
+import { forwardTool, VERSIONED_TOOLS } from "../scripts/mcp-forward";
 import { SEMANTIC_API_VERSION } from "../server/runtime";
 import { emptyState } from "../server/engine";
 
@@ -49,4 +49,32 @@ test("MCP forwards names, symbols, qualified IDs and omitted-token default uncha
     expect((await forwardTool("http://backend", "discover_objects", args, request)).ok).toBe(true);
     expect(calls).toEqual(["http://backend/api/health", "http://backend/api/tools/discover_objects"]);
   }
+});
+
+
+test("policy, source, utility and monitoring tools refuse obsolete semantic runtimes before any write", async () => {
+  for (const name of VERSIONED_TOOLS) {
+    const calls: string[] = [];
+    const request = (async (url: any) => { calls.push(String(url)); return Response.json({ runtime: { semanticApiVersion: SEMANTIC_API_VERSION - 1 } }); }) as typeof fetch;
+    const result = await forwardTool("http://backend", name, { network: "ethereum-sepolia", operationId: "obsolete" }, request);
+    expect(result.code).toBe("BACKEND_VERSION_MISMATCH");
+    expect(result.ok).toBe(false);
+    expect(calls).toEqual(["http://backend/api/health"]);
+  }
+});
+
+test("evaluation-only never reaches a same-version backend that would silently broadcast", async () => {
+  let posts = 0;
+  let supported = false;
+  const request = async (_input: any, init?: RequestInit) => {
+    if (init?.method === "POST") { posts++; expect(JSON.parse(String(init.body)).evaluationOnly).toBe(true); return Response.json({ok:true,summary:"evaluation queued"}); }
+    return Response.json({runtime:{semanticApiVersion:SEMANTIC_API_VERSION,supports:{evaluationOnly:supported}}});
+  };
+  const args = {expectedRevision:1,evaluationOnly:true,operationId:"evaluation:immutable"};
+  const rejected = await forwardTool("http://backend", "run_workflow", args, request as typeof fetch);
+  expect(rejected).toMatchObject({ok:false,code:"EVALUATION_ONLY_UNSUPPORTED"});
+  expect(posts).toBe(0);
+  supported = true;
+  expect((await forwardTool("http://backend","run_workflow",args,request as typeof fetch)).ok).toBe(true);
+  expect(posts).toBe(1);
 });

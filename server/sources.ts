@@ -1,3 +1,4 @@
+import {creDeployment} from '../cre/deployment';
 import { createPublicClient, http, formatEther, isAddress } from "viem";
 import type { GraphObject } from "../shared/types";
 
@@ -160,24 +161,9 @@ export interface Deployment {
   rpcUrl: string;
   [key: string]: any;
 }
-export async function loadDeployment(): Promise<Deployment | null> {
-  if (process.env.ORIGINS_EXECUTION_MODE === "cre") {
-    const address = process.env.ORIGINS_SEPOLIA_VAULT;
-    if (!address || !isAddress(address))
-      throw new Error(
-        "CRE mode requires an explicitly configured Sepolia vault",
-      );
-    // The deploy record gives restart recovery a block to search logs from.
-    const record = await Bun.file("contracts/deployment.sepolia.json").json().catch(() => null);
-    return {
-      address,
-      chainId: 11155111,
-      rpcUrl:
-        process.env.ORIGINS_SEPOLIA_RPC ||
-        "https://ethereum-sepolia-rpc.publicnode.com",
-      ...(record?.address?.toLowerCase() === address.toLowerCase() ? { blockNumber: record.blockNumber } : {}),
-    };
-  }
+export async function loadDeployment(): Promise<Deployment | null> { return creDeployment(); }
+/** Explicit isolated research reader; never used by the product Engine. */
+export async function loadResearchDeployment(): Promise<Deployment | null> {
   const file = Bun.file(process.env.DEPLOYMENT_FILE || ".data/deployment.json");
   if (!(await file.exists())) return null;
   const raw = await file.json();
@@ -197,30 +183,7 @@ const vaultAbi = [
 ] as const;
 export async function fetchVault(fixturePaused = false): Promise<GraphObject> {
   const deployment = await loadDeployment();
-  if (!deployment)
-    return {
-      id: "vault:grant",
-      kind: "vault",
-      label: "Grant vault",
-      visible: true,
-      pinned: false,
-      data: {
-        paused: fixturePaused,
-        balance: "0.12",
-        balanceEth: 0.12,
-        chainId: null,
-        address: null,
-        fixture: true,
-        network: "Local rehearsal fixture",
-      },
-      provenance: {
-        source: "Local rehearsal fixture",
-        observedAt: iso(),
-        fetchedAt: iso(),
-        kind: "fixture",
-        label: "Fixture vault · no deployed contract",
-      },
-    };
+  if (!deployment) throw new Error("No deployed vault configured; no fixture is substituted.");
   const client = createPublicClient({
     transport: http(deployment.rpcUrl, { timeout: 8000 }),
   });

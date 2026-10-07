@@ -1,6 +1,6 @@
 import { policyGraphSchema, policyHash, describeGraph, type Network, type PolicyGraph } from "../cre/graph";
 import type { ExecutionSpecification } from "../cre/spec";
-import type { ExecutionEvidence } from "../cre/runner";
+import { assertCreSupports, type ExecutionEvidence } from "../cre/runner";
 
 /** Freezes a graph into the request every runner accepts. */
 export function specOf(graphInput: unknown, runId: string, revision: number, maxAgeSeconds = 60): ExecutionSpecification {
@@ -43,7 +43,7 @@ const summarize = (spec: ExecutionSpecification, evidence: ExecutionEvidence) =>
 /**
  * The four cases the plan asks for, against one deployed vault:
  * false → no write; true → verified pause; duplicate → no second action;
- * unsupported action → refused with zero writes. Leaves the vault active.
+ * unsupported action → refused before execution. Leaves the vault active.
  */
 export async function proveSequence(options: ProofOptions) {
   const log = options.log ?? console.log;
@@ -58,7 +58,7 @@ export async function proveSequence(options: ProofOptions) {
   const eth = falseResult.observations.find((o) => o.provider === "coinbase");
   check(eth, "false run must archive the exchange trade it read");
 
-  const threshold = Math.ceil(eth!.value * 1.1);
+  const threshold = Math.ceil((eth!.value ?? eth!.usd!) * 1.1);
   log(`2/4 True condition: ETH below $${threshold} (10% above the trade just read) and BTC feed live`);
   const trueSpec = specOf(composedPause(threshold, options.feedNetwork), `prove-true-${suffix}`, 2);
   const before = options.beforeTrue ? await options.beforeTrue() : undefined;
@@ -74,17 +74,17 @@ export async function proveSequence(options: ProofOptions) {
   const again = await options.execute({ ...trueSpec, runId: `prove-again-${suffix}` });
   check(again.decision === "noop" && !again.transaction, "a paused vault must not receive a second pause");
 
-  log("4/4 Unsupported action: simulated sell must never write");
-  const sellSpec = specOf({ ...composedPause(threshold, options.feedNetwork), action: { type: "sell", symbol: "ETH", amount: 1, venue: "mock-venue" } }, `prove-sell-${suffix}`, 3);
-  let sell: { refused?: string; evidence?: ExecutionEvidence };
+  log("4/4 Unsupported action: sell must be refused before execution");
+  const sellGraph = { ...composedPause(threshold, options.feedNetwork), action: { type: "sell", symbol: "ETH", amount: 1, venue: "mock-venue" } };
+  let sell: { refused: string } | undefined;
   try {
-    const evidence = await options.execute(sellSpec);
-    check(!evidence.transaction && evidence.simulatedOrder?.simulated, "a sell may only produce simulated evidence");
-    sell = { evidence };
+    // CRE refuses a simulated sell before any read or write; nothing is recorded as an order.
+    await assertCreSupports(specOf(sellGraph, `prove-sell-${suffix}`, 3) as any, []);
   } catch (error) {
     sell = { refused: error instanceof Error ? error.message : String(error) };
-    check(/Simulated sells/.test(sell.refused!), `unexpected sell failure: ${sell.refused}`);
+    check(/sell|simulated|action/i.test(sell.refused), `unexpected sell validation failure: ${sell.refused}`);
   }
+  check(sell, "CRE must refuse a sell before any read or write, rather than recording a simulated order");
 
   const resumeHash = await options.resume();
   log(`Vault resumed for the next demo (${resumeHash})`);
@@ -98,7 +98,7 @@ export async function proveSequence(options: ProofOptions) {
       falseCondition: summarize(falseSpec, falseResult),
       trueCondition: summarize(trueSpec, trueResult),
       duplicate: { replayReturnedSameHash: true, newRunOnPausedVault: summarize({ ...trueSpec, runId: `prove-again-${suffix}` }, again) },
-      unsupportedAction: { spec: sellSpec, ...sell },
+      unsupportedAction: { requestedGraph: sellGraph, ...sell, executionCalled: false },
     },
     pause: { transactionHash: tx!.hash, blockNumber: tx!.blockNumber, policyHash: trueSpec.policyHash, runId: trueSpec.runId, revision: trueSpec.revision },
     resumeTransactionHash: resumeHash,

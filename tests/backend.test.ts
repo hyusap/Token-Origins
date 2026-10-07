@@ -160,7 +160,7 @@ test("stale and future price data cannot pause; paused vault is clear no-op", as
   await complete(e);
   expect(e.state.runs[0]!.status).toBe("no-op");
   expect(
-    e.state.runs[0]!.decisions.find((x) => x.nodeId === "guard:vault-active")?.passed,
+    e.state.runs[0]!.decisions.find((x) => x.nodeId === "guard:vault-active" && x.role === "guard")?.passed,
   ).toBe(false);
   expect(e.state.runs[0]!.noopReason).toContain("already paused");
 });
@@ -259,6 +259,9 @@ test("explicit inspection selects older immutable run without changing drafts or
   });
   expect(retried.duplicate).toBe(true);
   expect(retried.runId).toBe(latest.id);
+  // Inspecting a completed run selects its existing immutable evidence.
+  await e.invoke("get_run", { runId: latest.id });
+  expect(e.state.inspectedRunId).toBe(latest.id);
   expect(e.state.runs).toHaveLength(2);
   // An explicit new run of a finished revision is a fresh execution with fresh inputs.
   const fresh = await e.invoke("run_workflow", {

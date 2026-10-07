@@ -1,0 +1,1026 @@
+{
+  "verifiedAt": "2026-10-07T07:55:36.352Z",
+  "passed": true,
+  "mode": "isolated real local EVM with live Coinbase sources",
+  "testnetBroadcast": false,
+  "activeChainMutated": false,
+  "activeCanvasMutated": false,
+  "temporaryWorkspace": "/var/folders/34/vr8fyd1s5fsd42n8f2l4t5yc0000gn/T/woga-real-e2e-FBozEo",
+  "rpcUrl": "http://127.0.0.1:59260",
+  "backendUrl": "http://127.0.0.1:59261",
+  "steps": [
+    {
+      "check": "fresh isolated contracts deployed",
+      "passed": true,
+      "detail": {
+        "rpcUrl": "http://127.0.0.1:59260",
+        "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+        "block": "2"
+      }
+    },
+    {
+      "check": "official MCP discovers live ETH/SOL/BTC and the same deployed vault",
+      "passed": true,
+      "detail": [
+        {
+          "id": "price:eth-usd",
+          "usd": 2615.13,
+          "source": "Coinbase Exchange",
+          "observedAt": "2026-10-07T07:55:32.460437Z"
+        },
+        {
+          "id": "price:sol-usd",
+          "usd": 118.57,
+          "source": "Coinbase Exchange",
+          "observedAt": "2026-10-07T07:55:30.242868Z"
+        },
+        {
+          "id": "price:btc-usd",
+          "usd": 84118.01,
+          "source": "Coinbase Exchange",
+          "observedAt": "2026-10-07T07:55:30.681322Z"
+        }
+      ]
+    },
+    {
+      "check": "unsupported asset fails without fabricating another price",
+      "passed": true
+    },
+    {
+      "check": "false composed policy produces no transaction",
+      "passed": true,
+      "detail": {
+        "runId": "run-a58c3c3d-3f89-4b7e-b872-a3d054c851d4"
+      }
+    },
+    {
+      "check": "true multi-asset graph mines correlated policy hash and pause event",
+      "passed": true,
+      "detail": {
+        "runId": "run-32d0a5a8-0ffa-48ef-9115-eb1c132d9cdd",
+        "hash": "0x3a00b9e4407ec4b1d946ea47ba1f8ab3984f1876afb4912d5faec9ba288ce0e7",
+        "block": "3",
+        "graphFrozenWhileDraftEdited": true
+      }
+    },
+    {
+      "check": "exact operation replay returns immutable run without a transaction",
+      "passed": true
+    },
+    {
+      "check": "already-paused guard prevents another on-chain action",
+      "passed": true
+    },
+    {
+      "check": "real WebSocket pushes execution state",
+      "passed": true,
+      "detail": {
+        "receivedStates": 56
+      }
+    },
+    {
+      "check": "SQLite and operation dedup survive backend restart",
+      "passed": true
+    },
+    {
+      "check": "real node restart preserves receipt, correlated events and historical vault state",
+      "passed": true
+    },
+    {
+      "check": "rising comparison, OR, NOT and explicit freshness execute a real report",
+      "passed": true,
+      "detail": {
+        "runId": "run-d500ad7a-fbdc-40f6-8799-ef6922d9096e",
+        "hash": "0xacd91400186db024184a5522efc467a43ddf27f0d23e5151b8b2a0de28d4f69b"
+      }
+    },
+    {
+      "check": "vault-only graph executes without a fabricated price or exchange request",
+      "passed": true,
+      "detail": {
+        "runId": "run-dce6ef0c-3b7e-4ddd-96c0-2600a3ed649d",
+        "hash": "0xbb47d8147757251b7becdb305b01b3e79b774091eed559540898e121bb52c8c0"
+      }
+    }
+  ],
+  "confirmedRun": {
+    "id": "run-32d0a5a8-0ffa-48ef-9115-eb1c132d9cdd",
+    "revision": 2,
+    "snapshot": {
+      "revision": 2,
+      "threshold": 5230.26,
+      "maxAgeSeconds": null,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T07:55:34.612Z",
+      "reason": "Composed condition graph",
+      "graph": {
+        "nodes": [
+          {
+            "id": "eth",
+            "kind": "price",
+            "source": {
+              "type": "exchange-trade",
+              "pair": "ETH-USD"
+            }
+          },
+          {
+            "id": "sol",
+            "kind": "price",
+            "source": {
+              "type": "exchange-trade",
+              "pair": "SOL-USD"
+            }
+          },
+          {
+            "id": "eth-low",
+            "kind": "compare",
+            "input": "eth",
+            "op": "<",
+            "value": 5230.26
+          },
+          {
+            "id": "sol-low",
+            "kind": "compare",
+            "input": "sol",
+            "op": "<",
+            "value": 237.14
+          },
+          {
+            "id": "both",
+            "kind": "and",
+            "inputs": [
+              "eth-low",
+              "sol-low"
+            ]
+          }
+        ],
+        "root": "both",
+        "action": {
+          "type": "pause-vault"
+        }
+      }
+    },
+    "status": "confirmed",
+    "startedAt": "2026-10-07T07:55:34.616Z",
+    "executionMode": "Local EVM rehearsal · no CRE consensus",
+    "decisions": [
+      {
+        "id": "threshold",
+        "label": "threshold",
+        "passed": true,
+        "detail": "Coinbase ETH-USD trade $2615.13 < $5230.26",
+        "nodeId": "eth-low"
+      },
+      {
+        "id": "threshold",
+        "label": "threshold",
+        "passed": true,
+        "detail": "Coinbase SOL-USD trade $118.59 < $237.14",
+        "nodeId": "sol-low"
+      },
+      {
+        "id": "and",
+        "label": "and",
+        "passed": true,
+        "detail": "eth-low AND sol-low → true",
+        "nodeId": "both"
+      },
+      {
+        "id": "freshness",
+        "label": "freshness",
+        "passed": true,
+        "detail": "Coinbase ETH-USD trade must have a valid reading within 60s",
+        "nodeId": "guard:source:exchange-trade:ETH-USD"
+      },
+      {
+        "id": "freshness",
+        "label": "freshness",
+        "passed": true,
+        "detail": "Coinbase SOL-USD trade must have a valid reading within 60s",
+        "nodeId": "guard:source:exchange-trade:SOL-USD"
+      },
+      {
+        "id": "composed-policy",
+        "label": "composed-policy",
+        "passed": true,
+        "detail": "Composed policy root \"both\" evaluated true",
+        "nodeId": "guard:composed"
+      },
+      {
+        "id": "vault-state",
+        "label": "vault-state",
+        "passed": true,
+        "detail": "Vault spending active",
+        "nodeId": "guard:vault-state"
+      },
+      {
+        "id": "freshness",
+        "label": "freshness",
+        "passed": true,
+        "detail": "Reported observation age 2.3s; receiver maximum 60s",
+        "nodeId": "guard:freshness"
+      }
+    ],
+    "logs": [
+      {
+        "at": "2026-10-07T07:55:34.616Z",
+        "stage": "queued",
+        "message": "Frozen draft revision 2"
+      },
+      {
+        "at": "2026-10-07T07:55:34.626Z",
+        "stage": "fetching",
+        "message": "Fetching fresh execution inputs"
+      },
+      {
+        "at": "2026-10-07T07:55:34.628Z",
+        "stage": "evaluating",
+        "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+      },
+      {
+        "at": "2026-10-07T07:55:34.629Z",
+        "stage": "fetching",
+        "message": "Resolving Coinbase ETH-USD trade"
+      },
+      {
+        "at": "2026-10-07T07:55:34.691Z",
+        "stage": "fetching",
+        "message": "Resolving Coinbase SOL-USD trade"
+      },
+      {
+        "at": "2026-10-07T07:55:34.720Z",
+        "stage": "fetching",
+        "message": "Read vault state and balance directly from local EVM"
+      },
+      {
+        "at": "2026-10-07T07:55:34.722Z",
+        "stage": "evaluating",
+        "message": "PASS threshold: Coinbase ETH-USD trade $2615.13 < $5230.26"
+      },
+      {
+        "at": "2026-10-07T07:55:34.723Z",
+        "stage": "evaluating",
+        "message": "PASS threshold: Coinbase SOL-USD trade $118.59 < $237.14"
+      },
+      {
+        "at": "2026-10-07T07:55:34.723Z",
+        "stage": "evaluating",
+        "message": "PASS and: eth-low AND sol-low → true"
+      },
+      {
+        "at": "2026-10-07T07:55:34.724Z",
+        "stage": "evaluating",
+        "message": "PASS freshness: Coinbase ETH-USD trade must have a valid reading within 60s"
+      },
+      {
+        "at": "2026-10-07T07:55:34.725Z",
+        "stage": "evaluating",
+        "message": "PASS freshness: Coinbase SOL-USD trade must have a valid reading within 60s"
+      },
+      {
+        "at": "2026-10-07T07:55:34.726Z",
+        "stage": "evaluating",
+        "message": "PASS composed-policy: Composed policy root \"both\" evaluated true"
+      },
+      {
+        "at": "2026-10-07T07:55:34.726Z",
+        "stage": "evaluating",
+        "message": "PASS vault-state: Vault spending active"
+      },
+      {
+        "at": "2026-10-07T07:55:34.727Z",
+        "stage": "reporting",
+        "message": "PASS freshness: Reported observation age 2.3s; receiver maximum 60s"
+      },
+      {
+        "at": "2026-10-07T07:55:34.762Z",
+        "stage": "reporting",
+        "message": "Delivering ABI report through localhost rehearsal forwarder"
+      },
+      {
+        "at": "2026-10-07T07:55:34.778Z",
+        "stage": "reporting",
+        "message": "Confirmed receipt + SpendingPaused event + fresh paused() read at block 3"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "Resolving Coinbase ETH-USD trade"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "Resolving Coinbase SOL-USD trade"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "Read vault state and balance directly from local EVM"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "PASS threshold: Coinbase ETH-USD trade $2615.13 < $5230.26"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "PASS threshold: Coinbase SOL-USD trade $118.59 < $237.14"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "PASS and: eth-low AND sol-low → true"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "PASS freshness: Coinbase ETH-USD trade must have a valid reading within 60s"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "PASS freshness: Coinbase SOL-USD trade must have a valid reading within 60s"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "PASS composed-policy: Composed policy root \"both\" evaluated true"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "PASS vault-state: Vault spending active"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "PASS freshness: Reported observation age 2.3s; receiver maximum 60s"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "Delivering ABI report through localhost rehearsal forwarder"
+      },
+      {
+        "at": "2026-10-07T07:55:34.780Z",
+        "stage": "runner",
+        "message": "Confirmed receipt + SpendingPaused event + fresh paused() read at block 3"
+      }
+    ],
+    "inputs": {
+      "price": {
+        "id": "price:eth-usd",
+        "kind": "price",
+        "label": "ETH / USD",
+        "visible": true,
+        "pinned": false,
+        "data": {
+          "price": 2615.13,
+          "unit": "USD",
+          "symbol": "ETH",
+          "history": [
+            {
+              "price": 2615.13,
+              "observedAt": "2026-10-07T07:55:32.460436623Z"
+            }
+          ],
+          "historyLabel": "Actual execution observation"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "observedAt": "2026-10-07T07:55:32.460436623Z",
+          "fetchedAt": "2026-10-07T07:55:34.779Z",
+          "kind": "live",
+          "label": "Live exchange observation · execution input"
+        }
+      },
+      "vault": {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "visible": true,
+        "pinned": false,
+        "data": {
+          "paused": false,
+          "balance": "1.2049",
+          "balanceEth": 1.2049,
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "chainId": 31337,
+          "blockNumber": "2",
+          "fixture": false,
+          "network": "Local Anvil",
+          "balanceWei": "1204900000000000000"
+        },
+        "provenance": {
+          "source": "Anvil contract read",
+          "observedAt": "2026-10-07T07:55:32.000Z",
+          "fetchedAt": "2026-10-07T07:55:34.780Z",
+          "kind": "chain",
+          "chainId": 31337,
+          "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+          "label": "Actual local contract · Anvil"
+        }
+      }
+    },
+    "evidence": {
+      "transactionHash": "0x3a00b9e4407ec4b1d946ea47ba1f8ab3984f1876afb4912d5faec9ba288ce0e7",
+      "blockNumber": "3",
+      "receiptStatus": "success",
+      "pausedAfter": true,
+      "chainId": 31337,
+      "contractAddress": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+      "verification": "Receiver event and paused state confirmed"
+    },
+    "completedAt": "2026-10-07T07:55:34.783Z"
+  },
+  "additionalRuns": [
+    {
+      "id": "run-d500ad7a-fbdc-40f6-8799-ef6922d9096e",
+      "revision": 5,
+      "snapshot": {
+        "revision": 5,
+        "threshold": 0.0001,
+        "maxAgeSeconds": null,
+        "skipPaused": false,
+        "createdAt": "2026-10-07T07:55:35.546Z",
+        "reason": "Composed condition graph",
+        "graph": {
+          "nodes": [
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "ETH-USD"
+              }
+            },
+            {
+              "id": "sol",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "SOL-USD"
+              }
+            },
+            {
+              "id": "rising",
+              "kind": "compare",
+              "input": "eth",
+              "op": ">",
+              "value": 0.0001
+            },
+            {
+              "id": "low",
+              "kind": "compare",
+              "input": "sol",
+              "op": "<=",
+              "value": 0.0001
+            },
+            {
+              "id": "not-low",
+              "kind": "not",
+              "input": "low"
+            },
+            {
+              "id": "either",
+              "kind": "or",
+              "inputs": [
+                "rising",
+                "not-low"
+              ]
+            },
+            {
+              "id": "fresh",
+              "kind": "freshness",
+              "input": "eth",
+              "maxAgeSeconds": 60
+            },
+            {
+              "id": "both",
+              "kind": "and",
+              "inputs": [
+                "either",
+                "fresh"
+              ]
+            }
+          ],
+          "root": "both",
+          "action": {
+            "type": "pause-vault"
+          }
+        }
+      },
+      "status": "confirmed",
+      "startedAt": "2026-10-07T07:55:35.563Z",
+      "executionMode": "Local EVM rehearsal · no CRE consensus",
+      "decisions": [
+        {
+          "id": "threshold",
+          "label": "threshold",
+          "passed": true,
+          "detail": "Coinbase ETH-USD trade $2615.13 > $0.00",
+          "nodeId": "rising"
+        },
+        {
+          "id": "threshold",
+          "label": "threshold",
+          "passed": false,
+          "detail": "Coinbase SOL-USD trade $118.56 <= $0.00",
+          "nodeId": "low"
+        },
+        {
+          "id": "not",
+          "label": "not",
+          "passed": true,
+          "detail": "NOT low",
+          "nodeId": "not-low"
+        },
+        {
+          "id": "or",
+          "label": "or",
+          "passed": true,
+          "detail": "rising OR not-low → true",
+          "nodeId": "either"
+        },
+        {
+          "id": "freshness",
+          "label": "freshness",
+          "passed": true,
+          "detail": "Coinbase ETH-USD trade observed 3.4s ago; maximum 60s",
+          "nodeId": "fresh"
+        },
+        {
+          "id": "and",
+          "label": "and",
+          "passed": true,
+          "detail": "either AND fresh → true",
+          "nodeId": "both"
+        },
+        {
+          "id": "freshness",
+          "label": "freshness",
+          "passed": true,
+          "detail": "Coinbase ETH-USD trade must have a valid reading within 60s",
+          "nodeId": "guard:source:exchange-trade:ETH-USD"
+        },
+        {
+          "id": "freshness",
+          "label": "freshness",
+          "passed": true,
+          "detail": "Coinbase SOL-USD trade must have a valid reading within 60s",
+          "nodeId": "guard:source:exchange-trade:SOL-USD"
+        },
+        {
+          "id": "composed-policy",
+          "label": "composed-policy",
+          "passed": true,
+          "detail": "Composed policy root \"both\" evaluated true",
+          "nodeId": "guard:composed"
+        },
+        {
+          "id": "vault-state",
+          "label": "vault-state",
+          "passed": true,
+          "detail": "Vault spending active",
+          "nodeId": "guard:vault-state"
+        },
+        {
+          "id": "freshness",
+          "label": "freshness",
+          "passed": true,
+          "detail": "Reported observation age 3.4s; receiver maximum 60s",
+          "nodeId": "guard:freshness"
+        }
+      ],
+      "logs": [
+        {
+          "at": "2026-10-07T07:55:35.563Z",
+          "stage": "queued",
+          "message": "Frozen draft revision 5"
+        },
+        {
+          "at": "2026-10-07T07:55:35.574Z",
+          "stage": "fetching",
+          "message": "Fetching fresh execution inputs"
+        },
+        {
+          "at": "2026-10-07T07:55:35.668Z",
+          "stage": "evaluating",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-07T07:55:35.685Z",
+          "stage": "fetching",
+          "message": "Resolving Coinbase ETH-USD trade"
+        },
+        {
+          "at": "2026-10-07T07:55:35.794Z",
+          "stage": "fetching",
+          "message": "Resolving Coinbase SOL-USD trade"
+        },
+        {
+          "at": "2026-10-07T07:55:35.818Z",
+          "stage": "fetching",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-07T07:55:35.821Z",
+          "stage": "evaluating",
+          "message": "PASS threshold: Coinbase ETH-USD trade $2615.13 > $0.00"
+        },
+        {
+          "at": "2026-10-07T07:55:35.822Z",
+          "stage": "evaluating",
+          "message": "STOP threshold: Coinbase SOL-USD trade $118.56 <= $0.00"
+        },
+        {
+          "at": "2026-10-07T07:55:35.832Z",
+          "stage": "evaluating",
+          "message": "PASS not: NOT low"
+        },
+        {
+          "at": "2026-10-07T07:55:35.837Z",
+          "stage": "evaluating",
+          "message": "PASS or: rising OR not-low → true"
+        },
+        {
+          "at": "2026-10-07T07:55:35.838Z",
+          "stage": "evaluating",
+          "message": "PASS freshness: Coinbase ETH-USD trade observed 3.4s ago; maximum 60s"
+        },
+        {
+          "at": "2026-10-07T07:55:35.839Z",
+          "stage": "evaluating",
+          "message": "PASS and: either AND fresh → true"
+        },
+        {
+          "at": "2026-10-07T07:55:35.840Z",
+          "stage": "evaluating",
+          "message": "PASS freshness: Coinbase ETH-USD trade must have a valid reading within 60s"
+        },
+        {
+          "at": "2026-10-07T07:55:35.841Z",
+          "stage": "evaluating",
+          "message": "PASS freshness: Coinbase SOL-USD trade must have a valid reading within 60s"
+        },
+        {
+          "at": "2026-10-07T07:55:35.841Z",
+          "stage": "evaluating",
+          "message": "PASS composed-policy: Composed policy root \"both\" evaluated true"
+        },
+        {
+          "at": "2026-10-07T07:55:35.842Z",
+          "stage": "evaluating",
+          "message": "PASS vault-state: Vault spending active"
+        },
+        {
+          "at": "2026-10-07T07:55:35.843Z",
+          "stage": "reporting",
+          "message": "PASS freshness: Reported observation age 3.4s; receiver maximum 60s"
+        },
+        {
+          "at": "2026-10-07T07:55:35.877Z",
+          "stage": "reporting",
+          "message": "Delivering ABI report through localhost rehearsal forwarder"
+        },
+        {
+          "at": "2026-10-07T07:55:35.894Z",
+          "stage": "reporting",
+          "message": "Confirmed receipt + SpendingPaused event + fresh paused() read at block 5"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "Resolving Coinbase ETH-USD trade"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "Resolving Coinbase SOL-USD trade"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS threshold: Coinbase ETH-USD trade $2615.13 > $0.00"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "STOP threshold: Coinbase SOL-USD trade $118.56 <= $0.00"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS not: NOT low"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS or: rising OR not-low → true"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS freshness: Coinbase ETH-USD trade observed 3.4s ago; maximum 60s"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS and: either AND fresh → true"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS freshness: Coinbase ETH-USD trade must have a valid reading within 60s"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS freshness: Coinbase SOL-USD trade must have a valid reading within 60s"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS composed-policy: Composed policy root \"both\" evaluated true"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS vault-state: Vault spending active"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "PASS freshness: Reported observation age 3.4s; receiver maximum 60s"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "Delivering ABI report through localhost rehearsal forwarder"
+        },
+        {
+          "at": "2026-10-07T07:55:35.895Z",
+          "stage": "runner",
+          "message": "Confirmed receipt + SpendingPaused event + fresh paused() read at block 5"
+        }
+      ],
+      "inputs": {
+        "price": {
+          "id": "price:eth-usd",
+          "kind": "price",
+          "label": "ETH / USD",
+          "visible": true,
+          "pinned": false,
+          "data": {
+            "price": 2615.13,
+            "unit": "USD",
+            "symbol": "ETH",
+            "history": [
+              {
+                "price": 2615.13,
+                "observedAt": "2026-10-07T07:55:32.460436623Z"
+              }
+            ],
+            "historyLabel": "Actual execution observation"
+          },
+          "provenance": {
+            "source": "Coinbase Exchange",
+            "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+            "observedAt": "2026-10-07T07:55:32.460436623Z",
+            "fetchedAt": "2026-10-07T07:55:35.895Z",
+            "kind": "live",
+            "label": "Live exchange observation · execution input"
+          }
+        },
+        "vault": {
+          "id": "vault:grant",
+          "kind": "vault",
+          "label": "Grant vault",
+          "visible": true,
+          "pinned": false,
+          "data": {
+            "paused": false,
+            "balance": "1.2049",
+            "balanceEth": 1.2049,
+            "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+            "chainId": 31337,
+            "blockNumber": "3",
+            "fixture": false,
+            "network": "Local Anvil",
+            "balanceWei": "1204900000000000000"
+          },
+          "provenance": {
+            "source": "Anvil contract read",
+            "observedAt": "2026-10-07T07:55:34.000Z",
+            "fetchedAt": "2026-10-07T07:55:35.895Z",
+            "kind": "chain",
+            "chainId": 31337,
+            "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+            "label": "Actual local contract · Anvil"
+          }
+        }
+      },
+      "evidence": {
+        "transactionHash": "0xacd91400186db024184a5522efc467a43ddf27f0d23e5151b8b2a0de28d4f69b",
+        "blockNumber": "5",
+        "receiptStatus": "success",
+        "pausedAfter": true,
+        "chainId": 31337,
+        "contractAddress": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+        "verification": "Receiver event and paused state confirmed"
+      },
+      "completedAt": "2026-10-07T07:55:35.900Z"
+    },
+    {
+      "id": "run-dce6ef0c-3b7e-4ddd-96c0-2600a3ed649d",
+      "revision": 6,
+      "snapshot": {
+        "revision": 6,
+        "threshold": 0.0001,
+        "maxAgeSeconds": null,
+        "skipPaused": false,
+        "createdAt": "2026-10-07T07:55:36.086Z",
+        "reason": "Composed condition graph",
+        "graph": {
+          "nodes": [
+            {
+              "id": "active",
+              "kind": "vault-paused",
+              "equals": false
+            }
+          ],
+          "root": "active",
+          "action": {
+            "type": "pause-vault"
+          }
+        }
+      },
+      "status": "confirmed",
+      "startedAt": "2026-10-07T07:55:36.091Z",
+      "executionMode": "Local EVM rehearsal · no CRE consensus",
+      "decisions": [
+        {
+          "id": "vault-state",
+          "label": "vault-state",
+          "passed": true,
+          "detail": "Vault is active; condition wants active",
+          "nodeId": "active"
+        },
+        {
+          "id": "composed-policy",
+          "label": "composed-policy",
+          "passed": true,
+          "detail": "Composed policy root \"active\" evaluated true",
+          "nodeId": "guard:composed"
+        },
+        {
+          "id": "vault-state",
+          "label": "vault-state",
+          "passed": true,
+          "detail": "Vault spending active",
+          "nodeId": "guard:vault-state"
+        }
+      ],
+      "logs": [
+        {
+          "at": "2026-10-07T07:55:36.091Z",
+          "stage": "queued",
+          "message": "Frozen draft revision 6"
+        },
+        {
+          "at": "2026-10-07T07:55:36.101Z",
+          "stage": "fetching",
+          "message": "Fetching fresh execution inputs"
+        },
+        {
+          "at": "2026-10-07T07:55:36.103Z",
+          "stage": "evaluating",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-07T07:55:36.106Z",
+          "stage": "fetching",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-07T07:55:36.110Z",
+          "stage": "evaluating",
+          "message": "PASS vault-state: Vault is active; condition wants active"
+        },
+        {
+          "at": "2026-10-07T07:55:36.111Z",
+          "stage": "evaluating",
+          "message": "PASS composed-policy: Composed policy root \"active\" evaluated true"
+        },
+        {
+          "at": "2026-10-07T07:55:36.111Z",
+          "stage": "evaluating",
+          "message": "PASS vault-state: Vault spending active"
+        },
+        {
+          "at": "2026-10-07T07:55:36.116Z",
+          "stage": "reporting",
+          "message": "Delivering ABI report through localhost rehearsal forwarder"
+        },
+        {
+          "at": "2026-10-07T07:55:36.123Z",
+          "stage": "reporting",
+          "message": "Confirmed receipt + SpendingPaused event + fresh paused() read at block 7"
+        },
+        {
+          "at": "2026-10-07T07:55:36.124Z",
+          "stage": "runner",
+          "message": "Local EVM rehearsal · isolated evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-07T07:55:36.124Z",
+          "stage": "runner",
+          "message": "Read vault state and balance directly from local EVM"
+        },
+        {
+          "at": "2026-10-07T07:55:36.124Z",
+          "stage": "runner",
+          "message": "PASS vault-state: Vault is active; condition wants active"
+        },
+        {
+          "at": "2026-10-07T07:55:36.124Z",
+          "stage": "runner",
+          "message": "PASS composed-policy: Composed policy root \"active\" evaluated true"
+        },
+        {
+          "at": "2026-10-07T07:55:36.124Z",
+          "stage": "runner",
+          "message": "PASS vault-state: Vault spending active"
+        },
+        {
+          "at": "2026-10-07T07:55:36.124Z",
+          "stage": "runner",
+          "message": "Delivering ABI report through localhost rehearsal forwarder"
+        },
+        {
+          "at": "2026-10-07T07:55:36.124Z",
+          "stage": "runner",
+          "message": "Confirmed receipt + SpendingPaused event + fresh paused() read at block 7"
+        }
+      ],
+      "inputs": {
+        "vault": {
+          "id": "vault:grant",
+          "kind": "vault",
+          "label": "Grant vault",
+          "visible": true,
+          "pinned": false,
+          "data": {
+            "paused": false,
+            "balance": "1.2049",
+            "balanceEth": 1.2049,
+            "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+            "chainId": 31337,
+            "blockNumber": "5",
+            "fixture": false,
+            "network": "Local Anvil",
+            "balanceWei": "1204900000000000000"
+          },
+          "provenance": {
+            "source": "Anvil contract read",
+            "observedAt": "2026-10-07T07:55:35.000Z",
+            "fetchedAt": "2026-10-07T07:55:36.124Z",
+            "kind": "chain",
+            "chainId": 31337,
+            "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+            "label": "Actual local contract · Anvil"
+          }
+        }
+      },
+      "evidence": {
+        "transactionHash": "0xbb47d8147757251b7becdb305b01b3e79b774091eed559540898e121bb52c8c0",
+        "blockNumber": "7",
+        "receiptStatus": "success",
+        "pausedAfter": true,
+        "chainId": 31337,
+        "contractAddress": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+        "verification": "Receiver event and paused state confirmed"
+      },
+      "completedAt": "2026-10-07T07:55:36.126Z"
+    }
+  ],
+  "acceptedProductProof": false,
+  "scope": "historical direct-execution research; current product execution requires Chainlink CRE"
+}

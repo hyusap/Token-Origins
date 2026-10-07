@@ -10,3 +10,4 @@ cre/bin/
 cre/workflow/workflow.js
 cre/workflow/workflow.wasm
 cre/workflow/config.runtime.json
+cre/workflow/.cre_build_tmp.js

@@ -1,5 +1,7 @@
 # Execution contract
 
+> **Product authority.** Chainlink CRE is the sole product execution authority (semantic API 7). The fixture and local-EVM paths described below are research and test harnesses: the product engine refuses simulated and direct-signer actions when composing, and `run_workflow` executes only through CRE against the frozen Sepolia receiver (and the Solana vault when configured). `activate_policy` monitors (`server/monitor.ts`) schedule repeated CRE pause evaluations; `watch_policy` runs any vault action through the CRE workflow's cron trigger.
+
 Owner: Shivam · Reviewer: Ayush · Graph hash domain v2 · Report v3 (v2 still produced for pause-only vaults) · Semantic API 4
 
 This is what "the displayed graph, the spoken sentence, the frozen definition and the on-chain action mean the same thing" means in code. The source of truth is `cre/graph.ts` (policy, identity, units, evaluation, reports), `cre/onchain-reads.ts` (how contract sources are read), `cre/spec.ts` (frozen request), `cre/runner.ts` (execution paths and verification) and `shared/types.ts` (what the UI reads). Representative full states live in `fixtures/states/`.

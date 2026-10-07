@@ -1,0 +1,33 @@
+{
+  "verified": true,
+  "chainId": 11155111,
+  "vault": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+  "pausedPolicy": "Pause spending when (Coinbase ETH-USD trade < $2,880 and Chainlink BTC/USD (mainnet) > $1).",
+  "verifiedAt": "2026-10-07T08:48:38.094Z",
+  "independentReadOnly": true,
+  "verificationScope": "Saved CRE simulation claim and frozen graphs correlated with actual public receipt/receiver event; this does not establish deployed DON execution or independently recreate historical off-chain source reads",
+  "trustedForwarder": "0x15fC6ae953E024d975e77382eEeC56A9101f9F88",
+  "transaction": "0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec",
+  "block": 11861492,
+  "blockHash": "0x9d726cbe8c29a724dbda7c4342aa2e151a72123d4644992e5523355a720675b4",
+  "checks": {
+    "falseCondition.policyHashRecomputed": true,
+    "trueCondition.policyHashRecomputed": true,
+    "falseCondition.noTransaction": true,
+    "savedEvidence.creSimulationMode": true,
+    "pause.savedSpecCorrelation": true,
+    "pause.savedTransactionCorrelation": true,
+    "pause.receiptSuccess": true,
+    "pause.receiptBlockCorrelation": true,
+    "pause.authorizedForwarderDestination": true,
+    "pause.eventRunId": true,
+    "pause.eventRevision": true,
+    "pause.eventPolicyHash": true,
+    "pause.processedOnChain": true,
+    "pause.pausedAtReceiptBlock": true,
+    "duplicate.noSecondTransaction": true,
+    "unsupportedAction.noTransaction": true,
+    "unsupportedAction.refused": true,
+    "unsupportedAction.noSimulatedOrder": true
+  }
+}

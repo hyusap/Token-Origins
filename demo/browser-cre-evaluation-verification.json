@@ -1,0 +1,210 @@
+{
+  "verified": true,
+  "verifiedAt": "2026-10-07T09:21:56.470Z",
+  "claim": "Actual typed browser instruction and CRE evaluation-only evidence, with independent check that this run was not processed on chain.",
+  "operatorLimitation": "The first operator turn timed out after valid terminal evaluation evidence; later instructions now stop repeated terminal polling.",
+  "checks": {
+    "evaluationOnly": true,
+    "terminalNoop": true,
+    "actualCreMode": true,
+    "noTransaction": true,
+    "policyHash": true,
+    "chainlinkObservation": true,
+    "rootFalse": true,
+    "runNotProcessed": true
+  },
+  "run": {
+    "id": "run-0d6bb114-8688-4853-98c4-863e6b46f11a",
+    "revision": 2,
+    "snapshot": {
+      "revision": 2,
+      "threshold": 3000,
+      "maxAgeSeconds": null,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T09:09:23.552Z",
+      "reason": "Requested same Chainlink mainnet SOL below $1 AND at least $1; mandatory provider freshness and already-paused guard remain; evaluate only",
+      "target": {
+        "kind": "evm-vault",
+        "chainId": 11155111,
+        "address": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+        "executor": "cre"
+      },
+      "graph": {
+        "nodes": [
+          {
+            "id": "sol",
+            "kind": "price",
+            "source": {
+              "type": "chainlink-feed",
+              "symbol": "SOL",
+              "network": "ethereum-mainnet"
+            }
+          },
+          {
+            "id": "below-one",
+            "kind": "compare",
+            "input": "sol",
+            "op": "<",
+            "value": 1
+          },
+          {
+            "id": "at-least-one",
+            "kind": "compare",
+            "input": "sol",
+            "op": ">=",
+            "value": 1
+          },
+          {
+            "id": "all",
+            "kind": "and",
+            "inputs": [
+              "below-one",
+              "at-least-one"
+            ]
+          }
+        ],
+        "root": "all",
+        "action": {
+          "type": "pause-vault"
+        }
+      },
+      "policyHash": "0xcc8e8e817b7205962322d980e4d1454ddb49e054c53c77cbf3b384c03eb0f3c0"
+    },
+    "policyHash": "0xcc8e8e817b7205962322d980e4d1454ddb49e054c53c77cbf3b384c03eb0f3c0",
+    "target": {
+      "kind": "evm-vault",
+      "chainId": 11155111,
+      "address": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+      "executor": "cre"
+    },
+    "action": "pause-vault",
+    "evaluationOnly": true,
+    "status": "no-op",
+    "startedAt": "2026-10-07T09:09:29.546Z",
+    "executionMode": "CRE local simulation · evaluation only · no report submitted",
+    "decisions": [
+      {
+        "id": "threshold",
+        "label": "threshold",
+        "passed": false,
+        "detail": "Chainlink SOL/USD (mainnet) $119.14780745 < $1",
+        "nodeId": "below-one",
+        "role": "node"
+      },
+      {
+        "id": "threshold",
+        "label": "threshold",
+        "passed": true,
+        "detail": "Chainlink SOL/USD (mainnet) $119.14780745 >= $1",
+        "nodeId": "at-least-one",
+        "role": "node"
+      },
+      {
+        "id": "and",
+        "label": "and",
+        "passed": false,
+        "detail": "below-one AND at-least-one → false",
+        "nodeId": "all",
+        "role": "node"
+      },
+      {
+        "id": "composed-policy",
+        "label": "composed-policy",
+        "passed": false,
+        "detail": "Policy root \"all\" evaluated false",
+        "nodeId": "guard:root",
+        "role": "root"
+      },
+      {
+        "id": "source-freshness",
+        "label": "source-freshness",
+        "passed": true,
+        "detail": "Chainlink SOL/USD (mainnet) observed 25834.7s ago; limit 93600s",
+        "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:SOL",
+        "role": "guard"
+      },
+      {
+        "id": "vault-state",
+        "label": "vault-state",
+        "passed": true,
+        "detail": "Vault spending active",
+        "nodeId": "guard:vault-active",
+        "role": "guard"
+      }
+    ],
+    "logs": [
+      {
+        "at": "2026-10-07T09:09:29.546Z",
+        "stage": "queued",
+        "message": "Frozen draft revision 2 · evaluation only; broadcast disabled"
+      },
+      {
+        "at": "2026-10-07T09:09:29.722Z",
+        "stage": "fetching",
+        "message": "Fetching fresh execution inputs"
+      },
+      {
+        "at": "2026-10-07T09:09:29.780Z",
+        "stage": "fetching",
+        "message": "CRE CLI compiling and executing the frozen HTTP-trigger specification"
+      },
+      {
+        "at": "2026-10-07T09:09:45.944Z",
+        "stage": "fetching",
+        "message": "ORIGINS_SOURCE Reading Chainlink SOL/USD (mainnet) at 0x4ffC43a60e009B551865A93d232E33Fce9f01507"
+      }
+    ],
+    "observations": [
+      {
+        "key": "chainlink-feed:ethereum-mainnet:SOL",
+        "provider": "chainlink",
+        "label": "Chainlink SOL/USD (mainnet)",
+        "network": "ethereum-mainnet",
+        "chainId": 1,
+        "address": "0x4ffC43a60e009B551865A93d232E33Fce9f01507",
+        "decimals": 8,
+        "usd": 119.14780745,
+        "raw": "11914780745",
+        "roundId": "36893488147419106531",
+        "observedAt": "2026-10-07T01:59:11.000Z",
+        "fetchedAt": "2026-10-07T09:09:45.195Z"
+      }
+    ],
+    "noopReason": "The policy condition was not met.",
+    "inputs": {
+      "vault": {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "visible": true,
+        "pinned": false,
+        "data": {
+          "paused": false,
+          "balance": "0",
+          "balanceEth": 0,
+          "address": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+          "chainId": 11155111,
+          "blockNumber": "11861992",
+          "fixture": false,
+          "network": "Ethereum Sepolia",
+          "balanceWei": "0",
+          "reportVersion": 2
+        },
+        "provenance": {
+          "source": "EVM contract read",
+          "observedAt": "2026-10-07T09:08:48.000Z",
+          "fetchedAt": "2026-10-07T09:09:45.988Z",
+          "kind": "chain",
+          "chainId": 11155111,
+          "address": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+          "label": "Actual contract read"
+        }
+      }
+    },
+    "evidence": {
+      "evaluationOnly": true,
+      "verification": "CRE evaluated the frozen policy with fresh source reads; broadcast disabled"
+    },
+    "completedAt": "2026-10-07T09:09:45.988Z"
+  }
+}

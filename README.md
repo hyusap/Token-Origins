@@ -1,147 +1,96 @@
-# Sotto
+# Woga
 
-**Speak. Observe. Execute.** A voice-native treasury observatory for TOKEN2049 Origins, built around Codex semantic MCP tools and a bounded Chainlink CRE workflow.
+**Speak. Observe. Execute.** Chainlink CRE for people who don't write code: say what your treasury should do, see it as a graph you can check, and let CRE enforce it on Ethereum and Solana. Built for TOKEN2049 Origins, with Chainlink CRE as its sole execution authority. A real Codex operator composes typed policies through MCP; the canvas retains source identities, frozen revisions, observations and verified receipts.
 
-The canvas keeps observations, their sources, conversational focus, policy revisions, and immutable execution evidence together. This implementation includes a real Codex-agent rehearsal and real local contract execution. It uses the Blockchain at Berkeley design system with an original Sotto wordmark.
-
-## Open the demo
-
-For an operator chat, open [`operator/`](operator/README.md) as the primary Codex project folder. Its `AGENTS.md` and `.codex/config.toml` make new chats Sotto operators with the semantic MCP attached. Coding chats belong in the parent project. The rehearsal agents also start in `operator/` with that same prompt.
+## Run
 
 ```sh
 bun install
 bun run dev
 ```
 
-Open http://127.0.0.1:5173. A production build is also served by the backend at http://127.0.0.1:4318 after `bun run build`. The supervisor starts an isolated localhost Anvil chain, deploys the grant vault if needed, and starts the backend and Vite. Prerequisites: Bun, Foundry (`forge`, `anvil`), and an authenticated Codex CLI. No private wallet or testnet credentials are needed for the local demo.
+Open [the observatory](http://127.0.0.1:5173). Bun and a signed-in Codex CLI are required for conversational commands. `bun run dev` starts the backend and canvas in CRE mode; it does not start a standalone chain signer. To prepare speech recognition, run `bun run voice:setup` (pinned local whisper.cpp and verified base.en model; requires the build tools printed by the installer).
 
-- **Space** starts the complete timed rehearsal from an empty canvas. Each prompt is interpreted by a real Codex CLI agent, which calls semantic MCP tools. A new rehearsal resumes only this project's local vault.
-- **/** opens a text transcript prompt; **Enter** sends it to Codex.
-- **I** shows provenance and the semantic tool trace.
-- **M** or **Mic** enables a local microphone waveform after browser permission. Audio is analysed in memory, with no recording or upload; this does not transcribe commands.
-- **V** narrates planned prompts and final responses with optional browser speech synthesis. The waveform responds only to the microphone.
-- **Clear** archives the current canvas; **Undo clear** restores its policy and execution evidence while the canvas is still empty. Neither changes the deployed contract.
-- **+ / −** zoom, arrow keys pan, and **0** fits the graph. Trackpad pan and pinch also work.
-- **Escape** stops microphone capture, future rehearsal prompts, and narration. Submitted actions and blockchain transactions continue.
+Type in the command dock, or select **Mic** to speak. Local transcription sends final text to the same real operator/MCP pipeline. `/` expands the dock; `I` opens proof; `0` fits the graph. Optional browser recognition may use its browser provider when local recognition is unavailable; its privacy status is visible. Clear removes canvas state while preserving contract state.
 
-The canvas uses React Flow custom nodes, port-connected edges, and its real viewport. Discovery, focus, source navigation, pinning, composition, revision, undo, execution, and inspection remain semantic operations; objects are not manually rewired. Semantic focus and navigation also move the viewport.
+For Codex desktop voice, use [operator/](operator/README.md). Browser dictation has its own verified implementation; desktop voice remains a separate integration requiring an actual user-started walkthrough.
 
-The 13-cue rehearsal takes around six minutes with the measured CLI/model setup. Prompts have minimum scheduled offsets and defer when a previous turn is still working. To trigger each prompt manually in the terminal, run `bun run rehearse`; for automatic timing, run `bun run demo`.
+## Compose through CRE
 
-The app opens directly on the full-screen graph. A compact microphone meter sits beside the mic control in the header and appears only while capture is live. The completion caption updates after the user's task finishes; price timestamps and exchange provenance stay in the cards and inspector. Permission denial, cancellation, and device disconnection are handled. Live microphone capture was verified in the Codex in-app browser with 2,048-sample frames and changing measured amplitude; spoken command transcription remains separate.
+Example prompts:
 
-Price discovery accepts exact Coinbase USD asset names, symbols, and qualified market IDs, and keeps each asset as a separate observation. Omitted tokens defaults to ETH; the grant-vault spending policy always uses ETH/USD. Restart `bun run server` after backend changes: a newly started MCP bridge checks semantic API compatibility before discovery and rejects older backends that would discard token arguments. `/api/health` reports the running process ID, start time, semantic API version, and a startup fingerprint of the semantic sources.
+- “Show SOL and ETH prices, BTC's mainnet Chainlink feed, and the grant vault.”
+- “Pause the vault if SOL is below $100, or ETH is above $4,000 and BTC's mainnet feed is above $80,000.”
+- “Explain the policy and its freshness guards.”
+- “Evaluate this revision without broadcasting and inspect its exact inputs.”
+- “Watch this policy every 30 seconds.”
+- “Stop the active monitor.”
+- “If ETH drops below $2,000 or USDC loses its peg, sweep half the treasury to the reserve and pause.”
+- “If WBTC's reserves fall below its supply, pause spending.”
+- “Pay the grantee 0.001 ETH every minute while ETH is above $1,000.”
+- “If ETH crashes, bridge the treasury's tokens to the reserve on Base and pause.”
 
-## What the agent can build: past Chainlink winners, by voice
+The vocabulary covers exact Coinbase USD markets, configured Chainlink feeds on explicit networks, Chainlink Proof of Reserve, ERC-20 supply, Aave v3 and Compound v3 rates and the vault's own balance; math (spread, ratio, product with unit checking), comparisons, freshness, deadlines, vault state, AND, OR and NOT. The operator assembles validated data, never arbitrary executable code. Every node must be reachable; equivalent reordered graphs have the same structural hash.
 
-Each past Chainlink hackathon winner below hand-built one automation. Sotto composes the same core loop from one sentence, as an ordinary policy graph run by the same CRE workflow, with the policy hash repeated in every on-chain event. `list_recipes` / `apply_recipe` offer these ready-made; `compose_graph` builds any variation.
+The implemented actions are **pause**, **sweep** (a share of the vault to the reserve fixed at deploy), **pay** (a payee the owner registered, capped and rate-limited on chain) and **evacuate** (the vault's tokens to the reserve on Base Sepolia through Chainlink CCIP), each delivered by the actual CRE workflow as one report. When a Solana vault is configured, the same CRE decision pauses (or sweeps) it too. Execution reads exchange APIs through CRE HTTP capabilities and feed/vault state through CRE EVM capabilities, evaluates the frozen graph, generates a report and submits it through the configured forwarder. Canvas discovery readings are previews; a run archives its own CRE observations. Direct local/testnet signers, standalone Solana transfers and copy-trading are unavailable in the product, including through HTTP/MCP bypass attempts. Unsupported requests do not substitute a different action.
 
-| Say | Inspired by | What runs |
+A run freezes its graph, revision, hash and Sepolia receiver. Confirmation requires a successful receipt, the matching run/revision/hash event (`SpendingPaused`, `ReserveSwept`, `GrantStreamed` or `TreasuryEvacuated`), and the vault state at the receipt block. Failed sources or guards produce an explicit no-op or failure; uncertain submissions remain blocked until read-only reconciliation establishes their outcome.
+
+`run_workflow` evaluates once. `evaluationOnly:true` freezes no-broadcast authority even when the policy passes; evaluations cannot join a broadcast run or reuse its operation ID. An identical operation ID returns the original run; a new completed-run request fetches fresh inputs. Explicit `activate_policy` schedules CRE checks against a frozen pause revision; `watch_policy` runs any vault action through the CRE workflow's own cron trigger. Draft edits do not change it. The backend scheduler pauses across restart and stops after settlement. **It is not a deployed DON trigger.** There is no direct-signing fallback when CRE is unavailable.
+
+## Safety: the vault sets the limits
+
+The agent never holds a key. CRE can only deliver a signed report, and `GrantVault` checks each one against limits its owner fixed at deploy: the reserve and CCIP destination, the payees and their per-payment caps and intervals, the CCIP fee cap and evacuation interval. A pause is always allowed. Worst case, funds go to the owner's own reserve. The vault can lock itself to one CRE workflow identity (`bun run lock:workflow`), and every event repeats the policy hash, so anyone can prove which rule moved which funds.
+
+## CRE setup and real chain proof
+
+Authenticate using `cre/bin/cre login` or `CRE_API_KEY`. Deploy the GrantVault v3 receiver with `bun run deploy:sepolia` and fund a Sepolia test wallet for broadcast; keep keys out of source control. The inspector's live readiness check separates CLI authentication, evaluation configuration, broadcast configuration and unverified funding.
+
+A fresh owned receiver and successful **CRE local simulation with actual Sepolia broadcast** are verified:
+
+[Sepolia transaction](https://sepolia.etherscan.io/tx/0xbf74d6505904c5cd08761cfd652faa17c6c84caae03eae7f1fd62b302a2c01a8) · block **11861976** · matching receiver event, frozen policy and historical paused state independently verified through two public RPC providers on October 7, 2026. The vault was subsequently resumed. This is historical chain proof, not current state or deployed DON consensus.
+
+**Every treasury action, executed through CRE on Sepolia** (CRE CLI simulation broadcasting through Chainlink's forwarder; [evidence](demo/actions-evidence-2026-10-07T12-15-49-819Z.json)):
+
+| Action | What happened | Transaction |
 | --- | --- | --- |
-| "If WBTC's reserves fall below its supply or USDC depegs, sweep half the treasury to the reserve and pause." | SentinelCRE (Convergence 2026, CRE & AI, 1st) | Chainlink Proof of Reserve ÷ WBTC supply, USDC feed → real sweep + pause |
-| "If USDC and USDT drift more than a cent apart, pause spending." | FlowVault (Convergence 2026, DeFi & Tokenization, 1st) | USDC − USDT spread from two Chainlink feeds → real pause |
-| "If Compound pays half a point more than Aave on USDC, move it." | YieldCoin (Chromion 2025 Grand Prize), Copil | Aave v3 and Compound v3 supply rates read from their contracts → **simulated** rebalance |
-| "If the treasury is worth under $1,000, pause grants." | TokenIQ (Chromion 2025, Onchain Finance, 1st) | vault ETH × Chainlink ETH/USD → real pause |
-| "Pay the grantee 0.001 ETH every minute while ETH is above $1,000." | InControl (Convergence 2026, Autonomous Agents, 1st) | `watch_policy` through the CRE cron trigger → real capped, rate-limited payments |
-| "If ETH falls below $2,000 before Friday, pay the insured." | Azurance (Constellation 2023), TAPL (Convergence 2026, Prediction Markets, 1st) | ETH feed AND a time window → real payout |
-| "If ETH crashes, bridge the treasury's tokens to the reserve on Base and pause." | YieldCoin, Chronomancer (Block Magic 2024, Cross-Chain, 1st) | ETH feed → real Chainlink CCIP transfer to Base Sepolia + pause |
+| Sweep | 25% of the vault (0.015 ETH) to the reserve | [`0x0c8579…a5e2f3`](https://sepolia.etherscan.io/tx/0x0c8579f63258551c2f9023f3e94872131e45dea8494ff084f24ceac5b6a5e2f3) |
+| Pay | 0.001 ETH to a registered grantee, under its cap | [`0xf39ae9…4a998f`](https://sepolia.etherscan.io/tx/0xf39ae9293874951ba94110f21270ff3c705af0478224171d55ef058f544a998f) |
+| Evacuate | 2 CCIP-BnM bridged to Base Sepolia, spending paused | [`0x2250c6…85e60f`](https://sepolia.etherscan.io/tx/0x2250c6e994f8691df8582e3e95423341d447468da8b0393c6c3dbe60dd85e60f) · [CCIP message](https://ccip.chain.link/msg/0xa1610d1de747df04d0fa3cb599d5300b5f1317909bb598d346688492c46d0022) |
+| Solana | The same decision paused the Solana vault | [`2AFf5U…oyu2mB`](https://explorer.solana.com/tx/2AFf5UuStEtMTsew2xxnFhXx6CL1yfQMxZcPmpto1JQUBXYpdzpy1jQbMAg6kE4xTVTRgjbF8f9U7T2Nmfoyu2mB?cluster=devnet) |
 
-Chainlink services used: CRE (HTTP and cron triggers, HTTP consensus, EVM reads on mainnet and Sepolia, EVM and Solana writes), Data Feeds, Proof of Reserve, and CCIP. "Inspired by" credits the idea; none of these teams' code is used. Every movement is bounded by the vault itself: the reserve and CCIP destination are fixed at deploy, payees are registered by the owner with a per-payment cap and minimum interval, so the worst a misbehaving agent or workflow can do is move funds to the owner's reserve.
+**One decision, two chains.** One CRE run paused the Sepolia vault ([`0xcea844…def6ca`](https://sepolia.etherscan.io/tx/0xcea844416b0ae01a6f96c491cc63c905931454be92c4091bc373b2e544def6ca)) and the [`sotto_vault`](https://explorer.solana.com/address/8g87GMMGr4JrzJpfh8v9oxyy8mwDRGawBRFJR8c1hqYD?cluster=devnet) program's vault on Solana devnet ([tx](https://explorer.solana.com/tx/39R7rvrjVS4etn7wmMXsMge6jpc4JRwnekpVsUmK6kMjQTVovoXeAY2i4Df3NJnmbZ8iWxGxNNmK4VaqPF3PiUHM?cluster=devnet)); both events carry the same run, revision and policy hash. A Solana grant was [paid while active](https://explorer.solana.com/tx/cAMvEBAzY1nWaApTbe1Fyo6zvhVHzvGrDJf2TfdoN9CN5MrzzECSPwgmBMgun5vCvSTHLTLmEETjVMaRYWju3mp?cluster=devnet) and refused on chain (`SpendingIsPaused`) after the pause. [Evidence](demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json).
 
-## What actually works
+[Fresh CRE evidence](demo/sepolia-evidence-2026-10-07T09-06-03-441Z.json) · [Independent verification](demo/sepolia-current-proof-verification.json) · [CRE-only API/MCP boundary](demo/cre-boundary-verification.json) · [Fresh CRE acceptance](demo/cre-acceptance-verification.json) · [Browser dictation E2E](demo/voice-browser-e2e-verification.json) · [Browser CRE delivery](demo/browser-cre-broadcast-verification.json)
 
-Two complete 13-cue takes each made **31 real MCP calls**. They discovered live timestamped Coinbase ETH/USD data and a deployed local vault, composed and revised the rule, recovered from an ambiguous reference, executed a false condition without a transaction, then delivered a pause report on the local EVM. The app required all three proofs before confirmation: a successful mined receipt, the matching receiver event, and a fresh `paused()` contract read. Later already-paused runs were no-ops. Additional real-agent probes verified source pinning, undo, old-receipt selection, and execution metadata, bringing the total to **86 actual MCP calls**. A rejected direct run reference in one probe was fixed and successfully retested with the real agent; the original failure remains in the saved evidence.
+Copy-trading is technically possible through a CRE report receiver that owns the swap assets and enforces budgets, source identity and replay protection. That receiver/workflow is not implemented or publicly verified here, so copy-trading is faded. Existing direct signer modules and local-AMM proof are retained as isolated research, excluded from product tools. [Feasibility review](docs/cre-copytrading-feasibility.md).
 
-[Portable execution evidence](demo/evidence-summary.json) · [Full rehearsal evidence](demo/rehearsal-report.json) · [Observed validation](docs/voice-validation.md) · [Final browser checks](demo/browser-validation.json)
-
-The final take's verified pause transaction is `0x02f81a058f1e52a9698aec7635f7001ba8c37ed4036e54d2f357b3501f0b94d0`, block 7 on **Anvil chain 31337**. Both this receipt and the first take's block-5 receipt survived an actual node restart. These are local EVM evidence; Sepolia remains untested.
-
-## Architecture
-
-```text
-Preplanned transcript / Codex desktop voice (future actual voice test)
-    → Codex agent
-    → official MCP stdio server
-    → Bun semantic backend + SQLite
-    → WebSocket → React observatory
-    → immutable execution specification
-        → local EVM rehearsal runner (default)
-        → CRE HTTP-trigger workflow (explicit authenticated mode)
-    → receipt + receiver event + fresh contract read → same canvas
-```
-
-The backend has optimistic revision checks and persistent operation deduplication. Executions freeze a revision and inputs; delayed tools cannot overwrite a newer draft. A repeated run of the same revision returns its existing run. Errors and no-ops are visible and inspectable.
-
-The CRE implementation is a fixed, allowlisted graph evaluator. The composed graph supplies a specification for Coinbase price fetch → EVM vault read → threshold + freshness + active-vault guards → AND → pause report. It does not generate arbitrary code or claim to be a native CRE graph feature. In CRE mode, fetches, reads, decisions, and report submission happen inside the CRE workflow.
-
-## Honest boundaries
-
-- **The default runs actual local EVM transactions through an explicitly named rehearsal forwarder.** It does not invoke CRE or demonstrate DON consensus.
-- **One CRE decision paused treasuries on Ethereum and Solana.** The same policy run paused the Sepolia vault ([tx](https://sepolia.etherscan.io/tx/0xcea844416b0ae01a6f96c491cc63c905931454be92c4091bc373b2e544def6ca)) and the [`sotto_vault`](https://explorer.solana.com/address/8g87GMMGr4JrzJpfh8v9oxyy8mwDRGawBRFJR8c1hqYD?cluster=devnet) program's [vault on Solana devnet](https://explorer.solana.com/address/7593tF3wMY5bT9hLv6hGgMXanRkgG7p48jsA6JcpXWtE?cluster=devnet) ([tx](https://explorer.solana.com/tx/39R7rvrjVS4etn7wmMXsMge6jpc4JRwnekpVsUmK6kMjQTVovoXeAY2i4Df3NJnmbZ8iWxGxNNmK4VaqPF3PiUHM?cluster=devnet)), and both events carry the same run, revision and policy hash. A Solana grant was [paid while active](https://explorer.solana.com/tx/cAMvEBAzY1nWaApTbe1Fyo6zvhVHzvGrDJf2TfdoN9CN5MrzzECSPwgmBMgun5vCvSTHLTLmEETjVMaRYWju3mp?cluster=devnet) and refused onchain (`SpendingIsPaused`) after the pause. Evidence: [`demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json`](demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json); re-check with `bun run verify:evidence demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json`. CRE runs off-chain in the CLI simulator and writes to both chains through Chainlink's simulation forwarders; it is not deployed on a DON or on Solana.
-- **CRE simulation with a real Sepolia broadcast is proven.** A composed policy (Coinbase ETH trade AND Chainlink mainnet BTC feed) was evaluated inside the CRE workflow and paused the Sepolia vault in [`0x82e480e1…`](https://sepolia.etherscan.io/tx/0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec) (block 11861492). The receiver event carries the same policy hash as the frozen graph. The same run also recorded a false condition with no write, a duplicate with no second pause, and a simulated sell refused before any read or write. Evidence: [`demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json`](demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json); re-check it with `bun run verify:evidence demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json`. This is the CRE CLI simulator broadcasting through Chainlink's MockForwarder, **not** a deployed DON workflow.
-- Report v2 is also verified on real local Anvil by `tests/anvil-integration.test.ts`. The older takes above used report v1 (ETH-only threshold).
-- **Treasury actions (report v3) are proven locally, not yet on Sepolia.** Sweep, pay and CCIP evacuate run as real transactions on Anvil (with a stand-in CCIP router there, not CCIP), in the CRE workflow under the SDK's capability mocks, and on a local Solana validator, including an in-place upgrade of the program deployed on devnet. The Sepolia proof needs `bun run deploy:sepolia` and `bun run prove:actions` with the owner's key; the Proof of Reserve, Aave and Compound addresses need one `bun run verify:registry` against mainnet. Until then, say "proven locally" for these.
-- **Built-in desktop voice remains untested.** Preplanned voice prompts use the real Codex/MCP agent. Browser microphone capture supplies only the requested amplitude display; speech recognition and native Codex voice are separate integrations.
-- The draft revision in the observed take arrived after the fast local run finished. Snapshot immutability was verified; audio interruption during an in-flight transaction was not.
-- Measured CLI agent turn duration was 17.1–35.3 seconds, median 20.6 seconds. These are not voice latency figures. First-render acknowledgement handling was corrected after that take; its original render numbers are not claimed as reliable performance.
-
-[CRE setup and implementation](docs/cre-integration.md) · [Future voice feasibility test and exact MCP setup](docs/voice-rehearsal.md)
-
-## Validation
+## Verification
 
 ```sh
 bun run check
 bun run build
-forge build --root contracts && bun test tests   # includes a real-Anvil integration test when Foundry is installed
+bun test
 bun run --cwd cre typecheck
-bun run --cwd cre test
 bun run --cwd cre build:wasm
 forge test --root contracts -vv
+bun run test:boundary
+bun run verify:proof
+bun run verify:evidence demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json   # the Ethereum + Solana decision
+# Requires CRE authentication; no broadcast or private signing key:
+bun run test:e2e
+# With the owner's keys in .env: deploy the v3 vault and prove sweep, pay and CCIP evacuation
+bun run deploy:sepolia && bun run prove:actions
 ```
 
-Policies execute through one decision path. Fixture, local EVM and CRE runs all validate the same graph, check its structural policy hash, read only the sources it names, and apply the same mandatory guards; see [the execution contract](docs/execution-contract.md). Backend tests cover revision conflicts, operation retries, immutable runs, fresh runs, migration of pre-graph saves, and restart recovery that never resubmits blindly. CRE tests run the real handler under the official capability mocks, including zero writes for simulated sells and refusal of unsupported networks. Solidity tests cover report v2 authorization, target/chain/action binding, expiry, replay and paused spending. `tests/anvil-integration.test.ts` deploys the vault on a throwaway Anvil node and proves false → verified composed pause → no duplicate → sell never writes, then re-verifies the evidence from chain data.
+`bun test` includes real local-chain runs: Anvil (`tests/anvil-integration.test.ts`, the vault's actions and their limits) and a local Solana validator (`tests/solana-integration.test.ts`) when Foundry and the Solana CLI are installed. These use the explicit research runner and never certify CRE execution.
 
-`bun run scripts/verify-local.ts` runs the same proof with live prices on the dev chain and resumes the vault afterward. Run it outside an active demo. The development key is the public Anvil account and is explicitly rejected outside localhost chain 31337. For Sepolia, see [CRE setup](docs/cre-integration.md#sepolia-deploy-and-prove).
+Honest boundaries: CRE runs here as the CLI simulation broadcasting through Chainlink's forwarders on Sepolia and Solana devnet, not a deployed DON. Agent turns take tens of seconds; transcription is real time.
 
-UI and voice work can build against `fixtures/states/*.json`: full canvas states produced by the real engine for a legacy rule, nested AND/OR/NOT, a false root with a true branch, a passing OR with a false branch, a guard-blocked root, an unsupported source, a simulated sell, a failed write, and a verified pause. Regenerate them with `bun run scripts/generate-fixtures.ts`.
+The accepted E2E harness uses a disposable backend/SQLite and official MCP, evaluates a contradictory condition through the real CRE CLI, checks frozen-monitor behavior and restart persistence, then independently verifies the saved public receipt. A missing CRE login fails honestly. The prior direct local harness requires an explicit research flag and cannot certify CRE execution.
 
-## Files
+Browser voice proof used synthetic spoken input through real MediaRecorder, local Whisper, Codex and live market discovery; no ambient human microphone or chain action was claimed. [Audio bounds verification](demo/voice-api-validation.json).
 
-- `src/` — observatory and brand tokens
-- `server/` — semantic state engine, sources, SQLite, HTTP and WebSocket
-- `scripts/mcp.ts` — official MCP SDK stdio server
-- `scripts/agent.ts` — real Codex CLI bridge, traces and timed cues
-- `demo/script.json` — filming transcript and minimum cue offsets
-- `cre/graph.ts` — policy graph, source registries, units, policy hash, shared evaluator, reports v2/v3
-- `cre/onchain-reads.ts` — how Proof of Reserve, supply and lending-rate contracts are read (shared by backend and CRE)
-- `server/recipes.ts` — winner-inspired recipes; `server/onchain.ts` — contract readings for the canvas
-- `cre/runner.ts` — fixture / local EVM / CRE execution paths and chain verification
-- `cre/workflow/handler.ts` — the CRE workflow
-- `contracts/src/GrantVault.sol` — receiver-enabled grant vault (report v3: pause, sweep, pay, CCIP evacuate)
-- `scripts/deploy-sepolia.ts`, `scripts/prove-sepolia.ts`, `scripts/verify-evidence.ts` — Sepolia deploy, proof and independent verification
-- `fixtures/states/` — reference UI/API states; `docs/execution-contract.md` — the shared contract
-- `.codex/config.toml` — project-scoped Sotto MCP connection
+`bun run build` serves the production app from [the backend](http://127.0.0.1:4318). Services bind to localhost. Optional private-tailnet sharing is not started automatically.
 
-The public frontend and backend bind only to localhost. Live broadcasts use an explicitly selected CRE mode and fresh configuration; the local forwarder is not a production Chainlink forwarder.
-
-Local chain persistence: new nodes started by `bun run dev` load/save `.data/anvil-state.json`, checkpoint every five seconds, and preserve block/transaction/history data. Stop the supervisor gracefully to allow its owned node to finish saving. An already-running node is reused; to checkpoint it without stopping or changing it, run `bun run scripts/snapshot-local.ts` after the rehearsal finishes. Keep `.data/` and `contracts/deployment.local.json` together when preserving a demo.
-
-`bun run scripts/verify-local-persistence.ts` selects a confirmed local pause transaction from the current API or saved rehearsal evidence, verifies restoration on a temporary node at port 8546, and stops only that node. An optional `ORIGINS_VERIFY_TX_HASH` accepts a public transaction hash. The check validates the correlated vault event, successful receipt, matching logs, transaction lookup, current balance/state, and paused state at the selected receipt block. Run a true policy version first on a fresh local chain. Dynamic evidence is saved in `demo/dynamic-persistence-verification.json`; the original process replacement proof remains in `demo/chain-persistence-report.json`. The live chain at 8545 is unchanged. See [Foundry state management](https://www.getfoundry.sh/anvil/state-management) for the snapshot mechanism.
-
-## Token price discovery
-
-`discover_objects` accepts `tokens`, for example:
-
-```json
-{"objects":["price","vault"],"tokens":["Ethereum","Solana","BTC"],"operationId":"discover-markets-1"}
-```
-
-Omitting `tokens` preserves ETH discovery. Exact names, symbols, and identifiers such as `coinbase:SOL-USD` resolve against Coinbase Exchange’s online USD market catalog (cached for five minutes). Each token retains its own canvas card, exchange product identity, source object, trade history, and source/fetch timestamps. Refreshing a token refreshes that market. Ambiguous names require a qualified identifier; unknown names, unsupported contract addresses, missing USD markets, and source failures produce errors rather than substitute prices. Market coverage is bounded by Coinbase listings, not every token on every chain. ETH retains its Kraken fallback. Small token prices retain meaningful decimal precision.
-
-The grant-vault policy and CRE runner remain explicitly **ETH/USD**. Additional discovered markets are observations; SOL cannot silently replace the ETH trigger. Discover ETH and the vault before composing that rule.
-
-The keyboard fallback recognizes “Show me Solana’s price” and “Show prices for ETH and SOL and our grant vault.” Voice/agent clients should use the structured `tokens` argument.
-
-To activate this change on an existing demo: integrate these changes into the checkout used by its backend and MCP launcher, rebuild with `bun run build`, restart only the backend with its existing `STATE_DB`, deployment, and execution environment, then reload/reconnect the Sotto MCP so its tool schema exposes `tokens` (and reconnect voice if that session caches the old tools). Keep Anvil running and preserve the existing canvas database. Code/schema changes cannot update a backend already running the old code; a safe restart window is required. Do not run the demo/rehearsal reset commands to activate pricing.
-
-For a separate preview, use `PORT=4319 STATE_DB=.data/token-preview.sqlite bun run server` in this worktree and point a separate MCP launcher at it with `ORIGINS_BACKEND_URL=http://127.0.0.1:4319 bun run mcp`. This creates a separate canvas; its vault defaults to an explicit fixture unless a deployment is configured. It does not replace the active demo.
+[Execution contract](docs/execution-contract.md) · [CRE setup](docs/cre-integration.md) · [Environment options](.env.example) · [Operator guidance](operator/AGENTS.md)

@@ -1,0 +1,475 @@
+{
+  "verifiedAt": "2026-10-07T08:13:18.649Z",
+  "claim": "Actual Playwriter browser instructions -> default-model Codex -> semantic MCP -> live inputs -> verified local EVM pause, plus false-policy no-op and explicit watcher start/stop. Local EVM, not CRE consensus.",
+  "chainId": 31337,
+  "vault": "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9",
+  "monitors": [
+    {
+      "id": "monitor_d80f4c4915f049b09080417f7e82d94d",
+      "sessionId": "0df08737-c50e-47b5-9461-da0975c4cae3",
+      "status": "paused",
+      "spec": {
+        "version": 2,
+        "runId": "monitor_d80f4c4915f049b09080417f7e82d94d",
+        "revision": 1,
+        "graph": {
+          "nodes": [
+            {
+              "id": "sol",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "SOL-USD"
+              }
+            },
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "ETH-USD"
+              }
+            },
+            {
+              "id": "sol-below",
+              "kind": "compare",
+              "input": "sol",
+              "op": "<",
+              "value": 1
+            },
+            {
+              "id": "eth-above",
+              "kind": "compare",
+              "input": "eth",
+              "op": ">",
+              "value": 1
+            },
+            {
+              "id": "both",
+              "kind": "and",
+              "inputs": [
+                "sol-below",
+                "eth-above"
+              ]
+            }
+          ],
+          "root": "both",
+          "action": {
+            "type": "pause-vault"
+          }
+        },
+        "policyHash": "0xe7b3bc9177ec0317cafdba6ae47ebb14f5ea24db4dffcb33b920c7601682d8b5",
+        "maxAgeSeconds": 60,
+        "broadcast": true
+      },
+      "target": {
+        "chainId": 31337,
+        "address": "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9"
+      },
+      "intervalSeconds": 30,
+      "createdAt": "2026-10-07T08:09:37.358Z",
+      "updatedAt": "2026-10-07T08:09:54.482Z",
+      "checks": 1,
+      "failures": 0,
+      "logs": [
+        {
+          "at": "2026-10-07T08:09:37.358Z",
+          "message": "Activated revision 1; checking every 30s while this backend is running"
+        },
+        {
+          "at": "2026-10-07T08:09:37.478Z",
+          "message": "Local EVM rehearsal · shared graph evaluator · no CRE/DON claim"
+        },
+        {
+          "at": "2026-10-07T08:09:37.667Z",
+          "message": "Read vault active on chain 31337"
+        },
+        {
+          "at": "2026-10-07T08:09:37.667Z",
+          "message": "Fetching Coinbase SOL-USD trade"
+        },
+        {
+          "at": "2026-10-07T08:09:37.667Z",
+          "message": "Fetching Coinbase ETH-USD trade"
+        },
+        {
+          "at": "2026-10-07T08:09:38.947Z",
+          "message": "STOP sol-below: Coinbase SOL-USD trade $118.54 < $1.00"
+        },
+        {
+          "at": "2026-10-07T08:09:38.947Z",
+          "message": "PASS eth-above: Coinbase ETH-USD trade $2,614.05 > $1.00"
+        },
+        {
+          "at": "2026-10-07T08:09:38.947Z",
+          "message": "STOP both: sol-below AND eth-above → false"
+        },
+        {
+          "at": "2026-10-07T08:09:38.947Z",
+          "message": "STOP root: Policy root \"both\" evaluated false"
+        },
+        {
+          "at": "2026-10-07T08:09:38.947Z",
+          "message": "PASS source:exchange-trade:SOL-USD: Coinbase SOL-USD trade observed 1.9s ago; limit 60s"
+        },
+        {
+          "at": "2026-10-07T08:09:38.947Z",
+          "message": "PASS source:exchange-trade:ETH-USD: Coinbase ETH-USD trade observed 0.9s ago; limit 60s"
+        },
+        {
+          "at": "2026-10-07T08:09:38.947Z",
+          "message": "PASS vault-active: Vault spending active"
+        },
+        {
+          "at": "2026-10-07T08:09:38.947Z",
+          "message": "No action. The policy condition was not met."
+        },
+        {
+          "at": "2026-10-07T08:09:54.481Z",
+          "message": "Deactivated by explicit request; no further checks will run."
+        }
+      ],
+      "lastRunId": "monitor_d80f4c4915f049b09080417f7e82d94d_1_observe",
+      "latestEvidence": {
+        "runId": "monitor_d80f4c4915f049b09080417f7e82d94d_1_observe",
+        "revision": 1,
+        "policyHash": "0xe7b3bc9177ec0317cafdba6ae47ebb14f5ea24db4dffcb33b920c7601682d8b5",
+        "mode": "local-evm-rehearsal",
+        "observations": [
+          {
+            "key": "exchange-trade:SOL-USD",
+            "provider": "coinbase",
+            "label": "Coinbase SOL-USD trade",
+            "url": "https://api.exchange.coinbase.com/products/SOL-USD/ticker",
+            "usd": 118.54,
+            "raw": "118.54",
+            "observedAt": "2026-10-07T08:09:37.060434024Z",
+            "fetchedAt": "2026-10-07T08:09:38.527Z"
+          },
+          {
+            "key": "exchange-trade:ETH-USD",
+            "provider": "coinbase",
+            "label": "Coinbase ETH-USD trade",
+            "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+            "usd": 2614.05,
+            "raw": "2614.05",
+            "observedAt": "2026-10-07T08:09:38.044329375Z",
+            "fetchedAt": "2026-10-07T08:09:38.936Z"
+          }
+        ],
+        "vault": {
+          "address": "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9",
+          "chainId": 31337,
+          "paused": false,
+          "balanceWei": "1204900000000000000",
+          "reportVersion": 2
+        },
+        "conditions": [
+          {
+            "nodeId": "sol-below",
+            "kind": "threshold",
+            "role": "node",
+            "passed": false,
+            "detail": "Coinbase SOL-USD trade $118.54 < $1.00"
+          },
+          {
+            "nodeId": "eth-above",
+            "kind": "threshold",
+            "role": "node",
+            "passed": true,
+            "detail": "Coinbase ETH-USD trade $2,614.05 > $1.00"
+          },
+          {
+            "nodeId": "both",
+            "kind": "and",
+            "role": "node",
+            "passed": false,
+            "detail": "sol-below AND eth-above → false"
+          },
+          {
+            "nodeId": "guard:root",
+            "kind": "composed-policy",
+            "role": "root",
+            "passed": false,
+            "detail": "Policy root \"both\" evaluated false"
+          },
+          {
+            "nodeId": "guard:source:exchange-trade:SOL-USD",
+            "kind": "source-freshness",
+            "role": "guard",
+            "passed": true,
+            "detail": "Coinbase SOL-USD trade observed 1.9s ago; limit 60s"
+          },
+          {
+            "nodeId": "guard:source:exchange-trade:ETH-USD",
+            "kind": "source-freshness",
+            "role": "guard",
+            "passed": true,
+            "detail": "Coinbase ETH-USD trade observed 0.9s ago; limit 60s"
+          },
+          {
+            "nodeId": "guard:vault-active",
+            "kind": "vault-state",
+            "role": "guard",
+            "passed": true,
+            "detail": "Vault spending active"
+          }
+        ],
+        "root": false,
+        "decision": "noop",
+        "action": "pause-vault",
+        "decidedAt": "2026-10-07T08:09:38.937Z",
+        "logs": [
+          "Local EVM rehearsal · shared graph evaluator · no CRE/DON claim",
+          "Read vault active on chain 31337",
+          "Fetching Coinbase SOL-USD trade",
+          "Fetching Coinbase ETH-USD trade",
+          "STOP sol-below: Coinbase SOL-USD trade $118.54 < $1.00",
+          "PASS eth-above: Coinbase ETH-USD trade $2,614.05 > $1.00",
+          "STOP both: sol-below AND eth-above → false",
+          "STOP root: Policy root \"both\" evaluated false",
+          "PASS source:exchange-trade:SOL-USD: Coinbase SOL-USD trade observed 1.9s ago; limit 60s",
+          "PASS source:exchange-trade:ETH-USD: Coinbase ETH-USD trade observed 0.9s ago; limit 60s",
+          "PASS vault-active: Vault spending active",
+          "No action. The policy condition was not met."
+        ],
+        "noopReason": "The policy condition was not met."
+      },
+      "stopReason": "Deactivated by explicit request; no further checks will run."
+    }
+  ],
+  "runs": [
+    {
+      "runId": "run-61cbaa1b-aa4b-4827-bd81-fad51907eda9",
+      "revision": 2,
+      "status": "confirmed",
+      "snapshot": {
+        "revision": 2,
+        "threshold": 3000,
+        "maxAgeSeconds": null,
+        "skipPaused": false,
+        "createdAt": "2026-10-07T08:11:57.000Z",
+        "reason": "SOL above $1 AND ETH above $1, preserving exact Coinbase sources; one-time local run, no watcher.",
+        "graph": {
+          "nodes": [
+            {
+              "id": "sol",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "SOL-USD"
+              }
+            },
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "ETH-USD"
+              }
+            },
+            {
+              "id": "sol-above",
+              "kind": "compare",
+              "input": "sol",
+              "op": ">",
+              "value": 1
+            },
+            {
+              "id": "eth-above",
+              "kind": "compare",
+              "input": "eth",
+              "op": ">",
+              "value": 1
+            },
+            {
+              "id": "both",
+              "kind": "and",
+              "inputs": [
+                "sol-above",
+                "eth-above"
+              ]
+            }
+          ],
+          "root": "both",
+          "action": {
+            "type": "pause-vault"
+          }
+        },
+        "policyHash": "0xc09f6bb7ac274c2515bda2bd7f4716a3abea2b40160a1b58c32d06c53d650dae"
+      },
+      "observations": [
+        {
+          "key": "exchange-trade:SOL-USD",
+          "provider": "coinbase",
+          "label": "Coinbase SOL-USD trade",
+          "url": "https://api.exchange.coinbase.com/products/SOL-USD/ticker",
+          "usd": 118.53,
+          "raw": "118.53",
+          "observedAt": "2026-10-07T08:12:00.723301256Z",
+          "fetchedAt": "2026-10-07T08:12:01.602Z"
+        },
+        {
+          "key": "exchange-trade:ETH-USD",
+          "provider": "coinbase",
+          "label": "Coinbase ETH-USD trade",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "usd": 2614.2,
+          "raw": "2614.2",
+          "observedAt": "2026-10-07T08:12:00.719771881Z",
+          "fetchedAt": "2026-10-07T08:12:01.444Z"
+        }
+      ],
+      "checks": {
+        "frozenPolicyHash": true,
+        "liveInputs": true,
+        "receiptSuccess": true,
+        "eventBound": true,
+        "pausedAtReceipt": true,
+        "processedRun": true
+      },
+      "chainEvidence": {
+        "hash": "0xfc2431a600e25589fbf72ea18e0e0cf8c7c3a181b4e46f9822d2b0cb06effdd6",
+        "blockNumber": 7,
+        "event": {
+          "eventName": "SpendingPaused",
+          "args": {
+            "runId": "0xcf421af44a3459e5d94c5c5544140a8e9e1010a02ae8decbc4435ec49a21b990",
+            "revision": "2",
+            "policyHash": "0xc09f6bb7ac274c2515bda2bd7f4716a3abea2b40160a1b58c32d06c53d650dae",
+            "decidedAt": "1791360721"
+          }
+        }
+      }
+    },
+    {
+      "runId": "run-8fccb248-e378-4159-b38b-0d066217bcf4",
+      "revision": 1,
+      "status": "no-op",
+      "snapshot": {
+        "revision": 1,
+        "threshold": 3000,
+        "maxAgeSeconds": null,
+        "skipPaused": false,
+        "createdAt": "2026-10-07T08:06:59.763Z",
+        "reason": "Draft only: pause spending when SOL below $1 and ETH above $1; do not run or activate.",
+        "graph": {
+          "nodes": [
+            {
+              "id": "sol",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "SOL-USD"
+              }
+            },
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "exchange-trade",
+                "pair": "ETH-USD"
+              }
+            },
+            {
+              "id": "sol-below",
+              "kind": "compare",
+              "input": "sol",
+              "op": "<",
+              "value": 1
+            },
+            {
+              "id": "eth-above",
+              "kind": "compare",
+              "input": "eth",
+              "op": ">",
+              "value": 1
+            },
+            {
+              "id": "both",
+              "kind": "and",
+              "inputs": [
+                "sol-below",
+                "eth-above"
+              ]
+            }
+          ],
+          "root": "both",
+          "action": {
+            "type": "pause-vault"
+          }
+        },
+        "policyHash": "0xe7b3bc9177ec0317cafdba6ae47ebb14f5ea24db4dffcb33b920c7601682d8b5"
+      },
+      "observations": [
+        {
+          "key": "exchange-trade:SOL-USD",
+          "provider": "coinbase",
+          "label": "Coinbase SOL-USD trade",
+          "url": "https://api.exchange.coinbase.com/products/SOL-USD/ticker",
+          "usd": 118.51,
+          "raw": "118.51",
+          "observedAt": "2026-10-07T08:10:19.907918898Z",
+          "fetchedAt": "2026-10-07T08:10:21.794Z"
+        },
+        {
+          "key": "exchange-trade:ETH-USD",
+          "provider": "coinbase",
+          "label": "Coinbase ETH-USD trade",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "usd": 2613.65,
+          "raw": "2613.65",
+          "observedAt": "2026-10-07T08:10:20.719674679Z",
+          "fetchedAt": "2026-10-07T08:10:21.917Z"
+        }
+      ],
+      "checks": {
+        "frozenPolicyHash": true,
+        "liveInputs": true,
+        "noTransaction": true
+      }
+    }
+  ],
+  "interfaceChecks": {
+    "productionBuildServed": true,
+    "mobileViewport": {
+      "width": 390,
+      "height": 844,
+      "noHorizontalOverflow": true
+    },
+    "desktopViewport": {
+      "width": 1440,
+      "height": 1000,
+      "noHorizontalOverflow": true
+    },
+    "mobileObjectFocus": true,
+    "proofOpensAndCloses": true,
+    "expandedResponseOpensAndCloses": true,
+    "promptFocusAndEscapeReturn": true,
+    "reducedMotionSupported": true,
+    "runtimeErrorsObserved": 0
+  },
+  "browserInstrumentationNote": "Removed Playwriter toolbar elements that intercepted mobile header pointer events; no application state or semantic operations were injected.",
+  "validation": {
+    "applicationAndCre": {
+      "passed": 152,
+      "failed": 0,
+      "assertions": 933
+    },
+    "solidity": {
+      "passed": 10,
+      "failed": 0
+    },
+    "realIsolatedE2e": {
+      "passed": 18,
+      "failed": 0
+    },
+    "defaultModelOperator": {
+      "draftAssertions": 10,
+      "noopAssertions": 13
+    },
+    "typescript": "passed",
+    "frontendBuild": "passed",
+    "wasmBuild": "passed"
+  }
+}

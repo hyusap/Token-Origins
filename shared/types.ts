@@ -1,3 +1,8 @@
+import type {EvmTradeWatch} from "../server/evm-trade-watch";
+import type {ExecutionTarget} from "./execution-target";
+import type {SolanaTransferReceipt} from "./solana-types";
+import type { PolicyMonitor } from "../server/monitor";
+import type { supportedPolicyCapabilities } from "./policy-capabilities";
 import type { PolicyGraph, PolicyAction, Observation, ResultRole } from "../cre/graph";
 import type { ReceiverEffects, FixtureEffects, SimulatedRebalance } from "../cre/runner";
 export type { PolicyGraph, PolicyAction, Observation, ResultRole, ReceiverEffects, FixtureEffects, SimulatedRebalance };
@@ -35,6 +40,7 @@ export interface WorkflowRevision {
   reason: string;
   /** Composed policy. Scalar edits synthesise the equivalent single-compare graph. */
   graph: PolicyGraph;
+  target?: ExecutionTarget;
   /** Structural hash of graph; the receiver event carries the same value. */
   policyHash?: string;
   /** Set on a revision created by undo: the revision whose policy it restored. */
@@ -82,6 +88,8 @@ export interface ExecutionRun {
   startedAt: string;
   completedAt?: string;
   executionMode: string;
+  /** Frozen read-only CRE invocation; never enables report submission. */
+  evaluationOnly?: boolean;
   /** Hash of the frozen graph this run evaluated. */
   policyHash?: string;
   /** The action the frozen graph names. */
@@ -90,16 +98,22 @@ export interface ExecutionRun {
   trigger?: "manual" | "watch";
   /** Which check of the standing policy this run was. */
   watchCheck?: number;
-  inputs?: { price: GraphObject; vault: GraphObject };
+  inputs?: { price?: GraphObject; vault?: GraphObject };
   /** Every source reading the decision used, with provider, network, address and timestamps. */
   observations?: Observation[];
   /** Why no action was taken, from the gate that actually stopped it. */
   noopReason?: string;
   /** Set after a restart interrupted this run, until the chain says whether its report landed. */
   uncertain?: boolean;
+  submissionPossible?: boolean;
+  /** Target frozen before execution so recovery never reads a replacement vault. */
+  target?: ExecutionTarget;
   decisions: RunDecision[];
   logs: RunLog[];
   evidence?: {
+    evaluationOnly?:true;
+    solanaTransfer?: SolanaTransferReceipt & {genesisHash:string;verified:true};
+    submittedSignature?:string;
     transactionHash?: string;
     blockNumber?: string;
     receiptStatus?: string;
@@ -188,6 +202,8 @@ export interface CanvasState {
   edges: { id: string; from: string; to: string; label: string }[];
   workflow: Workflow;
   runs: ExecutionRun[];
+  monitors?: PolicyMonitor[];
+  tradeWatches?: EvmTradeWatch[];
   inspectedRunId?: string;
   conversation: ConversationEntry[];
   activity: {
@@ -211,6 +227,7 @@ export interface CanvasState {
     renderMs?: number;
   }[];
   capabilities: {
+    supported?: typeof supportedPolicyCapabilities;
     price: string;
     vault: string;
     execution: string;
@@ -235,6 +252,7 @@ export interface FixtureTreasury {
   lastEvacuationAt: number;
 }
 export interface ToolResult {
+  data?: Record<string, unknown>;
   ok: boolean;
   summary: string;
   state: CanvasState;

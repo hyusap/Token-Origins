@@ -13,6 +13,7 @@ import { createPublicClient, createWalletClient, http, parseAbi, parseEther, for
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { REPORT_VERSION, NETWORKS, CCIP_SEPOLIA, CCIP_DESTINATIONS, payeeId } from "../cre/graph";
+import { mkdir } from "node:fs/promises";
 
 /**
  * CRE's simulation MockForwarder on Sepolia. `cre workflow simulate --broadcast`
@@ -27,6 +28,7 @@ if (!isAddress(forwarder)) throw new Error("ORIGINS_SEPOLIA_FORWARDER is not an 
 const rpcUrl = process.env.ORIGINS_SEPOLIA_RPC || "https://ethereum-sepolia-rpc.publicnode.com";
 // Long enough for CLI compile + simulation + inclusion; the contract caps it at 3600.
 const maxReportAge = BigInt(process.env.ORIGINS_REPORT_AGE_SECONDS || 300);
+if(maxReportAge<1n || maxReportAge>3600n) throw new Error("ORIGINS_REPORT_AGE_SECONDS must be 1–3600");
 const account = privateKeyToAccount(key);
 const pick = (name: string) => {
   const value = (process.env[name] || account.address) as Address;
@@ -101,6 +103,14 @@ const deployment = {
   // Earlier vaults stay on chain with their receipts; recorded evidence keeps pointing at them.
   previousDeployments: previous ? [...(previous.previousDeployments ?? []), { address: previous.address, reportVersion: previous.reportVersion, deploymentHash: previous.deploymentHash, blockNumber: previous.blockNumber, createdAt: previous.createdAt }] : [],
 };
-await Bun.write("contracts/deployment.sepolia.json", JSON.stringify(deployment, null, 2));
+// Keep previous public receiver identities so archived receipts stay inspectable.
+const manifestPath = "contracts/deployment.sepolia.json";
+if (await Bun.file(manifestPath).exists()) {
+  const previous = await Bun.file(manifestPath).json();
+  if (!isAddress(previous.address)) throw new Error("Previous deployment manifest has no valid address; preserve it manually before replacing");
+  await mkdir("contracts/deployments", { recursive: true });
+  await Bun.write(`contracts/deployments/sepolia-${previous.address.toLowerCase()}.json`, JSON.stringify(previous, null, 2));
+}
+await Bun.write(manifestPath, JSON.stringify(deployment, null, 2));
 console.log(JSON.stringify(deployment, null, 2));
 console.log(`\nUpdate your .env:\nORIGINS_EXECUTION_MODE=cre\nORIGINS_SEPOLIA_VAULT=${address}`);

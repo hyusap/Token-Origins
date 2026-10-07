@@ -32,7 +32,8 @@ const feed = (symbol: string, usd: number, network = "ethereum-mainnet"): GraphO
 };
 const PRICES: Record<string, number> = { ETH: 2600, BTC: 85000, SOL: 150 };
 const create = () => new Engine(new StateStore(":memory:"), {
-  fetchPrice: async (token = "ETH") => coinbase(token.toUpperCase(), PRICES[token.toUpperCase()] ?? 1),
+  // Execution asks for a market pair ("ETH-USD"); discovery asks for a symbol.
+  fetchPrice: async (token = "ETH") => { const symbol = token.toUpperCase().replace(/-USD$/, ""); return coinbase(symbol, PRICES[symbol] ?? 1); },
   fetchVault: async (paused = false) => vault(paused),
   loadDeployment: async () => null,
   fetchFeedPrice: async (symbol: string, network = "ethereum-mainnet") => feed(resolveFeedSymbol(symbol)!.symbol, symbol.toUpperCase() === "USDC" ? 0.9996 : 85000, network),
@@ -260,9 +261,9 @@ test("U4, U5: errors are readable and name the next step", async () => {
   const engine = create();
   await engine.invoke("discover_objects", { operationId: op() });
   const sol = await engine.invoke("compose_graph", { expectedRevision: 0, operationId: op(), graph: {
-    nodes: [price("sol", { type: "exchange-trade", pair: "SOL-USD" }), { id: "c", kind: "compare", input: "sol", op: "<", value: 100 }], root: "c", action: { type: "pause-vault" } } });
+    nodes: [price("sol", { type: "exchange-trade", pair: "SOLUSD" }), { id: "c", kind: "compare", input: "sol", op: "<", value: 100 }], root: "c", action: { type: "pause-vault" } } });
   expect(sol.ok).toBe(false);
-  expect(sol.error).toContain("use a chainlink-feed source");
+  expect(sol.error).toContain("exact Coinbase USD market such as ETH-USD");
   expect(sol.error).not.toContain('"code"');
   const badOp = await engine.invoke("compose_graph", { expectedRevision: 0, operationId: op(), graph: {
     nodes: [price("eth", ETH), { id: "c", kind: "compare", input: "eth", op: "==", value: 100 }], root: "c", action: { type: "pause-vault" } } });

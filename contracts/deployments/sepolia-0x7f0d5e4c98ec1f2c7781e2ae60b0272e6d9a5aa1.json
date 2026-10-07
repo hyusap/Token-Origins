@@ -1,0 +1,14 @@
+{
+  "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+  "forwarder": "0x15fC6ae953E024d975e77382eEeC56A9101f9F88",
+  "owner": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8",
+  "chainId": 11155111,
+  "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+  "mode": "cre-sepolia",
+  "reportVersion": 2,
+  "maxReportAgeSeconds": 300,
+  "deploymentHash": "0x82314604845eb925da9ae9e313e33eda075c00f0ecfe39212c0e5fd4c510cd59",
+  "blockNumber": 11861375,
+  "explorer": "https://sepolia.etherscan.io/address/0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+  "createdAt": "2026-10-07T07:05:16.858Z"
+}

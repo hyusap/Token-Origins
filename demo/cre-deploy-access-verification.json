@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-10-07T09:33:13.315Z",
+  "authenticated": true,
+  "deploymentAccessEnabled": false,
+  "accessRequestSubmitted": true,
+  "availableRegistries": [
+    "private",
+    "onchain:ethereum-mainnet"
+  ],
+  "evidence": "Standard CRE CLI account access and registry list output",
+  "cliCaveat": "account access unexpectedly prompted and submitted a request despite --non-interactive; no purpose or use-case text was supplied",
+  "notDeployed": true
+}

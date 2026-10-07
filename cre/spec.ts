@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { policyGraphSchema, validateGraph, policyHash, EXCHANGE_TRADE_URL, MAX_EXCHANGE_AGE_SECONDS } from './graph';
+import { policyGraphSchema, validateGraph, policyHash, EXCHANGE_TRADE_URL, MAX_EXCHANGE_AGE_SECONDS, exchangeTradeUrl } from './graph';
 
 /**
  * The frozen execution request handed to every runner, including the CRE HTTP
@@ -30,10 +30,11 @@ export const specificationSchema = z.object({
 export type ExecutionSpecification = z.infer<typeof specificationSchema>;
 
 export const PRICE_URL = EXCHANGE_TRADE_URL;
+export const priceUrl = exchangeTradeUrl;
 export type PriceObservation = { usd: number; observedAt: string; source: string; raw: string };
-export function parsePrice(value: unknown): PriceObservation {
+export function parsePrice(value: unknown, source = PRICE_URL): PriceObservation {
   const data = z.object({ price: z.string(), time: z.string().datetime({ offset: true }) }).parse(value);
   const usd = Number(data.price);
   if (!Number.isFinite(usd) || usd <= 0) throw new Error('Invalid price observation');
-  return { usd, observedAt: data.time, source: PRICE_URL, raw: data.price };
+  return { usd, observedAt: data.time, source, raw: data.price };
 }

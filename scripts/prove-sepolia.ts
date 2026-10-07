@@ -21,6 +21,7 @@ if (!vault) throw new Error("Set ORIGINS_SEPOLIA_VAULT (printed by scripts/deplo
 if (!key) throw new Error("Set CRE_ETH_PRIVATE_KEY (the funded Sepolia wallet that owns the vault)");
 const rpcUrl = process.env.ORIGINS_SEPOLIA_RPC || "https://ethereum-sepolia-rpc.publicnode.com";
 const client = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+if(await client.getChainId()!==11155111) throw new Error("Proof RPC is not Sepolia; no transaction will be submitted");
 const wallet = createWalletClient({ account: privateKeyToAccount(key), chain: sepolia, transport: http(rpcUrl) });
 const abi = parseAbi(["function paused() view returns (bool)", "function resume()", "function owner() view returns (address)"]);
 if ((await client.readContract({ address: vault, abi, functionName: "owner" })).toLowerCase() !== wallet.account.address.toLowerCase())

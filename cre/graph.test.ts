@@ -1,5 +1,5 @@
 import {expect,test} from 'bun:test';
-import {validateGraph,evaluateGraph,collectSources,sourceKey,policyGraphSchema,describeGraph,policyHash,explainNoop,isLegacyShape,legacyGraph,encodePauseReport,formatUsd,MAX_FEED_AGE_SECONDS,type PolicyGraph,type GraphInputs} from './graph';
+import {isVaultAction,validateGraph,evaluateGraph,collectSources,sourceKey,policyGraphSchema,describeGraph,policyHash,explainNoop,isLegacyShape,legacyGraph,encodePauseReport,formatUsd,MAX_FEED_AGE_SECONDS,sourceIdentity,type PolicyGraph,type GraphInputs} from './graph';
 import {decodeAbiParameters,parseAbiParameters} from 'viem';
 
 const now=Date.parse('2026-10-06T04:40:00Z');
@@ -71,7 +71,7 @@ test('the policy hash changes with anything that changes meaning',()=>{
   expect(variant(g=>{(g.nodes[2] as any).op='<=';})).not.toBe(base);
   expect(variant(g=>{(g.nodes[1] as any).source.network='ethereum-sepolia';})).not.toBe(base);
   expect(variant(g=>{(g.nodes[4] as any).kind='or';})).not.toBe(base);
-  expect(variant(g=>{g.action={type:'sell',symbol:'BTC',amount:1,venue:'mock-venue'};})).not.toBe(base);
+  expect(variant(g=>{(g.nodes[0] as any).source.pair='SOL-USD';})).not.toBe(base);
 });
 
 test('J4: nested A AND (B OR NOT C) evaluates, narrates and validates as one structure',()=>{
@@ -137,7 +137,7 @@ test('validation rejects cycles, dangling edges, duplicate ids, mistyped operand
   expect(()=>validateGraph({...multiSource,root:'eth'})).toThrow(/must be a condition/i);
   expect(()=>validateGraph({...multiSource,root:'nowhere'})).toThrow(/not a node/i);
   // A branch the root never reaches would be fetched and displayed without deciding anything.
-  expect(()=>validateGraph({...multiSource,root:'ethUnder'})).toThrow(/"btc", "btcUnder", "both" not connected/);
+  expect(()=>validateGraph({...multiSource,root:'ethUnder'})).toThrow(/not connected to root/);
 });
 
 test('validation binds feeds to their network registry and bounds the fetch plan',()=>{
@@ -185,30 +185,15 @@ test('the legacy scalar policy round-trips as a graph',()=>{
   expect(evaluateGraph(legacy,inputs({vaultPaused:true}),now).decision).toBe('noop');
 });
 
-const sellGraph=policyGraphSchema.parse({
-  nodes:[
-    {id:'btc',kind:'price',source:{type:'chainlink-feed',symbol:'BTC'}},
-    {id:'drop',kind:'compare',input:'btc',op:'<',value:90000},
-  ],
-  root:'drop',
-  action:{type:'sell',symbol:'BTC',amount:0.5,venue:'mock-venue'},
+test('policies reject unsupported actions, and simulated trading is never a vault action',()=>{
+  expect(()=>policyGraphSchema.parse({...multiSource,action:{type:'copy-trade',wallet:'0x123'}})).toThrow();
+  // A simulated sell parses for local research, but no CRE report or vault action ever carries it.
+  for(const action of [{type:'sell',symbol:'BTC',amount:0.5,venue:'mock-venue'},{type:'sell',symbol:'BTC',amount:0.5}])
+    expect(isVaultAction(policyGraphSchema.parse({...multiSource,action}).action)).toBe(false);
 });
 
-test('a sell is described as simulated and does not inherit vault guards',()=>{
-  const {graph}=validateGraph(sellGraph);
-  expect(describeGraph(graph)).toBe('Submit a simulated sell of 0.5 BTC when Chainlink BTC/USD (mainnet) < $90,000.');
-  const result=evaluateGraph(graph,{readings:{[BTC]:{usd:85000,observedAt:at(60)}},vaultPaused:null,exchangeMaxAgeSeconds:60},now);
-  expect(result.decision).toBe('act');
-  expect(result.conditions.some(c=>c.kind==='vault-state')).toBe(false);
-  // The same graph ending in a pause needs a vault read.
-  expect(()=>evaluateGraph({...graph,action:{type:'pause-vault'}},{readings:{[BTC]:{usd:85000,observedAt:at(60)}},vaultPaused:null,exchangeMaxAgeSeconds:60},now)).toThrow(/vault read/);
-});
-
-test('a sell cannot name an unlisted asset, an arbitrary venue or a negative size',()=>{
-  expect(()=>policyGraphSchema.parse({...sellGraph,action:{type:'sell',symbol:'DOGE',amount:1,venue:'mock-venue'}})).toThrow();
-  expect(()=>policyGraphSchema.parse({...sellGraph,action:{type:'sell',symbol:'BTC',amount:1,venue:'binance'}})).toThrow();
-  expect(()=>policyGraphSchema.parse({...sellGraph,action:{type:'sell',symbol:'BTC',amount:-1,venue:'mock-venue'}})).toThrow();
-  expect(()=>policyGraphSchema.parse({...sellGraph,action:{type:'sell',symbol:'BTC',amount:1,venue:'mock-venue',to:'0xattacker'}})).toThrow();
+test('a vault pause requires a real vault read',()=>{
+  expect(()=>evaluateGraph(multiSource,inputs({vaultPaused:null}),now)).toThrow(/vault read/);
 });
 
 test('report v2 binds target, chain, run, revision, policy and action',()=>{
@@ -217,4 +202,50 @@ test('report v2 binds target, chain, run, revision, policy and action',()=>{
   const [version,target,chainId,,revision,policy,action,decidedAt]=decodeAbiParameters(parseAbiParameters('uint256,address,uint256,bytes32,uint256,bytes32,uint256,uint256'),encoded);
   expect([version,target,chainId,revision,policy,action,decidedAt]).toEqual([2n,'0x0000000000000000000000000000000000001234',11155111n,3n,hash,1n,1_800_000_000n]);
   expect((encoded.length-2)/2).toBe(256);
+});
+
+
+test('exact exchange markets carry their own source identity and policy hash',()=>{
+  const sol=validateGraph(legacyGraph(200,'SOL-USD')).graph;
+  expect(sourceIdentity(collectSources(sol)[0]!).url).toBe('https://api.exchange.coinbase.com/products/SOL-USD/ticker');
+  expect(policyHash(sol)).not.toBe(policyHash(legacyGraph(200)));
+  expect(describeGraph(sol)).toBe('Pause spending when Coinbase SOL-USD trade < $200.');
+  expect(evaluateGraph(sol,inputs({readings:{'exchange-trade:SOL-USD':{usd:150,observedAt:at(5)}}}),now).decision).toBe('act');
+});
+
+test('schema and policy hashing refuse malformed semantics without recursion',()=>{
+  const cycle={nodes:[{id:'a',kind:'not',input:'a'}],root:'a',action:{type:'pause-vault'}};
+  expect(()=>policyGraphSchema.parse(cycle)).toThrow(/cycle/);
+  expect(()=>policyHash(cycle as never)).toThrow(/cycle/);
+  expect(()=>policyGraphSchema.parse({...multiSource,root:'ethUnder'})).toThrow(/not connected/);
+});
+
+test('shared dependencies stay readable in each narrated branch',()=>{
+  const shared=validateGraph({nodes:[
+    {id:'eth',kind:'price',source:{type:'exchange-trade',pair:'ETH-USD'}},
+    {id:'under',kind:'compare',input:'eth',op:'<',value:3000},
+    {id:'recent',kind:'freshness',input:'eth',maxAgeSeconds:60},
+    {id:'all',kind:'and',inputs:['under','recent']},
+  ],root:'all',action:{type:'pause-vault'}}).graph;
+  expect(describeGraph(shared)).toBe('Pause spending when (Coinbase ETH-USD trade < $3,000 and Coinbase ETH-USD trade observed within 60s).');
+});
+
+test('branch reuse cannot create unbounded policy descriptions',()=>{
+  // Each level reuses both nodes of the level below, so narration doubles per level.
+  const graph:PolicyGraph={nodes:[{id:'x0',kind:'vault-paused',equals:false},{id:'y0',kind:'vault-paused',equals:true}],root:'x0',action:{type:'pause-vault'}};
+  for(let index=1;index<19;index++) {
+    graph.nodes.push({id:'x'+index,kind:'or',inputs:['x'+(index-1),'y'+(index-1)]},{id:'y'+index,kind:'and',inputs:['x'+(index-1),'y'+(index-1)]});
+  }
+  graph.nodes.push({id:'x19',kind:'or',inputs:['x18','y18']});
+  graph.root='x19';
+  validateGraph(graph);
+  expect(describeGraph(graph).length).toBeLessThan(4100);
+});
+
+test('state-only policies need no fabricated market quote',()=>{
+  const graph=validateGraph({nodes:[{id:'active',kind:'vault-paused',equals:false}],root:'active',action:{type:'pause-vault'}}).graph;
+  const result=evaluateGraph(graph,inputs({readings:{}}),now);
+  expect(result.decision).toBe('act');
+  expect(result.conditions.some(c=>c.kind==='source-freshness')).toBe(false);
+  expect(evaluateGraph(graph,inputs({readings:{},vaultPaused:true}),now).decision).toBe('noop');
 });

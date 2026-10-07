@@ -1,6 +1,8 @@
-# Observed rehearsal: 6 October 2026
+# Archived scripted validation: 6 October 2026
 
-The first complete 13-cue take ran at 12:43–12:49 Singapore time. A real Codex CLI agent made **31 actual MCP calls**, including named focus, policy composition, clarification, revision, asynchronous run submission, evidence inspection, and fresh contract reads. Raw model event streams are in `.data/agent`; `.data/rehearsal-report.json` contains the latest take, and `.data/rehearsal-full.log` records the original filming run.
+This document preserves historical observations and evidence from the retired scripted rehearsal. Its cue runner, scripts, keyboard binding and rehearsal API are no longer part of the app. For current manual typed/voice interaction, see [voice setup](voice-rehearsal.md). These local-chain takes do not certify the current CRE execution path.
+
+The first complete 13-cue take ran at 12:43–12:49 Singapore time. A real Codex CLI agent made **31 actual MCP calls**, including named focus, policy composition, clarification, revision, asynchronous run submission, evidence inspection, and fresh contract reads. Raw model event streams are in `.data/agent`; `.data/rehearsal-report.json` recorded that take, and `.data/rehearsal-full.log` records the original filming run.
 
 Portable evidence is saved in `demo/rehearsal-report.json`, with a concise index in `demo/evidence-summary.json`. These copies retain tool names, operation IDs, source observations, immutable run inputs, condition decisions, transaction evidence, and measured timing. They omit machine-local file paths, full conversational transcripts, authentication data, and CLI stderr.
 
@@ -22,7 +24,7 @@ Agent turn duration ranged from **17.114 to 35.260 seconds**, with a **20.608-se
 
 Browser render acknowledgements were observed for 18 semantic operations. During this take, repeated execution-progress broadcasts could overwrite an operation's initial acknowledgement, inflating its recorded delay. Those values remain in the raw report for audit; they are not presented as reliable first-render performance. The final implementation preserves the first acknowledgement for each operation. The follow-up probe and second full take below measured that corrected path.
 
-The planned draft revision arrived **after** the fast local chain run had completed. Immutability is proven; actual voice interruption during an in-flight chain transaction is not. Built-in desktop microphone interaction remains untested, as requested for this preplanned rehearsal phase. See `voice-rehearsal.md` for the exact future voice-session setup and test.
+The planned draft revision arrived **after** the fast local chain run had completed. Immutability is proven; actual voice interruption during an in-flight chain transaction is not. Built-in desktop microphone interaction was not tested in this archived scripted phase. Current browser voice evidence and setup are documented in [voice setup](voice-rehearsal.md).
 
 ## Follow-up semantic navigation probe
 

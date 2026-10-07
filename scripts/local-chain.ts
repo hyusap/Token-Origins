@@ -29,6 +29,9 @@ export async function alignLocalClock(rpc: Rpc, nowSeconds = () => Math.floor(Da
   const before = await latest();
   const lagBefore = nowSeconds() - before;
   if (lagBefore > MAX_CLOCK_LAG_SECONDS) {
+    // Change the ongoing node clock as well as the next block. Setting only
+    // the next timestamp lets subsequent blocks drift back after a restore.
+    await rpc("anvil_setTime", [nowSeconds()]);
     await rpc("evm_setNextBlockTimestamp", [Math.max(nowSeconds(), before + 1)]);
     await rpc("evm_mine", []);
   }
@@ -36,7 +39,7 @@ export async function alignLocalClock(rpc: Rpc, nowSeconds = () => Math.floor(Da
   if (Math.abs(lagAfter) > MAX_CLOCK_LAG_SECONDS)
     throw new Error(
       `Local chain clock is ${lagAfter}s off real time and could not be aligned. Saved receipts are intact. ` +
-        "To start a clean chain instead, stop the demo and run with ORIGINS_RESET_LOCAL_CHAIN=1 (the old snapshot is kept aside, never deleted).",
+        "Check the host clock and restart Anvil with the saved snapshot. No chain state has been discarded.",
     );
   return { lagBefore, lagAfter, minedAlignmentBlock: lagBefore > MAX_CLOCK_LAG_SECONDS };
 }

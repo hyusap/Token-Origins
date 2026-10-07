@@ -194,7 +194,7 @@ test("a frozen run keeps the graph that was composed when it started", async () 
   // Revising afterwards must not reach back into the frozen snapshot.
   await engine.invoke("compose_graph", {
     expectedRevision: 1,
-    graph: { ...ethAndBtc, nodes: [ethAndBtc.nodes[0], ethAndBtc.nodes[2]], root: "ethUnder" },
+    graph: { ...ethAndBtc, nodes: ethAndBtc.nodes.filter(node => node.id === "eth" || node.id === "ethUnder"), root: "ethUnder" },
     operationId: "revise",
   });
   expect(run.snapshot.graph.nodes).toHaveLength(5);

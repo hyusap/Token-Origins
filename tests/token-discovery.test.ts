@@ -5,6 +5,7 @@ import { Engine } from "../server/engine";
 import { StateStore } from "../server/store";
 import { toolDefinitions } from "../server/schemas";
 import type { GraphObject } from "../shared/types";
+import { observationOnlyForVault } from "../shared/policy-capabilities";
 
 const markets = [
   { symbol: "ETH", name: "Ethereum", productId: "ETH-USD" },
@@ -61,6 +62,39 @@ function engine() {
   });
   return { e, calls };
 }
+test("SOL and vault discovery supports price triggers before composition in either order", async () => {
+  for (const vaultFirst of [true, false]) {
+    const { e } = engine();
+    await e.invoke("discover_objects", { objects: vaultFirst ? ["vault"] : ["price"], tokens: ["SOL"], operationId: "first" });
+    const result = await e.invoke("discover_objects", { objects: vaultFirst ? ["price"] : ["vault"], tokens: ["SOL"], operationId: "second" });
+    expect(result.summary).not.toContain("ETH/USD only");
+    expect(e.state.workflow.created).toBe(false);
+    expect(observationOnlyForVault(e.state.objects.find(object => object.id === "price:sol-usd")!)).toBe(false);
+    expect(observationOnlyForVault(price("ETH"))).toBe(false);
+  }
+});
+test("SOL pause requests do not become ETH rules even when ETH is discovered", async () => {
+  const { e } = engine();
+  await e.invoke("discover_objects", { tokens: ["SOL", "ETH"], operationId: "discover" });
+  e.state.objects.find(object => object.id === "price:sol-usd")!.data.price = 118.78;
+  const before = structuredClone(e.state.workflow);
+  for (const [index, text] of ["If Solana drops more than $10, pause grant-vault spending", "If SOL is below $108.78, pause the vault"].entries()) {
+    const result = await command(e, text, `sol-request-${index}`);
+    expect(result.ok).toBe(true);
+    expect(e.state.workflow.threshold).toBe(108.78);
+    expect(e.state.workflow.graph.nodes[0]).toMatchObject({source:{type:"exchange-trade",pair:"SOL-USD"}});
+    expect(e.state.edges.some(edge => edge.from === "price:sol-usd")).toBe(true);
+    expect(e.state.runs).toHaveLength(0);
+  }
+  const result = await e.invoke("compose_graph", { expectedRevision: e.state.workflow.revision, operationId: "sol-graph", graph: {
+    nodes: [{ id: "sol", kind: "price", source: { type: "exchange-trade", pair: "SOL-USD" } },
+      { id: "below", kind: "compare", input: "sol", op: "<", value: 108.78 }],
+    root: "below", action: { type: "pause-vault" },
+  } });
+  expect(result.ok).toBe(true);
+  expect(e.state.workflow.threshold).toBe(108.78);
+  expect(e.state.runs).toHaveLength(0);
+});
 test("multiple token objects persist, generic price clarifies, SOL refresh and source stay SOL", async () => {
   const { e, calls } = engine();
   const args = toolDefinitions.discover_objects.schema.parse({ objects: ["price"], tokens: ["ETH", "Solana"], operationId: "d" });
@@ -83,8 +117,8 @@ test("partial discovery discloses failure; SOL cannot stand in for the ETH polic
   expect(result.summary).toContain("Unsupported");
   expect(e.state.objects.some(x => x.id === "price:eth-usd")).toBe(false);
   const policy = await e.invoke("patch_workflow", { expectedRevision: 0, patch: { threshold: 200 }, operationId: "p" });
-  expect(policy.ok).toBe(false);
-  expect(policy.error).toContain("ETH/USD");
+  expect(policy.ok).toBe(true);
+  expect(e.state.workflow.graph.nodes[0]).toMatchObject({source:{pair:"SOL-USD"}});
 });
 
 for (const tokens of [["Solana", "Bitcoin"], ["SOL", "BTC"], ["coinbase:SOL-USD", "coinbase:BTC-USD"]]) {

@@ -1,0 +1,43 @@
+{
+  "verifiedAt": "2026-10-07T08:40:36.361Z",
+  "kind": "real-HTTP-decoder-validation",
+  "liveRecognizer": "whisper.cpp/base.en",
+  "checks": [
+    {
+      "name": "malformed WAV redacted",
+      "status": 422,
+      "code": "invalid-audio",
+      "passed": true
+    },
+    {
+      "name": "playlist MIME rejected",
+      "status": 415,
+      "code": "unsupported-audio",
+      "passed": true
+    },
+    {
+      "name": "oversize raw rejected",
+      "status": 413,
+      "code": "AUDIO_TOO_LARGE",
+      "passed": true
+    },
+    {
+      "name": "empty recording rejected",
+      "status": 400,
+      "code": "AUDIO_REQUIRED",
+      "passed": true
+    },
+    {
+      "name": "overlength audio rejected",
+      "status": 413,
+      "code": "duration-limit",
+      "passed": true
+    },
+    {
+      "name": "silent audio rejected",
+      "status": 422,
+      "code": "no-speech",
+      "passed": true
+    }
+  ]
+}

@@ -38,7 +38,7 @@ export const NETWORKS = {
   'ethereum-sepolia': { chainId: 11155111, chainSelector: '16015286601757825753', creChainName: 'ethereum-testnet-sepolia', label: 'Ethereum Sepolia', explorer: 'https://sepolia.etherscan.io' },
 } as const;
 export type Network = keyof typeof NETWORKS;
-export const NETWORK_IDS = Object.keys(NETWORKS) as [Network, ...Network[]];
+export const NETWORK_IDS = Object.keys(NETWORKS).sort() as [Network, ...Network[]];
 export const DEFAULT_FEED_NETWORK: Network = 'ethereum-mainnet';
 
 export const FEED_SYMBOLS = ['ETH','BTC','LINK','SOL','BNB','AVAX','MATIC','AAVE','UNI','COMP','MKR','SNX','CRV','USDC','USDT','DAI'] as const;
@@ -121,7 +121,7 @@ export const CCIP_DESTINATION_IDS = Object.keys(CCIP_DESTINATIONS) as [CcipDesti
 export const CCIP_SEPOLIA = { router: '0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59', bnm: '0xFd57b4ddBf88a4e07fF4e34C487b99af2Fe82a05', link: '0x779877A7B0D9E8603169DdbD7836e478b4624789' } as const;
 export const ccipExplorer = (messageId: string) => `https://ccip.chain.link/msg/${messageId}`;
 
-const exchangeTradeSchema = z.object({ type: z.literal('exchange-trade'), pair: z.literal('ETH-USD', { errorMap: () => ({ message: 'Only the Coinbase ETH-USD trade is an exchange source; use a chainlink-feed source for other assets' }) }) }).strict();
+const exchangeTradeSchema = z.object({ type: z.literal('exchange-trade'), pair: z.string().max(40).regex(/^[A-Z0-9]+-USD$/, 'An exchange source is an exact Coinbase USD market such as ETH-USD') }).strict();
 const chainlinkFeedSchema = z.object({
   type: z.literal('chainlink-feed'),
   symbol: z.enum(FEED_SYMBOLS),
@@ -179,12 +179,16 @@ export interface SourceIdentity {
   decimals?: number;
   url?: string;
 }
-export const EXCHANGE_TRADE_URL = 'https://api.exchange.coinbase.com/products/ETH-USD/ticker';
+export function exchangeTradeUrl(pair: string): string {
+  if (!/^[A-Z0-9]+-USD$/.test(pair) || pair.length > 40) throw new Error('Invalid USD market pair');
+  return 'https://api.exchange.coinbase.com/products/' + pair + '/ticker';
+}
+export const EXCHANGE_TRADE_URL = exchangeTradeUrl('ETH-USD');
 export function sourceIdentity(source: Source): SourceIdentity {
   const base = { key: sourceKey(source), label: describeSource(source) };
   switch (source.type) {
     case 'exchange-trade':
-      return { ...base, provider: 'coinbase', unit: 'USD', url: EXCHANGE_TRADE_URL };
+      return { ...base, provider: 'coinbase', unit: 'USD', url: exchangeTradeUrl(source.pair) };
     case 'chainlink-feed': {
       const address = feedAddress(source.network, source.symbol);
       if (!address) throw new Error(`No Chainlink ${source.symbol}/USD feed is configured on ${NETWORKS[source.network].label}; available there: ${Object.keys(FEED_REGISTRY[source.network]).join(', ')}`);
@@ -258,6 +262,7 @@ export const PAYEE_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
  *   share of the vault's CCIP-BnM to the reserve on another chain via CCIP).
  * - Simulated, local rehearsal only, never a transaction: sell, rebalance. Any
  *   surface showing their result has to say simulated.
+ * - solana-transfer: a direct devnet signer path kept as research; CRE never delivers it.
  */
 export const actionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('pause-vault') }).strict(),
@@ -277,21 +282,41 @@ export const actionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('sweep'), fraction: fractionSchema, pause: z.boolean().default(true) }).strict(),
   z.object({ type: z.literal('pay'), payee: z.string().regex(PAYEE_PATTERN, 'Payee is a registered name such as "grantee"'), amountEth: ethAmountSchema }).strict(),
   z.object({ type: z.literal('evacuate'), destination: z.enum(CCIP_DESTINATION_IDS), fraction: fractionSchema, pause: z.boolean().default(true) }).strict(),
+  // A direct devnet transfer by the backend's own signer: research only, never delivered through CRE.
+  z.object({ type: z.literal('solana-transfer'), network: z.literal('devnet'), recipient: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/), amountLamports: z.number().int().min(1).max(1_000_000_000) }).strict(),
 ]);
 export type PolicyAction = z.infer<typeof actionSchema>;
 export type SimulatedAction = Extract<PolicyAction, { type: 'sell' | 'rebalance' }>;
-export type VaultAction = Exclude<PolicyAction, SimulatedAction>;
+export type DirectAction = Extract<PolicyAction, { type: 'solana-transfer' }>;
+export type VaultAction = Exclude<PolicyAction, SimulatedAction | DirectAction>;
 export const isSimulatedAction = (action: PolicyAction): action is SimulatedAction => action.type === 'sell' || action.type === 'rebalance';
+/** Not a vault report: the research-only direct Solana signer path. */
+export const isDirectAction = (action: PolicyAction): action is DirectAction => action.type === 'solana-transfer';
+export const isVaultAction = (action: PolicyAction): action is VaultAction => !isSimulatedAction(action) && !isDirectAction(action);
 /** Pauses spending as part of the action. */
 export const actionPauses = (action: PolicyAction): boolean =>
   action.type === 'pause-vault' || ((action.type === 'sweep' || action.type === 'evacuate') && action.pause);
 
-export const policyGraphSchema = z.object({
+const graphShapeSchema = z.object({
   nodes: z.array(graphNodeSchema).min(1).max(40),
   root: id,
   action: actionSchema,
 }).strict();
-export type PolicyGraph = z.infer<typeof policyGraphSchema>;
+export type PolicyGraph = z.infer<typeof graphShapeSchema>;
+// Full validation belongs at every schema boundary, including hashing and stored snapshots.
+export const policyGraphSchema = graphShapeSchema.superRefine((graph, ctx) => {
+  try { validateGraphTypes(graph); }
+  catch (error) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof Error ? error.message : String(error) });
+  }
+});
+export const predicateGraphSchema = graphShapeSchema.omit({action:true}).superRefine((graph,ctx)=>{
+  try {validateGraphTypes(graph);} catch(error){ctx.addIssue({code:z.ZodIssueCode.custom,message:error instanceof Error ? error.message : String(error)});}
+});
+export type PredicateGraph = { nodes: GraphNode[]; root: string };
+export function validatePredicate(input:unknown):{graph:PredicateGraph;types:Map<string,ValueType>} {
+  const graph=predicateGraphSchema.parse(input);return {graph,types:validateGraphTypes(graph)};
+}
 /** Accepts graphs written before feed sources carried a network. */
 export type PolicyGraphInput = z.input<typeof policyGraphSchema>;
 
@@ -321,7 +346,7 @@ type ValueType = 'bool' | Unit;
 
 export function unitOfSource(source: Source): Unit {
   switch (source.type) {
-    case 'exchange-trade': return { dim: 'usd', per: 'ETH' };
+    case 'exchange-trade': return { dim: 'usd', per: source.pair.slice(0, -4) };
     case 'chainlink-feed': return { dim: 'usd', per: source.symbol };
     case 'proof-of-reserve': return { dim: 'amount', asset: source.asset };
     case 'token-supply': return { dim: 'amount', asset: source.token };
@@ -368,7 +393,7 @@ const inputsOf = (node: GraphNode): string[] =>
 export const nodeInputs = inputsOf;
 
 /** Types every node, or throws the first well-typedness error. */
-function typeGraph(graph: PolicyGraph): Map<string, ValueType> {
+function typeGraph(graph: PredicateGraph): Map<string, ValueType> {
   const byId = new Map<string, GraphNode>();
   for (const node of graph.nodes) {
     if (byId.has(node.id)) throw new Error(`Duplicate node id "${node.id}"`);
@@ -472,6 +497,9 @@ function typeGraph(graph: PolicyGraph): Map<string, ValueType> {
  */
 export function validateGraph(input: unknown): { graph: PolicyGraph; types: Map<string, ValueType> } {
   const graph = policyGraphSchema.parse(input);
+  return { graph, types: validateGraphTypes(graph) };
+}
+function validateGraphTypes(graph: PredicateGraph & { action?: PolicyAction }): Map<string, ValueType> {
   const types = typeGraph(graph);
   if (types.get(graph.root) !== 'bool')
     throw new Error(`Root "${graph.root}" must be a condition, not a price reading`);
@@ -494,13 +522,13 @@ export function validateGraph(input: unknown): { graph: PolicyGraph; types: Map<
   for (const source of sources) sourceIdentity(source);
   if (sources.length > MAX_SOURCES)
     throw new Error(`A policy may read at most ${MAX_SOURCES} distinct sources; this one reads ${sources.length}`);
-  if (graph.action.type === 'rebalance' && graph.action.from === graph.action.to)
+  if (graph.action?.type === 'rebalance' && graph.action.from === graph.action.to)
     throw new Error('A rebalance needs two different protocols');
-  return { graph, types };
+  return types;
 }
 
 /** Every distinct source a graph needs fetched, deduplicated, in first-use order. */
-export function collectSources(graph: PolicyGraph): Source[] {
+export function collectSources(graph: PredicateGraph): Source[] {
   const seen = new Map<string, Source>();
   for (const node of graph.nodes)
     if (isSourceNode(node)) seen.set(sourceKey(node.source), node.source);
@@ -509,7 +537,7 @@ export function collectSources(graph: PolicyGraph): Source[] {
 
 /** True when execution must read the vault: an action targets it, or a condition or reading uses it. */
 export const readsVault = (graph: PolicyGraph): boolean =>
-  !isSimulatedAction(graph.action) || graph.nodes.some((node) => node.kind === 'vault-paused' || (isSourceNode(node) && node.source.type === 'vault-balance'));
+  isVaultAction(graph.action) || graph.nodes.some((node) => node.kind === 'vault-paused' || (isSourceNode(node) && node.source.type === 'vault-balance'));
 
 // ---------------------------------------------------------------------------
 // Policy identity. The hash is structural: node ids and declaration order do
@@ -528,6 +556,7 @@ export function actionIdentity(action: PolicyAction): string {
     case 'sweep': return `sweep(${toBps(action.fraction)},${action.pause})`;
     case 'pay': return `pay(${action.payee},${toGwei(action.amountEth)})`;
     case 'evacuate': return `evacuate(${CCIP_DESTINATIONS[action.destination].chainSelector},${toBps(action.fraction)},${action.pause})`;
+    case 'solana-transfer': return `solana-transfer(${action.network},${action.recipient},${action.amountLamports})`;
   }
 }
 /**
@@ -537,6 +566,16 @@ export function actionIdentity(action: PolicyAction): string {
  */
 export function policyHash(input: PolicyGraphInput | PolicyGraph, exchangeMaxAgeSeconds: number = DEFAULT_EXCHANGE_MAX_AGE_SECONDS): Hex {
   const graph = policyGraphSchema.parse(input);
+  const usesExchange = graph.nodes.some((node) => isSourceNode(node) && node.source.type === 'exchange-trade');
+  const cap = usesExchange && exchangeMaxAgeSeconds !== DEFAULT_EXCHANGE_MAX_AGE_SECONDS ? `|exchange-max-age(${exchangeMaxAgeSeconds})` : '';
+  return keccak256(toBytes(`sotto-policy/v${GRAPH_VERSION}|${predicateRootHash(graph)}|${actionIdentity(graph.action)}${cap}`));
+}
+/** A condition graph's identity without an action, for monitors that only read. */
+export function predicateHash(input: PredicateGraph): Hex {
+  const graph = predicateGraphSchema.parse(input);
+  return keccak256(toBytes(`sotto-predicate/v${GRAPH_VERSION}|${predicateRootHash(graph)}`));
+}
+function predicateRootHash(graph: PredicateGraph): string {
   const byId = new Map(graph.nodes.map((node) => [node.id, node] as const));
   const memo = new Map<string, string>();
   const visiting = new Set<string>();
@@ -575,9 +614,7 @@ export function policyHash(input: PolicyGraphInput | PolicyGraph, exchangeMaxAge
     memo.set(nodeId, value);
     return value;
   };
-  const usesExchange = graph.nodes.some((node) => isSourceNode(node) && node.source.type === 'exchange-trade');
-  const cap = usesExchange && exchangeMaxAgeSeconds !== DEFAULT_EXCHANGE_MAX_AGE_SECONDS ? `|exchange-max-age(${exchangeMaxAgeSeconds})` : '';
-  return digest(`sotto-policy/v${GRAPH_VERSION}|${hashOf(graph.root)}|${actionIdentity(graph.action)}${cap}`);
+  return hashOf(graph.root);
 }
 
 // ---------------------------------------------------------------------------
@@ -590,8 +627,8 @@ export interface Reading { value?: number; usd?: number; observedAt: string }
 export type PriceReading = Reading;
 /** One archived input. Everything needed to re-check the decision later. */
 export interface Observation extends SourceIdentity {
-  /** The reading in `unit`. */
-  value: number;
+  /** The reading in `unit` (older records carry only `usd`). */
+  value?: number;
   /** Same as value, present only for USD prices. */
   usd?: number;
   /** Raw integer answer for contract reads; exact string for exchange trades. */
@@ -732,7 +769,13 @@ type NumberValue = { value: number; unit: Unit };
  * sweep or payment, tokens for an evacuation). Only the root and these guards
  * gate the action, so a false branch inside a passing OR is not a failure.
  */
-export function evaluateGraph(graph: PolicyGraph, inputs: GraphInputs, nowMs: number): GraphResult {
+/** Evaluates conditions only, with no action guards: what a read-only monitor reports. */
+export function evaluatePredicate(input: PredicateGraph, inputs: GraphInputs, nowMs: number): GraphResult {
+  const graph = predicateGraphSchema.parse(input);
+  return evaluateGraph({ ...graph, action: { type: 'pause-vault' } }, inputs, nowMs, { actionGuards: false });
+}
+
+export function evaluateGraph(graph: PolicyGraph, inputs: GraphInputs, nowMs: number, options: { actionGuards?: boolean } = {}): GraphResult {
   const byId = new Map(graph.nodes.map((node) => [node.id, node] as const));
   const types = typeGraph(graph);
   const conditions: ConditionEvidence[] = [];
@@ -824,7 +867,7 @@ export function evaluateGraph(graph: PolicyGraph, inputs: GraphInputs, nowMs: nu
         : `${describeSource(source)} observed ${formatAge(age, limit)}s ago; limit ${limit}s`,
     });
   }
-  const guards = actionGuards(graph.action, inputs, nowMs);
+  const guards = options.actionGuards === false ? [] : actionGuards(graph.action, inputs, nowMs);
   gates.push(...guards);
   let blockedBy = gates.find((gate) => !gate.passed);
   // A protective sweep or evacuation that cannot move anything still pauses, if the vault is active.
@@ -844,7 +887,7 @@ export function evaluateGraph(graph: PolicyGraph, inputs: GraphInputs, nowMs: nu
  * guards pass is one the vault accepts (barring a change between read and delivery).
  */
 function actionGuards(action: PolicyAction, inputs: GraphInputs, nowMs: number): ConditionEvidence[] {
-  if (isSimulatedAction(action)) return [];
+  if (!isVaultAction(action)) return [];
   if (inputs.vaultPaused === null) throw new Error(`A vault ${action.type === 'pause-vault' ? 'pause' : action.type} needs a fresh vault read`);
   const balance = (): bigint => {
     if (typeof inputs.vaultBalanceWei === 'bigint') return inputs.vaultBalanceWei;
@@ -982,10 +1025,10 @@ export function encodeReportFor(vaultReportVersion: number | null, action: Vault
  * regenerate such a graph; against a composed one they refuse, rather than
  * silently discarding branches the speaker added.
  */
-export function legacyGraph(thresholdUsd: number): PolicyGraph {
+export function legacyGraph(thresholdUsd: number, pair = 'ETH-USD'): PolicyGraph {
   return {
     nodes: [
-      { id: 'eth', kind: 'price', source: { type: 'exchange-trade', pair: 'ETH-USD' } },
+      { id: 'eth', kind: 'price', source: { type: 'exchange-trade', pair } },
       { id: 'under-threshold', kind: 'compare', input: 'eth', op: '<', value: thresholdUsd },
     ],
     root: 'under-threshold',
@@ -1006,6 +1049,16 @@ export function isLegacyShape(graph: PolicyGraph | undefined | null): boolean {
 
 const percent = (fraction: number) => `${(toBps(fraction) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
 const protocolLabel = (protocol: LendingProtocol) => LENDING_REGISTRY[protocol].label;
+/**
+ * Order-independent scalar metadata for older clients. The report binds the full
+ * policy hash; this value never replaces the composed condition or enters its report.
+ */
+export function reportedThreshold(graph: PolicyGraph, fallback: number): number {
+  const priceIds = new Set(graph.nodes.filter((node): node is Extract<GraphNode, { kind: 'price' }> => node.kind === 'price' && node.source.type === 'exchange-trade').map((node) => node.id));
+  const bounds = graph.nodes.filter((node): node is Extract<GraphNode, { kind: 'compare' }> => node.kind === 'compare' && (node.op === '<' || node.op === '<=') && priceIds.has(node.input)).map((node) => node.value);
+  return bounds.length ? Math.min(...bounds) : fallback;
+}
+
 export function describeAction(action: PolicyAction): string {
   switch (action.type) {
     case 'pause-vault': return 'Pause grant vault spending';
@@ -1014,6 +1067,7 @@ export function describeAction(action: PolicyAction): string {
     case 'sweep': return `Sweep ${percent(action.fraction)} of the vault to the reserve${action.pause ? ' and pause spending' : ''}`;
     case 'pay': return `Pay ${formatWei(toGwei(action.amountEth) * 1_000_000_000n)} to the ${action.payee}`;
     case 'evacuate': return `Bridge ${percent(action.fraction)} of the vault's CCIP-BnM to the reserve on ${CCIP_DESTINATIONS[action.destination].label} via CCIP${action.pause ? ' and pause spending' : ''}`;
+    case 'solana-transfer': return `Transfer ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 9 }).format(action.amountLamports / 1_000_000_000)} SOL to ${action.recipient} on devnet`;
   }
 }
 function actionSentence(action: PolicyAction): string {
@@ -1052,6 +1106,8 @@ function phraser(graph: PolicyGraph): (nodeId: string) => string {
       case 'not': text = `not (${phrase(node.input)})`; break;
       default: text = `(${node.inputs.map(phrase).join(node.kind === 'and' ? ' and ' : ' or ')})`;
     }
+    // Branch reuse can grow narration exponentially; execution still retains every node.
+    if (text.length > 4000) text = text.slice(0, 3999) + '…';
     memo.set(nodeId, text);
     return text;
   };

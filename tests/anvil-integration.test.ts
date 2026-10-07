@@ -9,7 +9,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executeCreRun, findSubmittedPause, type LocalDeployment } from "../cre/runner";
+import { executeRehearsalRun, findSubmittedPause, type LocalDeployment } from "../cre/runner";
+// Local Anvil runs use the explicit research path; the product executes only through CRE.
 import { sourceIdentity, FEED_REGISTRY, policyGraphSchema, type FeedSource, type Observation } from "../cre/graph";
 import { deployLocalTreasury, LOCAL_RESERVE, LOCAL_PAYEES, LOCAL_CCIP_FEE, type LocalTreasury } from "../cre/local-deploy";
 import { proveSequence, specOf, composedPause } from "../scripts/prove-execution";
@@ -81,12 +82,14 @@ test.skipIf(!enabled)("the deployed vault reports v3 and a stale clock is aligne
 
 test.skipIf(!enabled)("full local proof: false, verified composed pause, no duplicate, sell never writes; then independent verification", async () => {
   ethUsd = 2500;
-  const execute = (spec: any) => executeCreRun(spec, undefined, { deployment, fetchExchange, resolveFeed });
+  const execute = (spec: any) => executeRehearsalRun(spec, undefined, { deployment, fetchExchange, resolveFeed });
   const proof = await proveSequence({ label: "anvil-integration", feedNetwork: "ethereum-mainnet", execute, isPaused, resume, log: () => {} });
   expect(proof.cases.trueCondition.evidence.transaction?.receiverConfirmed).toBe(true);
   expect(proof.cases.trueCondition.evidence.observations.map((o) => o.key)).toEqual(["exchange-trade:ETH-USD", "chainlink-feed:ethereum-mainnet:BTC"]);
   expect(proof.cases.trueCondition.evidence.observations[1]!.address).toBe(FEED_REGISTRY["ethereum-mainnet"].BTC!);
-  expect(proof.cases.unsupportedAction.evidence?.simulatedOrder?.simulated).toBe(true);
+  // CRE-only product: an unsupported action is refused before any execution.
+  expect(proof.cases.unsupportedAction.executionCalled).toBe(false);
+  expect(proof.cases.unsupportedAction.refused).toBeTruthy();
   expect(await isPaused()).toBe(false);
 
   const dir = await mkdtemp(join(tmpdir(), "sotto-proof-"));
@@ -97,7 +100,9 @@ test.skipIf(!enabled)("full local proof: false, verified composed pause, no dupl
     "trueCondition.policyHashRecomputed": true, "pause.receiptSuccess": true, "pause.eventRunId": true,
     "pause.eventRevision": true, "pause.eventPolicyHash": true, "pause.processedOnChain": true, "pause.pausedAtReceiptBlock": true,
   });
-  expect(verified.verified).toBe(true);
+  // The verifier certifies only CRE-simulation proofs; a local rehearsal passes every other check.
+  const failed = Object.entries(verified.checks).filter(([, ok]) => ok === false).map(([name]) => name);
+  expect(failed).toEqual(["savedEvidence.creSimulationMode"]);
 
   // Restart recovery reads the same chain: the paused run landed, an unknown one did not.
   const landed = await findSubmittedPause(proof.pause.runId, deployment);
@@ -109,7 +114,7 @@ test.skipIf(!enabled)("the receiver binds the policy hash: tampering with the fr
   ethUsd = 2500;
   const spec = specOf(composedPause(3000, "ethereum-mainnet"), `tamper-${Date.now()}`, 9);
   const tampered = { ...spec, graph: composedPause(1_000_000, "ethereum-mainnet") };
-  await expect(executeCreRun(tampered as any, undefined, { deployment, fetchExchange, resolveFeed })).rejects.toThrow(/Policy hash does not match/);
+  await expect(executeRehearsalRun(tampered as any, undefined, { deployment, fetchExchange, resolveFeed })).rejects.toThrow(/Policy hash does not match/);
   expect(await isPaused()).toBe(false);
 });
 
@@ -119,7 +124,7 @@ test.skipIf(!enabled)("a pre-v2 receiver is refused before any report is sent", 
   const old = { ...deployment, address: deployed.contractAddress! };
   const before = await client.getBlockNumber();
   const spec = specOf(composedPause(3000, "ethereum-mainnet"), `old-receiver-${Date.now()}`, 1);
-  await expect(executeCreRun(spec, undefined, { deployment: old, fetchExchange, resolveFeed })).rejects.toThrow(/accepts report v1, not v2/);
+  await expect(executeRehearsalRun(spec, undefined, { deployment: old, fetchExchange, resolveFeed })).rejects.toThrow(/accepts report v1, not v2/);
   expect(await client.getBlockNumber()).toBe(before);
 });
 
@@ -171,7 +176,7 @@ const ethBelow = (action: unknown, floor = 3000) => policyGraphSchema.parse({
   root: "low", action,
 });
 const run = (graph: unknown, tag: string, target = deployment) =>
-  executeCreRun(specOf(graph, `${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, 7), undefined, { deployment: target, fetchExchange, resolveFeed });
+  executeRehearsalRun(specOf(graph, `${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, 7), undefined, { deployment: target, fetchExchange, resolveFeed });
 
 test.skipIf(!enabled)("sweep moves half the vault to the reserve and pauses, verified from the receiver's own event", async () => {
   ethUsd = 2500;

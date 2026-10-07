@@ -1,20 +1,23 @@
+import type {SolanaTransferReceipt} from '../shared/solana-types';
 import {createPublicClient,createWalletClient,http,parseAbi,decodeEventLog,decodeErrorResult,decodeFunctionData,decodeAbiParameters,parseAbiParameters,encodeFunctionData,defineChain,size,slice,type Address,type Hex,type PublicClient} from 'viem';
 import {privateKeyToAccount} from 'viem/accounts';
 import {sepolia} from 'viem/chains';
 import {resolve} from 'node:path';
-import {specificationSchema,PRICE_URL,parsePrice,type ExecutionSpecification} from './spec';
+import {executionDeployment,creDeployment, SUPPORTED_TESTNETS} from './deployment';
+import {testnetAccount} from './testnet-wallet';
+import {specificationSchema,PRICE_URL,priceUrl,parsePrice,type ExecutionSpecification} from './spec';
 import {joinEvidenceChunks,EVIDENCE_CHUNK_TAG} from './evidence-log';
 import {
-  evaluateGraph,collectSources,sourceIdentity,describeSource,readsVault,explainNoop,encodeReportFor,reportRefusal,actionTerms,actionPauses,isSimulatedAction,runIdHash,payeeId,formatUsd,formatWei,toBps,termsFromTuple,
+  evaluateGraph,collectSources,sourceKey,sourceIdentity,describeSource,readsVault,explainNoop,encodeReportFor,reportRefusal,actionTerms,actionPauses,isSimulatedAction,isDirectAction,runIdHash,payeeId,formatUsd,formatWei,toBps,termsFromTuple,
   NETWORKS,CCIP_DESTINATIONS,LENDING_REGISTRY,ZERO_BYTES32,ccipExplorer,vaultTermsAbi,
-  type Source,type FeedSource,type ChainSource,type Observation,type ConditionEvidence,type PauseReport,type Reading,type VaultAction,type PolicyAction,type VaultTerms,
+  type Source,type PriceSource,type FeedSource,type ChainSource,type Observation,type ConditionEvidence,type PauseReport,type Reading,type VaultAction,type PolicyAction,type VaultTerms,
 } from './graph';
 
 /** Supplied by the backend, which owns RPC access for each source network. */
 export type FeedResolver=(source:FeedSource)=>Promise<Observation>;
 export type SourceResolver=(source:ChainSource)=>Promise<Observation>;
-export type ExchangeFetcher=()=>Promise<Observation>;
-export type ExecutionMode='cre-local-simulation'|'local-evm-rehearsal'|'fixture-rehearsal';
+export type ExchangeFetcher=(source:Extract<PriceSource,{type:"exchange-trade"}>)=>Promise<Observation>;
+export type ExecutionMode='cre-local-simulation'|'local-evm-rehearsal'|'fixture-rehearsal'|'testnet-evm'|'solana-devnet';
 export type SimulatedOrder={simulated:true;venue:string;side:'sell';symbol:string;amount:number;referencePriceUsd:number;notionalUsd:number;referenceSource:string;observedAt:string;placedAt:string};
 export type SimulatedRebalance={simulated:true;venue:'mock-venue';asset:string;from:string;to:string;fraction:number;fromAprPercent?:number;toAprPercent?:number;placedAt:string};
 export interface VaultRead {address:string;chainId:number;paused:boolean;balanceWei:string;reportVersion:number|null;
@@ -49,6 +52,7 @@ export interface ExecutionEvidence {
   /** Terms of the report sent: layout version and what the receiver was asked to do. */
   report?:{version:number|null;action:number;flags:number;payeeId:string;amount:string;destinationChainSelector:string};
   transaction?:TransactionEvidence;
+  solanaTransfer?:SolanaTransferReceipt & {genesisHash:string;verified:true};
   simulatedOrder?:SimulatedOrder;
   simulatedRebalance?:SimulatedRebalance;
   /** Fixture rehearsal changed only in-memory vault state. */
@@ -76,6 +80,8 @@ export interface PolicyEnvironment {
   alreadyProcessed?(runId:string):Promise<boolean>;
   /** Submits the report this vault accepts for the action and returns receipt evidence with decoded effects. */
   deliverReport?(request:{action:VaultAction;report:PauseReport;reportVersion:number|null}):Promise<TransactionEvidence>;
+  /** Research only: a direct devnet transfer by the backend's signer. CRE never takes this path. */
+  deliverSolanaTransfer?(action:Extract<PolicyAction,{type:'solana-transfer'}>,spec:ExecutionSpecification):Promise<NonNullable<ExecutionEvidence['solanaTransfer']>>;
   /** Fixture mode: apply the action to the in-memory vault. Never a transaction. */
   fixtureAct?(action:VaultAction):Promise<FixtureEffects>;
 }
@@ -152,14 +158,14 @@ export async function executePolicy(input:ExecutionSpecification,env:PolicyEnvir
   const graph=spec.graph;
   const logs:string[]=[];
   const log=(text:string)=>{logs.push(text);progress?.(text);};
-  log(env.mode==='fixture-rehearsal'?'Fixture rehearsal · live inputs, in-memory vault, no transaction':'Local EVM rehearsal · shared graph evaluator · no CRE/DON claim');
+  log(env.mode==='solana-devnet' ? 'Solana devnet · real System Program transfer · shared graph evaluator' : env.mode==='fixture-rehearsal'?'Fixture rehearsal · live inputs, in-memory vault, no transaction':'Local EVM rehearsal · shared graph evaluator · no CRE/DON claim');
 
   let vault:VaultRead|null=null;
   if(readsVault(graph)) {
     const action=graph.action;
     vault=await env.readVault(action.type==='pay'?{terms:{payee:action.payee}}:action.type==='evacuate'?{terms:{}}:{});
     log(`Read vault ${vault.paused?'paused':'active'} on chain ${vault.chainId}`);
-    if(!isSimulatedAction(graph.action)) {
+    if(!isSimulatedAction(graph.action)&&!isDirectAction(graph.action)) {
       const refusal=reportRefusal(vault.reportVersion,graph.action.type);
       if(refusal) throw new Error(`Vault ${vault.address}: ${refusal}`);
     }
@@ -207,10 +213,18 @@ export async function executePolicy(input:ExecutionSpecification,env:PolicyEnvir
     log(`SIMULATED rebalance of ${toBps(action.fraction)/100}% ${action.asset} from ${LENDING_REGISTRY[action.from].label} to ${LENDING_REGISTRY[action.to].label}; no transaction, no asset moved`);
     return evidence;
   }
+  if(spec.broadcast===false) {evidence.dryRun=true;log('Policy passed; dry run, no report submitted');return evidence;}
+  if(graph.action.type==='solana-transfer') {
+    if(!env.deliverSolanaTransfer) throw new Error('This environment cannot execute a Solana transfer');
+    log('Submitting immutable Solana devnet transfer');
+    evidence.solanaTransfer=await env.deliverSolanaTransfer(graph.action,spec);
+    const receipt=evidence.solanaTransfer;
+    if(!receipt.verified||receipt.status!=='confirmed'||receipt.network!==graph.action.network||receipt.recipient!==graph.action.recipient||receipt.lamports!==graph.action.amountLamports) throw new Error('Solana receipt does not match the frozen action');
+    log(`Confirmed Solana transfer ${receipt.signature} at slot ${receipt.slot}`);return evidence;
+  }
   // The action as written, or only its pause when nothing could move.
   const action=result.effectiveAction??graph.action;
   if(result.effectiveAction) log(`Sending only the pause: ${result.degradedBy?.detail}`);
-  if(spec.broadcast===false) {evidence.dryRun=true;log('Policy passed; dry run, no report submitted');return evidence;}
   if(env.fixtureAct) {
     const effects=await env.fixtureAct(action);
     evidence.fixture=effects;
@@ -312,11 +326,12 @@ export async function readVaultState(client:PublicClient,address:Address,chainId
   return {address,chainId,paused,balanceWei:balance.toString(),reportVersion,...(terms?{terms,tokenBalance:terms.tokenBalance}:{})};
 }
 
-export async function fetchExchangeTrade():Promise<Observation> {
-  const response=await fetch(PRICE_URL,{signal:AbortSignal.timeout(15000),headers:{Accept:'application/json'}});
+export async function fetchExchangeTrade(source:Extract<PriceSource,{type:"exchange-trade"}>={type:"exchange-trade",pair:"ETH-USD"}):Promise<Observation> {
+  const url=priceUrl(source.pair);
+  const response=await fetch(url,{signal:AbortSignal.timeout(15000),headers:{Accept:'application/json'}});
   if(!response.ok) throw new Error(`Price source unavailable (${response.status}); action blocked`);
-  const price=parsePrice(await response.json());
-  return {...sourceIdentity({type:'exchange-trade',pair:'ETH-USD'}),value:price.usd,usd:price.usd,raw:price.raw,observedAt:price.observedAt,fetchedAt:new Date().toISOString()};
+  const price=parsePrice(await response.json(),url);
+  return {...sourceIdentity(source),value:price.usd,usd:price.usd,raw:price.raw,observedAt:price.observedAt,fetchedAt:new Date().toISOString()};
 }
 
 export interface LocalDeployment {address:string;forwarder:string;chainId:number;rpcUrl:string;blockNumber?:number}
@@ -324,21 +339,22 @@ const isLocalRpc=(url:string)=>/^http:\/\/(127\.0\.0\.1|localhost):\d+\/?$/.test
 const localChain=(rpcUrl:string)=>defineChain({id:31337,name:'Anvil',nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18},rpcUrls:{default:{http:[rpcUrl]}}});
 
 export async function loadLocalDeployment():Promise<LocalDeployment> {
-  return await Bun.file(resolve(import.meta.dir,'../contracts/deployment.local.json')).json();
+  return executionDeployment();
 }
 
 /** Real transactions on an isolated localhost chain, through the explicitly named rehearsal forwarder. */
-export function localEvmEnvironment(deployment:LocalDeployment,deps:{resolveFeed?:FeedResolver;resolveSource?:SourceResolver;fetchExchange?:ExchangeFetcher}={}):PolicyEnvironment {
-  if(deployment.chainId!==31337||!isLocalRpc(deployment.rpcUrl)) throw new Error('Local rehearsal supports only isolated localhost Anvil (chain 31337)');
-  const chain=localChain(deployment.rpcUrl);
+export function localEvmEnvironment(deployment:LocalDeployment,deps:{resolveFeed?:FeedResolver;resolveSource?:SourceResolver;fetchExchange?:ExchangeFetcher;onSubmission?:(hash:string)=>void}={}):PolicyEnvironment {
+  const testnet=process.env.ORIGINS_EXECUTION_MODE==='testnet';
+  if(testnet ? !SUPPORTED_TESTNETS[deployment.chainId] || isLocalRpc(deployment.rpcUrl) : deployment.chainId!==31337||!isLocalRpc(deployment.rpcUrl)) throw new Error('Execution deployment is outside the selected development/test network');
+  const chain=testnet ? {...localChain(deployment.rpcUrl),id:deployment.chainId,name:SUPPORTED_TESTNETS[deployment.chainId]!.name} : localChain(deployment.rpcUrl);
   const client=createPublicClient({chain,transport:http(deployment.rpcUrl)}) as PublicClient;
   const address=deployment.address as Address;
-  const guardChain=async()=>{if(await client.getChainId()!==31337) throw new Error('Refusing rehearsal action outside localhost development chain');};
+  const guardChain=async()=>{if(await client.getChainId()!==deployment.chainId) throw new Error('Refusing rehearsal action outside localhost development chain');};
   return {
-    mode:'local-evm-rehearsal',
-    async readVault(options){await guardChain();return readVaultState(client,address,31337,options);},
+    mode:testnet ? 'testnet-evm' : 'local-evm-rehearsal',
+    async readVault(options){await guardChain();return readVaultState(client,address,deployment.chainId,options);},
     async readSource(source){
-      if(source.type==='exchange-trade') return (deps.fetchExchange??fetchExchangeTrade)();
+      if(source.type==='exchange-trade') return (deps.fetchExchange??fetchExchangeTrade)(source);
       if(source.type==='chainlink-feed'&&deps.resolveFeed) return deps.resolveFeed(source);
       if(!deps.resolveSource) throw new Error(`Policy references ${describeSource(source)} but no resolver for it was supplied`);
       return deps.resolveSource(source);
@@ -351,9 +367,11 @@ export function localEvmEnvironment(deployment:LocalDeployment,deps:{resolveFeed
     },
     async alreadyProcessed(runId){return client.readContract({address,abi:vaultAbi,functionName:'processedRuns',args:[runIdHash(runId)]});},
     async deliverReport({action,report,reportVersion}){
+      if(!/^0x[0-9a-fA-F]{40}$/.test(deployment.forwarder))throw new Error('EVM report delivery requires a real configured forwarder');
       await guardChain();
-      const wallet=createWalletClient({account:privateKeyToAccount(LOCAL_DEV_KEY),chain,transport:http(deployment.rpcUrl)});
+      const wallet=createWalletClient({account:testnet ? await testnetAccount() : privateKeyToAccount(LOCAL_DEV_KEY),chain,transport:http(deployment.rpcUrl)});
       const hash=await wallet.writeContract({address:deployment.forwarder as Address,abi:forwarderAbi,functionName:'deliver',args:[address,encodeReportFor(reportVersion,action,report)]});
+      deps.onSubmission?.(hash);
       const receipt=await client.waitForTransactionReceipt({hash,timeout:30000});
       return receiptEvidence(client,address,receipt,report.runId,report.revision,report.policyHash);
     },
@@ -363,24 +381,35 @@ export function localEvmEnvironment(deployment:LocalDeployment,deps:{resolveFeed
 export interface RunnerDeps {resolveFeed?:FeedResolver;resolveSource?:SourceResolver;fetchExchange?:ExchangeFetcher;deployment?:LocalDeployment;
   /** A standing policy's scheduled check: in CRE mode it runs through the workflow's cron trigger. */
   trigger?:'http'|'cron';schedule?:string}
+let executionQueue:Promise<unknown>=Promise.resolve();
 const active=new Map<string,{spec:string;promise:Promise<ExecutionEvidence>}>();
 const completed=new Map<string,{spec:string;evidence:ExecutionEvidence}>();
 /** Runs a frozen specification once per run ID in this process; the chain dedupes across processes. */
 export async function executeCreRun(input:ExecutionSpecification,onProgress?:(message:string)=>void,deps:RunnerDeps={}):Promise<ExecutionEvidence> {
+  return cachedExecution(input,'cre',onProgress,deps);
+}
+/** Explicit isolated research helper. Never selected by the product dispatcher. */
+export async function executeRehearsalRun(input:ExecutionSpecification,onProgress?:(message:string)=>void,deps:RunnerDeps={}):Promise<ExecutionEvidence> {
+  return cachedExecution(input,'research',onProgress,deps);
+}
+async function cachedExecution(input:ExecutionSpecification,authority:'cre'|'research',onProgress:((message:string)=>void)|undefined,deps:RunnerDeps):Promise<ExecutionEvidence> {
   const spec=Object.freeze(specificationSchema.parse(input));
+  if(isDirectAction(spec.graph.action)) throw new Error('CRE/EVM runner delivers vault reports only; select the Solana dispatcher. Nothing was submitted.');
   const serialized=JSON.stringify(spec);
-  const existing=completed.get(spec.runId);
+  const key=authority+':'+spec.runId;
+  const existing=completed.get(key);
   if(existing) {if(existing.spec!==serialized) throw new Error('Run ID reused with different immutable specification');return structuredClone(existing.evidence);}
-  const underway=active.get(spec.runId);
+  const underway=active.get(key);
   if(underway) {if(underway.spec!==serialized) throw new Error('Running version is immutable');return underway.promise;}
-  const work=(async()=>{
-    const result=process.env.ORIGINS_EXECUTION_MODE==='cre'
+  const work=executionQueue.then(async()=>{
+    const result=authority==='cre'
       ?await executeThroughCre(spec,onProgress,deps)
-      :await executePolicy(spec,localEvmEnvironment(deps.deployment??await loadLocalDeployment(),deps),onProgress);
-    completed.set(spec.runId,{spec:serialized,evidence:structuredClone(result)});return result;
-  })();
-  active.set(spec.runId,{spec:serialized,promise:work});
-  try{return await work;}finally{active.delete(spec.runId);}
+      :await executePolicy(spec,localEvmEnvironment(deps.deployment??await loadLocalDeployment(),{...deps,onSubmission:hash=>onProgress?.("ORIGINS_SUBMITTED "+JSON.stringify({hash,runId:spec.runId,revision:spec.revision,policyHash:spec.policyHash}))}),onProgress);
+    completed.set(key,{spec:serialized,evidence:structuredClone(result)});return result;
+  });
+  executionQueue=work.catch(()=>{});
+  active.set(key,{spec:serialized,promise:work});
+  try{return await work;}finally{active.delete(key);}
 }
 
 /** Chain names this CRE project has RPCs for; a graph needing any other network is refused before simulation. */
@@ -391,6 +420,7 @@ export async function configuredCreChains(projectFile=resolve(import.meta.dir,'p
 /** Throws before any side effect when CRE cannot execute this graph as written. */
 export async function assertCreSupports(spec:ExecutionSpecification,chains?:string[]) {
   if(isSimulatedAction(spec.graph.action)) throw new Error(SIMULATED_REFUSAL);
+  if(isDirectAction(spec.graph.action)) throw new Error('CRE delivers vault reports only; Solana transfers require the Solana devnet dispatcher. Nothing was submitted.');
   const available=chains??await configuredCreChains();
   for(const source of collectSources(spec.graph)) {
     const network=sourceIdentity(source).network;
@@ -427,10 +457,16 @@ export function cronEvery(seconds:number):string {
   if(seconds%60===0) return `0 */${seconds/60} * * * *`;
   return `*/${seconds} * * * * *`;
 }
+/** Machine progress carries durable transaction correlation; never clip its JSON payload. */
+export function replayCreProgress(logs:readonly string[],progress?:(message:string)=>void):void {
+  for(const message of logs) progress?.(message.startsWith('ORIGINS_')||message.length<=240?message:`${message.slice(0,240)}…`);
+}
 async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:string)=>void,deps:RunnerDeps={}):Promise<ExecutionEvidence> {
+  const frozen=deps.deployment;
   await assertCreSupports(spec);
-  const vault=process.env.ORIGINS_SEPOLIA_VAULT;
-  if(!vault||!/^0x[0-9a-fA-F]{40}$/.test(vault)) throw new Error('CRE mode requires ORIGINS_SEPOLIA_VAULT (run scripts/deploy-sepolia.ts)');
+  const configured=await creDeployment();
+  if(frozen&&(frozen.chainId!==11155111||frozen.address.toLowerCase()!==configured.address.toLowerCase()||frozen.forwarder&&frozen.forwarder.toLowerCase()!==configured.forwarder.toLowerCase()))throw new Error('CRE receiver configuration differs from the frozen execution target; nothing was submitted');
+  const vault=frozen?.address??configured.address;
   const root=resolve(import.meta.dir);
   const configPath=resolve(root,'workflow/config.runtime.json');
   // Covers the forwarder's bookkeeping plus the vault's storage writes (and a CCIP send) under current
@@ -448,7 +484,15 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
   progress?.(cron?'CRE CLI running the standing policy through the workflow cron trigger':'CRE CLI compiling and executing the frozen HTTP-trigger specification');
   const proc=Bun.spawn(args,{cwd:root,env:{...process.env},stdout:'pipe',stderr:'pipe'});
   const timeout=setTimeout(()=>proc.kill(),240000);
-  const [stdout,stderr,code]=await Promise.all([new Response(proc.stdout).text(),new Response(proc.stderr).text(),proc.exited]);clearTimeout(timeout);
+  const readOutput=async()=>{
+    const reader=proc.stdout.getReader();const decoder=new TextDecoder();let output='',pending='';
+    while(true){const {value,done}=await reader.read();if(done)break;const chunk=decoder.decode(value,{stream:true});output+=chunk;pending+=chunk;
+      const lines=pending.split('\n');pending=lines.pop() || '';
+      for(const line of lines){const start=line.indexOf('ORIGINS_SUBMITTED ');if(start>=0)progress?.(line.slice(start).replace(/\u001b\[[0-9;]*m/g,''));}
+    }
+    return output;
+  };
+  const [stdout,stderr,code]=await Promise.all([readOutput(),new Response(proc.stderr).text(),proc.exited]);clearTimeout(timeout);
   // Error output may echo key material; drop every secret and every 32-byte hex string.
   const redact=(text:string)=>{for(const secret of [process.env.CRE_API_KEY,process.env.CRE_ETH_PRIVATE_KEY,process.env.CRE_SOLANA_PRIVATE_KEY]) if(secret) text=text.split(secret).join('[redacted]');return text.replace(/(0x)?[a-fA-F0-9]{64}/g,'[redacted]');};
   if(code!==0) throw new Error(`CRE execution failed (${code}): ${redact(stderr||stdout).slice(-1500)}`);
@@ -462,7 +506,7 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
   catch(error) {throw new Error(`${error instanceof Error?error.message:String(error)}; the CLI transcript is in .data/cre-last-run.log`);}
   if(evidence.runId!==spec.runId||evidence.revision!==spec.revision||evidence.policyHash!==spec.policyHash) throw new Error('CRE execution evidence correlation failed');
   evidence.logs=cleanOutput.split('\n').filter(line=>line.includes('ORIGINS_')&&!line.includes(EVIDENCE_CHUNK_TAG)).map(line=>line.slice(line.indexOf('ORIGINS_')));
-  for(const message of evidence.logs) progress?.(message.length>240?`${message.slice(0,240)}…`:message);
+  replayCreProgress(evidence.logs,progress);
   // Verify what was actually sent: the action, or only its pause when nothing could move.
   const action=evidence.effectiveAction??spec.graph.action as VaultAction;
   if(evidence.transaction?.hash) {
@@ -567,7 +611,7 @@ export const diagnosePause=diagnoseReport;
  * After a restart, decides what happened to a submission whose outcome was
  * unknown, from the chain alone. Never resubmits.
  */
-export async function findSubmittedPause(runId:string,deployment:{address:string;chainId:number;rpcUrl:string;blockNumber?:number}):Promise<{landed:boolean;transactionHash?:string;blockNumber?:number;paused:boolean}> {
+export async function findSubmittedPause(runId:string,deployment:{address:string;chainId:number;rpcUrl:string;blockNumber?:number},expected?:{revision:number;policyHash:string},submittedHash?:string):Promise<{landed:boolean;transactionHash?:string;blockNumber?:number;paused:boolean;balanceWei?:string;decidedAt?:string;submissionSettled?:boolean}> {
   const client=createPublicClient({transport:http(deployment.rpcUrl,{timeout:10000})}) as PublicClient;
   if(await client.getChainId()!==deployment.chainId) throw new Error('RPC chain does not match the vault deployment');
   const address=deployment.address as Address;
@@ -576,6 +620,16 @@ export async function findSubmittedPause(runId:string,deployment:{address:string
     client.readContract({address,abi:vaultAbi,functionName:'processedRuns',args:[id]}),
     client.readContract({address,abi:vaultAbi,functionName:'paused'}),
   ]);
+  let knownReceipt: Awaited<ReturnType<typeof client.getTransactionReceipt>> | undefined;
+  if(submittedHash && /^0x[a-fA-F0-9]{64}$/.test(submittedHash)) {
+    try {knownReceipt=await client.getTransactionReceipt({hash:submittedHash as Hex});} catch { /* Pending or unavailable stays uncertain. */ }
+    if(knownReceipt) {
+      const trusted=await client.readContract({address,abi:parseAbi(['function forwarder() view returns (address)']),functionName:'forwarder'});
+      if(knownReceipt.to?.toLowerCase()!==trusted.toLowerCase()) throw new Error('Recorded submission did not target the receiver trusted forwarder');
+      if(knownReceipt.status!=='success' || (expected && !receiverEffects(knownReceipt.logs,address,runId,expected.revision,expected.policyHash).matched))
+        return {landed,paused,submissionSettled:true};
+    }
+  }
   if(!landed) return {landed:false,paused};
   try {
     // Any event this vault emits for the run proves which transaction carried it.
@@ -583,12 +637,23 @@ export async function findSubmittedPause(runId:string,deployment:{address:string
       const event=vaultAbi.find(x=>x.type==='event'&&x.name===name)!;
       const logs=await client.getLogs({address,event:event as any,args:{runId:id} as any,fromBlock:BigInt(deployment.blockNumber??0),toBlock:'latest'});
       const log=logs[0];
-      if(log) return {landed:true,paused,transactionHash:log.transactionHash!,blockNumber:Number(log.blockNumber)};
+      if(!log) continue;
+      const receipt=await client.getTransactionReceipt({hash:log.transactionHash!});
+      const effects=expected ? receiverEffects(receipt.logs,address,runId,expected.revision,expected.policyHash) : undefined;
+      if(expected && !effects?.matched) throw new Error('Recovered event does not match this execution revision and policy hash');
+      const pausedAfter=await pausedAt(client,address,receipt.blockNumber);
+      if(receipt.status!=='success'||(effects?.paused&&!pausedAfter)) throw new Error('Recovered receipt or receipt-block vault state did not verify');
+      const balance=await client.getBalance({address,blockNumber:receipt.blockNumber});
+      const recoveredEvent=receipt.logs.filter(entry=>entry.address.toLowerCase()===address.toLowerCase()).map(entry=>{try{return decodeEventLog({abi:vaultAbi,data:entry.data,topics:entry.topics as [Hex,...Hex[]]});}catch{return null;}}).find(event=>event?.eventName==='SpendingPaused' && event.args.runId===id);
+      const decidedAt=recoveredEvent?.eventName==='SpendingPaused' ? new Date(Number(recoveredEvent.args.decidedAt)*1000).toISOString() : undefined;
+      return {landed:true,paused:pausedAfter,transactionHash:log.transactionHash!,blockNumber:Number(log.blockNumber),balanceWei:balance.toString(),decidedAt};
     }
     return {landed:true,paused};
-  } catch {
+  } catch(error) {
     // Some public RPCs cap log ranges; processedRuns alone still proves the report landed.
+    if(expected) throw error;
     return {landed:true,paused};
   }
+
 }
 export {CCIP_DESTINATIONS};

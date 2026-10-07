@@ -39,12 +39,12 @@ test('ordinary tool results retain authoritative references and run summaries wi
 test('get_run retains complete selected evidence and resolves an explicit older run ahead of current selection', () => {
   const canonical = fixture(); const view = compactMcpResult(canonical, 'get_run', { runId: 'older' });
   const selected = view.state!.runs.find(run => run.id === 'older')!;
-  expect('inputs' in selected && selected.inputs?.price.data.price).toBe(2500);
+  expect('inputs' in selected && selected.inputs?.price?.data.price).toBe(2500);
   expect('decisions' in selected && selected.decisions).toEqual(canonical.state.runs[1]!.decisions);
   expect('logs' in selected && selected.logs).toEqual(canonical.state.runs[1]!.logs);
   expect('evidence' in selected && selected.evidence).toEqual(canonical.state.runs[1]!.evidence);
   expect('logs' in view.state!.runs[0]!).toBe(false);
-  expect(canonical.state.runs[1]!.inputs!.price.data.history).toHaveLength(1000);
+  expect(canonical.state.runs[1]!.inputs!.price!.data.history).toHaveLength(1000);
 });
 
 test('get_run keeps every archived observation and the policy hash; summaries keep the hash', () => {
@@ -62,4 +62,26 @@ test('compaction preserves actionable stale-revision errors and ambiguity candid
   const view = compactMcpResult(canonical, 'patch_workflow');
   expect(view.ok).toBe(false); expect(view.code).toBe('REVISION_CONFLICT');
   expect(view.error).toBe(canonical.error); expect(view.candidates).toEqual(canonical.candidates);
+});
+
+
+test('utility data survives compaction with no claimed graph execution', () => {
+  const canonical = { ...fixture(), data: { network: "devnet", signature: "confirmed-signature", status: "confirmed" } };
+  expect(compactMcpResult(canonical, "transfer_solana_devnet").data).toEqual(canonical.data);
+});
+
+test('operator supplied context retains uncertain monitor identity and frozen revision', () => {
+  const canonical = fixture();
+  canonical.state.monitors = [{
+    id: 'monitor-uncertain', sessionId: canonical.state.sessionId, status: 'uncertain',
+    spec: { version: 2, runId: 'frozen-run', revision: 2, graph: legacyGraph(3000), policyHash: '0x' + '0'.repeat(64), maxAgeSeconds: 60, broadcast: true },
+    target: { chainId: 31337, address: '0x123' }, intervalSeconds: 30,
+    createdAt: '2026-10-07T01:00:00Z', updatedAt: '2026-10-07T01:00:10Z',
+    checks: 1, failures: 0, lastRunId: 'frozen-run', lastError: 'Report outcome needs chain reconciliation', logs: [],
+  }];
+  const view = compactMcpResult(canonical, 'get_context');
+  expect(view.state!.monitors?.[0]?.status).toBe('uncertain');
+  expect(view.state!.monitors?.[0]?.lastRunId).toBe('frozen-run');
+  expect(view.state!.monitors?.[0]?.spec.revision).toBe(2);
+  expect(view.state!.monitors?.[0]?.target).toEqual(canonical.state.monitors[0]!.target);
 });

@@ -1,0 +1,26 @@
+{
+  "verifiedAt": "2026-10-07T08:40:56.273Z",
+  "status": "verified",
+  "kind": "real-local-recognizer",
+  "inputKind": "macOS-Samantha-TTS-fixture",
+  "humanMicrophoneVerified": false,
+  "pipeline": "audio bytes → HTTP multipart → ffmpeg → whisper.cpp",
+  "audioSha256": "11fd14943b06e6f8122506cffc3a1aa14b3020f2a45331e8bb11931cc1c313ef",
+  "audioBytes": 85838,
+  "multipartFilename": "utterance",
+  "declaredMimeType": "audio/wav",
+  "fixtureInstruction": "Show me the current price of Solana and Bitcoin.",
+  "transcript": "Show me the current price of Solana and Bitcoin.",
+  "engine": "whisper.cpp",
+  "model": "base.en",
+  "durationSeconds": 2.68,
+  "elapsedMs": 1210,
+  "implementation": {
+    "version": "v1.8.7",
+    "commit": "48f628a84833905ee4a0658ee6d4a5c915ce1997",
+    "modelSha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+    "repository": "https://github.com/ggml-org/whisper.cpp"
+  },
+  "operatorExecutionVerified": false,
+  "rawAudioRetained": false
+}

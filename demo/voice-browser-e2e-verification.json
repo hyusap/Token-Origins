@@ -1,0 +1,87 @@
+{
+  "status": "pass",
+  "verifiedAt": "2026-10-07T08:39:54.142Z",
+  "scope": "Dedicated Chromium fake microphone with synthetic spoken input; actual browser MediaRecorder, local Whisper.cpp and authenticated Codex semantic operator. No user ambient microphone captured.",
+  "source": {
+    "synthetic": true,
+    "tts": "macOS Samantha",
+    "expectedTranscript": "Show me the price of Solana. Keep this as a draft and do not execute anything.",
+    "wavSha256": "7eea6904074504281e38746987f826a48c98e42d1666149b39b7c869bf537786",
+    "browser": "Chrome154 headless",
+    "capture": "Production captureUtterance, MediaRecorder Opus WebM, real amplitude silence endpoint"
+  },
+  "transcription": {
+    "ok": true,
+    "transcript": "Show me the price of Solana. Keep this as a draft and do not execute anything.",
+    "engine": "whisper.cpp",
+    "model": "base.en",
+    "durationSeconds": 6.54,
+    "elapsedMs": 1165
+  },
+  "operator": {
+    "id": "agent-595f703b-23c6-4e37-82b6-4b58a346b4ec",
+    "text": "Show me the price of Solana. Keep this as a draft and do not execute anything.",
+    "summary": "Solana is displayed on the canvas at **$118.43 USD** from Coinbase. Everything remains draft-only; nothing was executed or activated.",
+    "durationMs": 42422,
+    "startedAt": "2026-10-07T08:38:09.986Z",
+    "completedAt": "2026-10-07T08:38:52.408Z",
+    "tools": [
+      {
+        "name": "discover_objects",
+        "server": "woga",
+        "arguments": {
+          "objects": [
+            "price"
+          ],
+          "tokens": [
+            "SOL"
+          ],
+          "operationId": "agent-595f703b-23c6-4e37-82b6-4b58a346b4ec-price"
+        },
+        "status": "completed",
+        "result": {
+          "ok": true,
+          "summary": "Discovered SOL / USD: $118.43 (Coinbase Exchange, observed 2026-10-07T08:38:37.680626Z).",
+          "seq": 3,
+          "revision": 0
+        },
+        "at": "2026-10-07T08:38:40.408Z"
+      }
+    ]
+  },
+  "market": {
+    "id": "price:sol-usd",
+    "price": 118.43,
+    "token": "coinbase:SOL-USD",
+    "tradeId": 356915549,
+    "provenance": {
+      "source": "Coinbase Exchange",
+      "url": "https://api.exchange.coinbase.com/products/SOL-USD/trades?limit=100",
+      "observedAt": "2026-10-07T08:38:37.680626Z",
+      "fetchedAt": "2026-10-07T08:38:40.397Z",
+      "kind": "live",
+      "label": "Live exchange trade · source timestamp"
+    }
+  },
+  "checks": {
+    "oneAudioUpload": true,
+    "exactTranscription": true,
+    "oneAgentOperation": true,
+    "exactAgentInput": true,
+    "semanticDiscovery": true,
+    "liveMarket": true,
+    "noExecution": true,
+    "terminal": true,
+    "micReleased": true
+  },
+  "execution": {
+    "runs": 0,
+    "monitors": 0,
+    "tradeWatches": 0,
+    "note": "This isolated voice turn requested only market discovery; no chain action was requested or executed."
+  },
+  "screenshots": [
+    "voice-recognized-command.png",
+    "voice-browser-e2e.png"
+  ]
+}

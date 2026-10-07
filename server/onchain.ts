@@ -46,7 +46,7 @@ const client = (network: Network) => {
 /** Canvas object that displays a source's reading. */
 export function readingObjectId(source: Source): string {
   switch (source.type) {
-    case "exchange-trade": return "price:eth-usd";
+    case "exchange-trade": return "price:" + source.pair.toLowerCase();
     case "chainlink-feed": return feedObjectId(source);
     case "vault-balance": return "vault:grant";
     default: return `reading:${sourceKey(source)}`;

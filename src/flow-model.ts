@@ -1,6 +1,7 @@
 import { MarkerType, type Node, type Edge } from "@xyflow/react";
 import type { CanvasState, GraphObject, ExecutionRun, PolicyGraph } from "../shared/types";
 import { graphInputs, policyView, sourceObjectId } from "./policy-view";
+import { actionObjectId } from "./policy-language";
 
 export type InstrumentData = {
   kind: "price" | "vault" | "source" | "conditions" | "action" | "run" | "section";
@@ -22,6 +23,7 @@ export function canvasFlow(state: CanvasState) {
   const nodes: InstrumentFlowNode[] = [];
   const edges: Edge[] = [];
   const focus = state.focus.objectId;
+  const actionId = actionObjectId(view.graph.action);
   const add = (id: string, kind: InstrumentData["kind"], x: number, y: number, extra: Partial<InstrumentData> = {}) =>
     nodes.push({id,type:"instrument",position:{x,y},style:{width:kind==="run" ? 360 : 280},draggable:false,selectable:false,
       data:{kind,state,focused:focus===id,...extra}});
@@ -64,11 +66,13 @@ export function canvasFlow(state: CanvasState) {
       }
       for (const input of graphInputs(node)) edge(`graph:${input}:${node.id}`,canvasId(input),id,node.kind==="and"||node.kind==="or"||node.kind==="not" ? node.kind.toUpperCase() : node.kind==="math" ? node.op : node.kind);
     }
-    add("action:pause","action",40+actionRank*360,46,{lane:"policy"});
-    edge("graph:root-action",canvasId(view.graph.root),"action:pause","root true");
+    add(actionId,"action",40+actionRank*360,46,{lane:"policy"});
+    const rootResult = view.run?.decisions.find(decision => decision.nodeId === view.graph.root);
+    edge("graph:root-action",canvasId(view.graph.root),actionId,rootResult ? `root evaluated: ${rootResult.passed ? "true" : "false"}` : "if root passes");
   }
   const vault = visible.find(o => o.kind==="vault");
-  if (vault) {
+  const vaultUsed = !active || ["pause-vault", "sweep", "pay", "evacuate"].includes(view.graph.action.type) || view.graph.nodes.some(node => node.kind === "vault-paused" || ((node.kind === "price" || node.kind === "reading") && node.source.type === "vault-balance"));
+  if (vault && vaultUsed) {
     add(vault.id,"vault",40+(active ? actionRank+1 : 1)*360,46,{object:vault,lane:"policy"});
     const action = view.graph.action;
     const verb = action.type==="pause-vault" ? "pause" : action.type==="sweep" ? "sweep" : action.type==="pay" ? "pay" : action.type==="evacuate" ? "CCIP" : null;
@@ -76,18 +80,23 @@ export function canvasFlow(state: CanvasState) {
     // State readers are roots in the drawing to avoid implying a cycle back into their own action.
   }
   const markets = view.run ? [] : visible.filter(o => (o.kind==="price"||o.kind==="feed") && !emitted.has(o.id));
+  const independentVault = !view.run && vault && !vaultUsed ? vault : undefined;
+  const observationCount = markets.length + Number(!!independentVault);
   const marketY = active || vault ? 46+policyHeight+64 : 46;
-  if (markets.length) {
-    add("section:markets","section",40,marketY-36,{title:active ? "Other market observations" : "Market observations",lane:"markets"});
+  if (observationCount) {
+    add("section:markets","section",40,marketY-36,{title:active ? "Other observations" : "Market observations",lane:"markets"});
     markets.forEach((o,i)=>add(o.id,"price",40+i%4*360,marketY+Math.floor(i/4)*360,{object:o,lane:"markets"}));
+    if (independentVault) { const index = markets.length; add(independentVault.id,"vault",40+index%4*360,marketY+Math.floor(index/4)*360,{object:independentVault,lane:"markets"}); }
   }
   const sources = view.run ? [] : visible.filter(o=>o.kind==="source");
-  const extraY = marketY+Math.ceil(markets.length/4)*360+46;
+  const extraY = marketY+Math.ceil(observationCount/4)*360+46;
   sources.forEach((o,i)=>add(o.id,"source",40+i%4*360,extraY+Math.floor(i/4)*360,{object:o,lane:"evidence"}));
-  const run = view.run || state.runs[0];
+  // A draft has no execution evidence attached. Node IDs can be reused across
+  // revisions, so even a visually identical old result belongs to its frozen run.
+  const run = view.run;
   if (run) {
     add(`run:${run.id}`,"run",40+actionRank*360,extraY+Math.ceil(sources.length/4)*360,{run,lane:"evidence"});
-    if (active) edge(`evidence:${run.id}`,"action:pause",`run:${run.id}`,"result",{sourceHandle:"evidence",style:{strokeDasharray:"4 5"}});
+    if (active) edge(`evidence:${run.id}`,actionId,`run:${run.id}`,"result",{sourceHandle:"evidence",style:{strokeDasharray:"4 5"}});
   }
   const drawn = new Set(nodes.map(node => node.id));
   return {nodes,edges:edges.filter(e => drawn.has(e.source) && drawn.has(e.target)).map(e=>({type:"smoothstep",markerEnd:{type:MarkerType.ArrowClosed,color:"var(--bab-line-lit)"},

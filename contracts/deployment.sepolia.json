@@ -1,7 +1,7 @@
 {
   "address": "0x8ae74ceb8e467dd79aa5b1eaa7f48c569c46877c",
   "forwarder": "0x15fC6ae953E024d975e77382eEeC56A9101f9F88",
-  "owner": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8",
+  "owner": "0xB39fE4BeD79Bb585205c080a610B1F689f019439",
   "chainId": 11155111,
   "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
   "mode": "cre-sepolia",
@@ -37,6 +37,13 @@
       "deploymentHash": "0x82314604845eb925da9ae9e313e33eda075c00f0ecfe39212c0e5fd4c510cd59",
       "blockNumber": 11861375,
       "createdAt": "2026-10-07T07:05:16.858Z"
+    },
+    {
+      "address": "0x3bacbd3a15dabc479e9654e92273cfbb53499a73",
+      "reportVersion": 2,
+      "deploymentHash": "0xa7190e22c4fbf9b48c7e5b5114652810432b0e5c3fd7a2050d00839eb4b06381",
+      "blockNumber": 11861967,
+      "createdAt": "2026-10-07T09:03:54.076Z"
     },
     {
       "address": "0x32aa29f6195f13c01d16e877dd797ceeff34f53f",
