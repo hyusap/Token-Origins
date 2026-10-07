@@ -23,7 +23,8 @@
     "solana:wallet": "bun run scripts/solana-wallet.ts",
     "prove:actions": "bun run scripts/prove-actions.ts",
     "verify:registry": "bun run scripts/verify-registry.ts",
-    "solana:enable-sweep": "bun run scripts/solana-enable-sweep.ts"
+    "solana:enable-sweep": "bun run scripts/solana-enable-sweep.ts",
+    "lock:workflow": "bun run scripts/lock-workflow.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

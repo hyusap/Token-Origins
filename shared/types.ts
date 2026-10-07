@@ -116,6 +116,12 @@ export interface ExecutionRun {
     solana?: { network: string; programId: string; vault: string; signature: string | null; verified: boolean; slot?: number; explorerUrl?: string; action?: "pause" | "sweep"; reserve?: string; sweptLamports?: number };
     /** Why an acting decision left the Solana vault unchanged. */
     solanaSkipped?: string;
+    /** The Ethereum action verified but the Solana write did not; why. */
+    solanaFailure?: string;
+    /** Only the pause of a protective sweep or evacuation was sent, because nothing could move. */
+    degradedReason?: string;
+    /** The workflow the Keystone forwarder vouched for (CRE runs). */
+    workflow?: { workflowId: string; workflowName: string; workflowOwner: string };
     /** What the receiver did, decoded from its events for this run: pause, sweep, payment, CCIP message. */
     effects?: ReceiverEffects;
     /** CCIP explorer link for an evacuation's cross-chain message. */

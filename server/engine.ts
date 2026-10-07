@@ -1471,7 +1471,8 @@ export class Engine {
       const outcome = run.status === "confirmed" ? this.completionSummary(run) : run.status === "no-op" ? `no action: ${run.noopReason ?? "nothing to do"}` : `failed: ${run.error}`;
       watch.lastOutcome = outcome;
       watch.consecutiveFailures = run.status === "failed" ? watch.consecutiveFailures + 1 : 0;
-      const stop = run.status === "confirmed" && watch.stopOnAction ? `acted on check ${watch.checks}. ${outcome}`
+      const stop = run.evidence?.solanaFailure ? `stopped on check ${watch.checks}: the Ethereum action verified but the Solana leg failed, so the two vaults disagree. ${outcome}`
+        : run.status === "confirmed" && watch.stopOnAction ? `acted on check ${watch.checks}. ${outcome}`
         : watch.consecutiveFailures >= 3 ? `stopped after 3 failed checks in a row; last ${outcome}`
         : watch.checks >= watch.maxChecks ? `finished all ${watch.maxChecks} checks; last ${outcome}`
         : undefined;
@@ -1652,12 +1653,15 @@ export class Engine {
         effects?.evacuatedTokens !== undefined && `queued ${effects.evacuatedTokens} CCIP-BnM for CCIP`,
         (effects?.paused ?? evidence.pausedAfter) && "paused",
       ].filter(Boolean);
-      return parts.length === 1 && parts[0] === "paused" ? `${v}: fixture vault paused in memory; no transaction.` : `${v}: fixture vault ${parts.join(" and ")} in memory; no transaction.`;
+      const only = evidence.degradedReason ? ` Only the pause was sent: ${evidence.degradedReason}.` : "";
+      return parts.length === 1 && parts[0] === "paused" ? `${v}: fixture vault paused in memory; no transaction.${only}` : `${v}: fixture vault ${parts.join(" and ")} in memory; no transaction.${only}`;
     }
     if (evidence?.transactionHash) {
       const effects = evidence.effects;
       const block = `at block ${evidence.blockNumber}`;
-      const solana = evidence.solana?.verified ? evidence.solana.action === "sweep" ? " The Solana vault swept to its reserve in the same decision." : " The Solana vault was paused by the same decision." : "";
+      const solana = evidence.solanaFailure ? ` The Ethereum action is verified, but the Solana leg failed: ${evidence.solanaFailure.split("\n")[0]}`
+        : evidence.solana?.verified ? evidence.solana.action === "sweep" ? " The Solana vault swept to its reserve in the same decision." : " The Solana vault was paused by the same decision." : "";
+      if (evidence.degradedReason) return `${v}: vault paused ${block}, verified by receipt, receiver event and a fresh read. Only the pause was sent: ${evidence.degradedReason}.${solana}`;
       const paused = effects?.paused ? " and paused spending" : "";
       if (run.action === "sweep" && effects?.sweptWei)
         return `${v}: swept ${Number(effects.sweptWei) / 1e18} ETH to the reserve${paused} ${block}, verified by receipt, ReserveSwept event and a fresh read.${solana}`;
@@ -1763,7 +1767,11 @@ export class Engine {
           ...(result.solana.sweptLamports !== undefined ? { sweptLamports: result.solana.sweptLamports } : {}),
         };
       if (result.solanaSkipped) run.evidence.solanaSkipped = result.solanaSkipped;
-      const failures = effectFailures(run.snapshot.graph.action as VaultAction, tx);
+      if (result.solanaFailure) run.evidence.solanaFailure = result.solanaFailure;
+      if (result.degradedReason) run.evidence.degradedReason = result.degradedReason;
+      if (result.workflow) run.evidence.workflow = result.workflow;
+      // Verify what was sent: the action, or only its pause when nothing could move.
+      const failures = effectFailures(result.effectiveAction ?? (run.snapshot.graph.action as VaultAction), tx);
       if (failures.length)
         throw new Error(`Report transaction did not verify: ${failures.join("; ")}`);
       run.status = "confirmed";
@@ -1791,6 +1799,7 @@ export class Engine {
         pausedAfter: Boolean(result.fixture?.paused ?? result.fixturePaused) || this.fixturePaused,
         fixture: true,
         ...(result.fixture ? { fixtureEffects: result.fixture } : {}),
+        ...(result.degradedReason ? { degradedReason: result.degradedReason } : {}),
         verification: "Local fixture changed only · no deployed contract or transaction",
       };
       run.status = "confirmed";

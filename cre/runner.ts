@@ -1,4 +1,4 @@
-import {createPublicClient,createWalletClient,http,parseAbi,decodeEventLog,decodeErrorResult,encodeFunctionData,defineChain,type Address,type Hex,type PublicClient} from 'viem';
+import {createPublicClient,createWalletClient,http,parseAbi,decodeEventLog,decodeErrorResult,decodeFunctionData,decodeAbiParameters,parseAbiParameters,encodeFunctionData,defineChain,size,slice,type Address,type Hex,type PublicClient} from 'viem';
 import {privateKeyToAccount} from 'viem/accounts';
 import {sepolia} from 'viem/chains';
 import {resolve} from 'node:path';
@@ -58,6 +58,10 @@ export interface ExecutionEvidence {
   solana?:{network:string;programId:string;vault:string;forwarderProgram:string;signature:string|null;status:string;error?:string;verified?:boolean;slot?:number;explorerUrl?:string;action?:'pause'|'sweep';pauses?:boolean;reserve?:string;bps?:number;sweptLamports?:number};
   /** Why the Solana vault was left unchanged by an acting decision. */
   solanaSkipped?:string;
+  /** The Ethereum action verified but the Solana write did not; the run keeps its EVM evidence. */
+  solanaFailure?:string;
+  /** The workflow the Keystone forwarder vouched for, decoded from the delivered transaction. */
+  workflow?:WorkflowMetadata;
   logs:string[];
 }
 
@@ -87,7 +91,47 @@ const vaultAbi=parseAbi([
   'event TreasuryEvacuated(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,bytes32 messageId,uint64 destinationChainSelector,address token,uint256 amount,uint256 fee)',
   'event MovementFailed(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,uint256 action,bytes reason)',
 ]);
-const forwarderAbi=parseAbi(['function deliver(address receiver,bytes report)']);
+const forwarderAbi=parseAbi(['function deliver(address receiver,bytes report)','function report(address receiver,bytes rawReport,bytes reportContext,bytes[] signatures)']);
+
+/** The workflow a Keystone forwarder vouched for, from the metadata it passes to the receiver. */
+export interface WorkflowMetadata {workflowId:Hex;workflowName:Hex;workflowOwner:Address}
+/** The v3 report fields as the receiver decoded them. */
+export interface DeliveredReport {version:bigint;target:Address;chainId:bigint;runIdHash:Hex;revision:bigint;policyHash:Hex;action:bigint;decidedAt:bigint;flags:bigint;payeeId:Hex;amount:bigint;destinationChainSelector:bigint}
+const V3_LAYOUT=parseAbiParameters('uint256,address,uint256,bytes32,uint256,bytes32,uint256,uint256,uint256,bytes32,uint256,uint64');
+/**
+ * What a forwarder transaction actually delivered: the receiver, the report
+ * body and, for a Keystone forwarder (CRE's MockKeystoneForwarder included),
+ * the workflow metadata. rawReport = 45-byte forwarder header | workflowId (32)
+ * | workflowName (10) | workflowOwner (20) | reportId (2) | report.
+ */
+export function decodeDeliveredReport(input:Hex):{receiver:Address;report:Hex;metadata?:WorkflowMetadata;decoded?:DeliveredReport} {
+  const call=decodeFunctionData({abi:forwarderAbi,data:input});
+  let receiver:Address,report:Hex,metadata:WorkflowMetadata|undefined;
+  if(call.functionName==='deliver') [receiver,report]=call.args;
+  else {
+    const [to,raw]=call.args;
+    if(size(raw)<109) throw new Error('Forwarder report is shorter than its metadata');
+    receiver=to;report=slice(raw,109);
+    metadata={workflowId:slice(raw,45,77),workflowName:slice(raw,77,87),workflowOwner:slice(raw,87,107) as Address};
+  }
+  let decoded:DeliveredReport|undefined;
+  if(size(report)===384) {
+    const f=decodeAbiParameters(V3_LAYOUT,report);
+    decoded={version:f[0],target:f[1],chainId:f[2],runIdHash:f[3],revision:f[4],policyHash:f[5],action:f[6],decidedAt:f[7],flags:f[8],payeeId:f[9],amount:f[10],destinationChainSelector:f[11]};
+  }
+  return {receiver,report,...(metadata?{metadata}:{}),...(decoded?{decoded}:{})};
+}
+/** Differences between a delivered v3 report and the run it claims to be; empty when they agree exactly. */
+export function reportMismatches(delivered:DeliveredReport,expected:{vault:string;chainId:number;runId:string;revision:number;policyHash:string;action:VaultAction}):string[] {
+  const terms=actionTerms(expected.action);
+  const want:[string,unknown,unknown][]=[
+    ['version',delivered.version,3n],['target',delivered.target.toLowerCase(),expected.vault.toLowerCase()],['chainId',delivered.chainId,BigInt(expected.chainId)],
+    ['runId',delivered.runIdHash,runIdHash(expected.runId)],['revision',delivered.revision,BigInt(expected.revision)],['policyHash',delivered.policyHash.toLowerCase(),expected.policyHash.toLowerCase()],
+    ['action',delivered.action,BigInt(terms.action)],['flags',delivered.flags,BigInt(terms.flags)],['payeeId',delivered.payeeId.toLowerCase(),terms.payeeId.toLowerCase()],
+    ['amount',delivered.amount,terms.amount],['destinationChainSelector',delivered.destinationChainSelector,terms.destinationChainSelector],
+  ];
+  return want.filter(([,got,expectedValue])=>got!==expectedValue).map(([name,got,expectedValue])=>`${name} ${String(got)} ≠ ${String(expectedValue)}`);
+}
 // Public Anvil development key; deliberately accepted only when chain ID is 31337.
 const LOCAL_DEV_KEY='0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
 const SIMULATED_REFUSAL='Simulated sells run only in local rehearsal (as do simulated rebalances); CRE delivers only real vault actions. Nothing was submitted.';
@@ -425,14 +469,23 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
     const client=createPublicClient({chain:sepolia,transport:http(process.env.ORIGINS_SEPOLIA_RPC||'https://ethereum-sepolia-rpc.publicnode.com')});
     const receipt=await client.waitForTransactionReceipt({hash:evidence.transaction.hash as Hex,timeout:90000});
     evidence.transaction=await receiptEvidence(client as PublicClient,vault as Address,receipt,spec.runId,spec.revision,spec.policyHash);
-    const failed=effectFailures(action,evidence.transaction);
+    // The bytes that reached the vault must be exactly this run's report, whatever the CLI printed.
+    const sentTx=await client.getTransaction({hash:receipt.transactionHash});
+    const delivered=decodeDeliveredReport(sentTx.input);
+    if(delivered.metadata) evidence.workflow=delivered.metadata;
+    const mismatched=delivered.receiver.toLowerCase()!==vault.toLowerCase()?['receiver']:delivered.decoded?reportMismatches(delivered.decoded,{vault,chainId:NETWORKS['ethereum-sepolia'].chainId,runId:spec.runId,revision:spec.revision,policyHash:spec.policyHash,action}):[];
+    const failed=[...effectFailures(action,evidence.transaction),...mismatched.map(m=>`delivered report ${m}`)];
     if(failed.length) {
       const notes=await diagnoseReport(client as PublicClient,vault as Address,receipt,spec,evidence).catch(error=>[`diagnosis unavailable: ${error instanceof Error?error.message:String(error)}`]);
       await Bun.write(resolve(root,'../.data/cre-last-run.log'),`${transcript}\n\nVERIFICATION FAILED: ${failed.join('; ')}\n${notes.join('\n')}\n`).catch(()=>{});
       throw new Error(`CRE report did not verify (${failed.join('; ')}).\n  ${notes.join('\n  ')}\n  ${NETWORKS['ethereum-sepolia'].explorer}/tx/${receipt.transactionHash}`);
     }
   }
-  if(solana&&evidence.decision==='act'&&spec.broadcast!==false&&!evidence.solanaSkipped) await verifySolanaLeg(evidence,spec);
+  if(solana&&evidence.decision==='act'&&spec.broadcast!==false&&!evidence.solanaSkipped) {
+    // The Ethereum action is already verified on chain; a Solana failure is recorded, never allowed to erase it.
+    try {await verifySolanaLeg(evidence,spec);}
+    catch(error) {evidence.solanaFailure=error instanceof Error?error.message:String(error);progress?.(`Solana leg failed: ${evidence.solanaFailure}`);}
+  }
   return evidence;
 }
 
