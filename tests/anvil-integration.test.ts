@@ -123,3 +123,23 @@ test.skipIf(!enabled)("a pre-v2 receiver is refused before any report is sent", 
   await expect(executeCreRun(spec, undefined, { deployment: old, fetchExchange, resolveFeed })).rejects.toThrow(/accepts report v1, not v2/);
   expect(await client.getBlockNumber()).toBe(before);
 });
+
+test.skipIf(!enabled)("a pause that does not verify is diagnosed: wrong forwarder named, receiver revert decoded", async () => {
+  const { diagnosePause } = await import("../cre/runner");
+  const { encodePauseReport } = await import("../cre/graph");
+  const { encodeFunctionData } = await import("viem");
+  const forwarderArtifact = await Bun.file("contracts/out/LocalRehearsalForwarder.sol/LocalRehearsalForwarder.json").json();
+  const rogue = (await client.waitForTransactionReceipt({ hash: await wallet.deployContract({ abi: forwarderArtifact.abi, bytecode: forwarderArtifact.bytecode.object, args: [] }) })).contractAddress!;
+  const spec = specOf(composedPause(3000, "ethereum-mainnet"), `diagnose-${Date.now()}`, 4);
+  const decidedAt = new Date().toISOString();
+  const report = encodePauseReport({ target: deployment.address as Address, chainId: 31337, runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash as any, decidedAt: Math.floor(Date.parse(decidedAt) / 1000) });
+  const hash = await wallet.sendTransaction({ to: rogue, gas: 300_000n, data: encodeFunctionData({ abi: forwarderArtifact.abi, functionName: "deliver", args: [deployment.address, report] }) });
+  const receipt = await client.waitForTransactionReceipt({ hash });
+  expect(receipt.status).toBe("reverted");
+  // The diagnosis replays against the vault's real chain id, so check the local variant directly.
+  const notes = await diagnosePause(client as any, deployment.address as Address, receipt as any, spec, { decidedAt } as any);
+  const text = notes.join("\n");
+  expect(text).toContain(`but the CRE transaction went to ${rogue}`);
+  expect(text).toContain(`replaying this report from ${rogue} before that block reverts Unauthorized`);
+  expect(await isPaused()).toBe(false);
+});

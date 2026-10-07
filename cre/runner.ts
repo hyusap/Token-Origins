@@ -1,4 +1,4 @@
-import {createPublicClient,createWalletClient,http,parseAbi,decodeEventLog,defineChain,type Address,type Hex,type PublicClient} from 'viem';
+import {createPublicClient,createWalletClient,http,parseAbi,decodeEventLog,decodeErrorResult,encodeFunctionData,defineChain,type Address,type Hex,type PublicClient} from 'viem';
 import {privateKeyToAccount} from 'viem/accounts';
 import {sepolia} from 'viem/chains';
 import {resolve} from 'node:path';
@@ -268,12 +268,70 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
   if(evidence.transaction?.hash) {
     const client=createPublicClient({chain:sepolia,transport:http(process.env.ORIGINS_SEPOLIA_RPC||'https://ethereum-sepolia-rpc.publicnode.com')});
     const receipt=await client.waitForTransactionReceipt({hash:evidence.transaction.hash as Hex,timeout:90000});
-    const pausedAfter=await client.readContract({address:vault as Address,abi:vaultAbi,functionName:'paused'});
     const confirmed=matchPauseEvent(receipt.logs,vault,spec.runId,spec.revision,spec.policyHash);
+    const pausedAfter=await pausedAt(client as PublicClient,vault as Address,receipt.blockNumber);
     evidence.transaction={hash:evidence.transaction.hash,blockNumber:Number(receipt.blockNumber),status:receipt.status,receiverConfirmed:confirmed,pausedAfter};
-    if(receipt.status!=='success'||!confirmed||!pausedAfter) throw new Error('CRE report lacks confirmed receipt, matching receiver event, or fresh paused() state');
+    const failed=[receipt.status!=='success'&&`receipt status ${receipt.status}`,!confirmed&&'no SpendingPaused event matching this run, revision and policy hash',!pausedAfter&&'vault not paused at the receipt block'].filter(Boolean);
+    if(failed.length) {
+      const notes=await diagnosePause(client as PublicClient,vault as Address,receipt,spec,evidence).catch(error=>[`diagnosis unavailable: ${error instanceof Error?error.message:String(error)}`]);
+      await Bun.write(resolve(root,'../.data/cre-last-run.log'),`${transcript}\n\nVERIFICATION FAILED: ${failed.join('; ')}\n${notes.join('\n')}\n`).catch(()=>{});
+      throw new Error(`CRE report did not verify (${failed.join('; ')}).\n  ${notes.join('\n  ')}\n  ${NETWORKS['ethereum-sepolia'].explorer}/tx/${receipt.transactionHash}`);
+    }
   }
   return evidence;
+}
+
+/** paused() as of a given block, retrying while a load-balanced RPC catches up to it. */
+async function pausedAt(client:PublicClient,address:Address,blockNumber:bigint):Promise<boolean> {
+  let lastError:unknown;
+  for(let attempt=0;attempt<6;attempt++) {
+    try {return await client.readContract({address,abi:vaultAbi,functionName:'paused',blockNumber});}
+    catch(error) {lastError=error;await Bun.sleep(2000);}
+  }
+  throw lastError;
+}
+
+const diagnosticAbi=parseAbi([
+  'function onReport(bytes metadata,bytes report)',
+  'function forwarder() view returns (address)',
+  'error Unauthorized()','error InvalidReport()','error UnsupportedReport()','error WrongTarget()','error UnsupportedAction()','error StaleReport()',
+]);
+const revertData=(error:any):Hex|undefined=>{
+  for(let e=error;e;e=e.cause) {
+    if(typeof e.data==='string'&&e.data.startsWith('0x')) return e.data as Hex;
+    if(typeof e.data?.data==='string') return e.data.data as Hex;
+  }
+  return undefined;
+};
+
+/**
+ * Explains a pause that did not verify: what the receipt holds, which
+ * forwarder sent it versus the one the vault trusts, and what the vault says
+ * when this exact report is replayed against chain state just before it.
+ */
+export async function diagnosePause(client:PublicClient,vault:Address,receipt:{transactionHash:string;status:string;blockNumber:bigint;to:string|null;logs:readonly {address:string;data:Hex;topics:readonly Hex[]}[]},spec:ExecutionSpecification,evidence:ExecutionEvidence):Promise<string[]> {
+  const notes=[`transaction status ${receipt.status} in block ${receipt.blockNumber}, sent to ${receipt.to}`];
+  const fromVault=receipt.logs.filter(log=>log.address.toLowerCase()===vault.toLowerCase());
+  notes.push(`${receipt.logs.length} log(s) from ${[...new Set(receipt.logs.map(log=>log.address))].join(', ')||'nobody'}; ${fromVault.length} from the vault`);
+  for(const log of fromVault) {
+    try {const event=decodeEventLog({abi:vaultAbi,data:log.data,topics:log.topics as [Hex,...Hex[]]});notes.push(`vault emitted ${event.eventName} ${JSON.stringify(event.args,(_,v)=>typeof v==='bigint'?v.toString():v)}`);}
+    catch {notes.push('vault emitted an event this runner does not recognise');}
+  }
+  const trusted=await client.readContract({address:vault,abi:diagnosticAbi,functionName:'forwarder'});
+  notes.push(`vault trusts forwarder ${trusted}${receipt.to&&receipt.to.toLowerCase()!==trusted.toLowerCase()?` — but the CRE transaction went to ${receipt.to}; redeploy with ORIGINS_SEPOLIA_FORWARDER=${receipt.to}`:''}`);
+  const report=encodePauseReport({target:vault,chainId:NETWORKS['ethereum-sepolia'].chainId,runId:spec.runId,revision:spec.revision,policyHash:spec.policyHash as Hex,decidedAt:Math.floor(Date.parse(evidence.decidedAt)/1000)});
+  for(const sender of [...new Set([trusted,receipt.to].filter(Boolean) as string[])]) {
+    try {
+      await client.call({account:sender as Address,to:vault,data:encodeFunctionData({abi:diagnosticAbi,functionName:'onReport',args:['0x',report]}),blockNumber:receipt.blockNumber-1n});
+      notes.push(`replaying this report from ${sender} before that block succeeds`);
+    } catch(error) {
+      const data=revertData(error);
+      let reason='reverted';
+      if(data) try {reason=`reverts ${decodeErrorResult({abi:diagnosticAbi,data}).errorName}`;} catch {reason=`reverts with data ${data.slice(0,10)}`;}
+      notes.push(`replaying this report from ${sender} before that block ${reason}`);
+    }
+  }
+  return notes;
 }
 
 /**
