@@ -52,11 +52,11 @@
   },
   "state": {
     "stateVersion": 2,
-    "sessionId": "2d5cf5ff-8495-4eaf-8a45-960084c6e3e3",
+    "sessionId": "95713e64-ce0d-4813-8bed-03400007b585",
     "seq": 5,
     "mode": "run",
     "focus": {
-      "objectId": "run:run-36191722-6c9b-4b1d-a21a-1e8f5bb16881",
+      "objectId": "run:run-a6f30ef4-93c4-4643-bf91-3284f87b2302",
       "label": "Execution v01"
     },
     "previousFocus": [
@@ -66,12 +66,12 @@
       {
         "name": "Treasury policy",
         "objectId": "workflow:treasury",
-        "at": "2026-10-07T05:46:59.221Z"
+        "at": "2026-10-07T09:26:27.136Z"
       },
       {
         "name": "Execution v01",
-        "objectId": "run:run-36191722-6c9b-4b1d-a21a-1e8f5bb16881",
-        "at": "2026-10-07T05:46:59.222Z"
+        "objectId": "run:run-a6f30ef4-93c4-4643-bf91-3284f87b2302",
+        "at": "2026-10-07T09:26:27.137Z"
       }
     ],
     "objects": [
@@ -89,8 +89,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T05:46:55.220Z",
-          "fetchedAt": "2026-10-07T05:46:59.220Z"
+          "observedAt": "2026-10-07T09:26:23.135Z",
+          "fetchedAt": "2026-10-07T09:26:27.135Z"
         },
         "visible": false,
         "pinned": false
@@ -113,8 +113,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T05:46:55.220Z",
-          "fetchedAt": "2026-10-07T05:46:59.220Z"
+          "observedAt": "2026-10-07T09:26:23.135Z",
+          "fetchedAt": "2026-10-07T09:26:27.135Z"
         },
         "visible": true,
         "pinned": false
@@ -134,8 +134,8 @@
           "source": "Local rehearsal fixture",
           "kind": "fixture",
           "label": "Fixture vault · no deployed contract",
-          "observedAt": "2026-10-07T05:46:59.220Z",
-          "fetchedAt": "2026-10-07T05:46:59.220Z"
+          "observedAt": "2026-10-07T09:26:27.135Z",
+          "fetchedAt": "2026-10-07T09:26:27.135Z"
         },
         "visible": true,
         "pinned": false
@@ -150,14 +150,15 @@
           "input": "eth",
           "op": "<",
           "value": 3000,
-          "source": "Coinbase ETH-USD trade"
+          "source": "Coinbase ETH-USD trade",
+          "root": false
         },
         "visible": true,
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T05:46:59.221Z",
-          "fetchedAt": "2026-10-07T05:46:59.221Z",
+          "observedAt": "2026-10-07T09:26:27.136Z",
+          "fetchedAt": "2026-10-07T09:26:27.136Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -172,14 +173,39 @@
           "input": "btc",
           "op": "<",
           "value": 80000,
-          "source": "Chainlink BTC/USD (mainnet)"
+          "source": "Chainlink BTC/USD (mainnet)",
+          "root": false
         },
         "visible": true,
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T05:46:59.221Z",
-          "fetchedAt": "2026-10-07T05:46:59.221Z",
+          "observedAt": "2026-10-07T09:26:27.136Z",
+          "fetchedAt": "2026-10-07T09:26:27.136Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:both",
+        "kind": "condition",
+        "label": "All of 2 conditions",
+        "data": {
+          "id": "both",
+          "kind": "and",
+          "inputs": [
+            "ethUnder",
+            "btcUnder"
+          ],
+          "logic": true,
+          "root": true
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T09:26:27.136Z",
+          "fetchedAt": "2026-10-07T09:26:27.136Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -196,8 +222,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T05:46:59.221Z",
-          "fetchedAt": "2026-10-07T05:46:59.221Z",
+          "observedAt": "2026-10-07T09:26:27.136Z",
+          "fetchedAt": "2026-10-07T09:26:27.136Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -217,20 +243,20 @@
         "label": "compares"
       },
       {
-        "id": "out-ethUnder",
+        "id": "in-both-0",
         "from": "condition:ethUnder",
-        "to": "action:pause",
-        "label": "if true"
+        "to": "condition:both",
+        "label": "and"
       },
       {
-        "id": "in-btcUnder",
-        "from": "feed:btc-usd",
-        "to": "condition:btcUnder",
-        "label": "compares"
-      },
-      {
-        "id": "out-btcUnder",
+        "id": "in-both-1",
         "from": "condition:btcUnder",
+        "to": "condition:both",
+        "label": "and"
+      },
+      {
+        "id": "out-root",
+        "from": "condition:both",
         "to": "action:pause",
         "label": "if true"
       },
@@ -247,7 +273,7 @@
       "threshold": 3000,
       "maxAgeSeconds": null,
       "skipPaused": false,
-      "createdAt": "2026-10-07T05:46:59.221Z",
+      "createdAt": "2026-10-07T09:26:27.136Z",
       "reason": "Composed condition graph",
       "graph": {
         "nodes": [
@@ -304,7 +330,7 @@
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T05:46:59.221Z",
+          "createdAt": "2026-10-07T09:26:27.136Z",
           "reason": "Composed condition graph",
           "graph": {
             "nodes": [
@@ -360,14 +386,14 @@
     },
     "runs": [
       {
-        "id": "run-36191722-6c9b-4b1d-a21a-1e8f5bb16881",
+        "id": "run-a6f30ef4-93c4-4643-bf91-3284f87b2302",
         "revision": 1,
         "snapshot": {
           "revision": 1,
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T05:46:59.221Z",
+          "createdAt": "2026-10-07T09:26:27.136Z",
           "reason": "Composed condition graph",
           "graph": {
             "nodes": [
@@ -421,57 +447,57 @@
         "policyHash": "0xff8b8dd8f93ae1b5c2c22aa0ab7accc4988b18ffa9b182d06083a5fcefd621ee",
         "action": "pause-vault",
         "status": "failed",
-        "startedAt": "2026-10-07T05:46:59.222Z",
+        "startedAt": "2026-10-07T09:26:27.137Z",
         "executionMode": "Preparing execution",
         "decisions": [],
         "logs": [
           {
-            "at": "2026-10-07T05:46:59.222Z",
+            "at": "2026-10-07T09:26:27.137Z",
             "stage": "queued",
             "message": "Frozen draft revision 1"
           },
           {
-            "at": "2026-10-07T05:46:59.232Z",
+            "at": "2026-10-07T09:26:27.147Z",
             "stage": "fetching",
             "message": "Fetching fresh execution inputs"
           },
           {
-            "at": "2026-10-07T05:46:59.233Z",
+            "at": "2026-10-07T09:26:27.148Z",
             "stage": "failed",
             "message": "Transaction, receiver event, and fresh pause read did not all confirm"
           }
         ],
         "error": "Transaction, receiver event, and fresh pause read did not all confirm",
-        "completedAt": "2026-10-07T05:46:59.233Z"
+        "completedAt": "2026-10-07T09:26:27.148Z"
       }
     ],
     "conversation": [
       {
-        "id": "dc0b18f8-781b-413a-a333-c004f36d9ca0",
+        "id": "d1001699-2e76-4d32-b724-7f3faf74f034",
         "role": "assistant",
-        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T05:46:55.220Z); Grant vault.",
-        "at": "2026-10-07T05:46:59.220Z",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T09:26:23.135Z); Grant vault.",
+        "at": "2026-10-07T09:26:27.135Z",
         "source": "mcp"
       },
       {
-        "id": "2b307d21-5500-41b7-a1eb-e10d2f016911",
+        "id": "cf8fde8a-1c44-4151-9ca5-2237d0996c1c",
         "role": "assistant",
         "text": "Revision 1. Pause spending when (Coinbase ETH-USD trade < $3,000 and Chainlink BTC/USD (mainnet) < $80,000). Execution fetches Coinbase ETH-USD trade and Chainlink BTC/USD (mainnet).",
-        "at": "2026-10-07T05:46:59.222Z",
+        "at": "2026-10-07T09:26:27.136Z",
         "source": "mcp"
       },
       {
-        "id": "87c449ed-dd24-4e99-88fd-8a5ed2a45b7d",
+        "id": "e4f5cf39-8995-4f7a-9e8c-a9e9a20130e8",
         "role": "assistant",
-        "text": "Run run-36191722-6c9b-4b1d-a21a-1e8f5bb16881 started against immutable revision 1.",
-        "at": "2026-10-07T05:46:59.222Z",
+        "text": "Run run-a6f30ef4-93c4-4643-bf91-3284f87b2302 started against immutable revision 1.",
+        "at": "2026-10-07T09:26:27.137Z",
         "source": "mcp"
       },
       {
-        "id": "24287dc5-5199-4a19-8f2c-7ee1d60d4477",
+        "id": "8d11380c-eaa4-46e7-aad9-7eef36d2c61f",
         "role": "assistant",
         "text": "Execution failed: Transaction, receiver event, and fresh pause read did not all confirm",
-        "at": "2026-10-07T05:46:59.233Z",
+        "at": "2026-10-07T09:26:27.148Z",
         "source": "mcp"
       }
     ],
@@ -484,22 +510,22 @@
       {
         "operationId": "d",
         "tool": "discover_objects",
-        "receivedAt": "2026-10-07T05:46:59.220Z",
-        "committedAt": "2026-10-07T05:46:59.220Z",
+        "receivedAt": "2026-10-07T09:26:27.135Z",
+        "committedAt": "2026-10-07T09:26:27.135Z",
         "commitMs": 0.15
       },
       {
         "operationId": "c",
         "tool": "compose_graph",
-        "receivedAt": "2026-10-07T05:46:59.221Z",
-        "committedAt": "2026-10-07T05:46:59.222Z",
-        "commitMs": 0.78
+        "receivedAt": "2026-10-07T09:26:27.136Z",
+        "committedAt": "2026-10-07T09:26:27.136Z",
+        "commitMs": 0.75
       },
       {
         "operationId": "r",
         "tool": "run_workflow",
-        "receivedAt": "2026-10-07T05:46:59.222Z",
-        "committedAt": "2026-10-07T05:46:59.222Z",
+        "receivedAt": "2026-10-07T09:26:27.137Z",
+        "committedAt": "2026-10-07T09:26:27.137Z",
         "commitMs": 0.06
       }
     ],
@@ -510,7 +536,7 @@
       "voice": "Planned utterances · actual desktop voice unverified",
       "mcp": "Semantic tools · official MCP stdio transport"
     },
-    "inspectedRunId": "run-36191722-6c9b-4b1d-a21a-1e8f5bb16881",
+    "inspectedRunId": "run-a6f30ef4-93c4-4643-bf91-3284f87b2302",
     "canUndoClear": false
   }
 }

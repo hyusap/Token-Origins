@@ -35,6 +35,8 @@ export interface WorkflowRevision {
   graph: PolicyGraph;
   /** Structural hash of graph; the receiver event carries the same value. */
   policyHash?: string;
+  /** Set on a revision created by undo: the revision whose policy it restored. */
+  restores?: number;
 }
 export interface Workflow {
   id: string;

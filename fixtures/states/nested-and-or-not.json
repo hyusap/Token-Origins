@@ -68,7 +68,7 @@
   },
   "state": {
     "stateVersion": 2,
-    "sessionId": "bf0ccd76-f556-40df-9c32-fde4693b9b16",
+    "sessionId": "0d22096f-efef-48b7-858a-d2e4d2f09cb4",
     "seq": 2,
     "mode": "compose",
     "focus": {
@@ -80,7 +80,7 @@
       {
         "name": "Treasury policy",
         "objectId": "workflow:treasury",
-        "at": "2026-10-07T05:46:59.133Z"
+        "at": "2026-10-07T09:26:27.048Z"
       }
     ],
     "objects": [
@@ -98,8 +98,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T05:46:55.129Z",
-          "fetchedAt": "2026-10-07T05:46:59.129Z"
+          "observedAt": "2026-10-07T09:26:23.044Z",
+          "fetchedAt": "2026-10-07T09:26:27.044Z"
         },
         "visible": false,
         "pinned": false
@@ -122,8 +122,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T05:46:55.129Z",
-          "fetchedAt": "2026-10-07T05:46:59.129Z"
+          "observedAt": "2026-10-07T09:26:23.044Z",
+          "fetchedAt": "2026-10-07T09:26:27.044Z"
         },
         "visible": true,
         "pinned": false
@@ -143,8 +143,8 @@
           "source": "Local rehearsal fixture",
           "kind": "fixture",
           "label": "Fixture vault · no deployed contract",
-          "observedAt": "2026-10-07T05:46:59.129Z",
-          "fetchedAt": "2026-10-07T05:46:59.129Z"
+          "observedAt": "2026-10-07T09:26:27.044Z",
+          "fetchedAt": "2026-10-07T09:26:27.044Z"
         },
         "visible": true,
         "pinned": false
@@ -159,14 +159,15 @@
           "input": "eth",
           "op": "<",
           "value": 3000,
-          "source": "Coinbase ETH-USD trade"
+          "source": "Coinbase ETH-USD trade",
+          "root": false
         },
         "visible": true,
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T05:46:59.132Z",
-          "fetchedAt": "2026-10-07T05:46:59.132Z",
+          "observedAt": "2026-10-07T09:26:27.047Z",
+          "fetchedAt": "2026-10-07T09:26:27.047Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -181,14 +182,15 @@
           "input": "btc",
           "op": "<",
           "value": 80000,
-          "source": "Chainlink BTC/USD (mainnet)"
+          "source": "Chainlink BTC/USD (mainnet)",
+          "root": false
         },
         "visible": true,
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T05:46:59.132Z",
-          "fetchedAt": "2026-10-07T05:46:59.132Z",
+          "observedAt": "2026-10-07T09:26:27.047Z",
+          "fetchedAt": "2026-10-07T09:26:27.047Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -201,14 +203,84 @@
           "id": "vaultPaused",
           "kind": "vault-paused",
           "equals": true,
-          "source": "vault:grant"
+          "source": "vault:grant",
+          "root": false
         },
         "visible": true,
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T05:46:59.132Z",
-          "fetchedAt": "2026-10-07T05:46:59.132Z",
+          "observedAt": "2026-10-07T09:26:27.047Z",
+          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:notPaused",
+        "kind": "condition",
+        "label": "Not (Vault paused)",
+        "data": {
+          "id": "notPaused",
+          "kind": "not",
+          "input": "vaultPaused",
+          "logic": true,
+          "root": false
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T09:26:27.047Z",
+          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:btcOrActive",
+        "kind": "condition",
+        "label": "Any of 2 conditions",
+        "data": {
+          "id": "btcOrActive",
+          "kind": "or",
+          "inputs": [
+            "btcUnder",
+            "notPaused"
+          ],
+          "logic": true,
+          "root": false
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T09:26:27.047Z",
+          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:root",
+        "kind": "condition",
+        "label": "All of 2 conditions",
+        "data": {
+          "id": "root",
+          "kind": "and",
+          "inputs": [
+            "ethUnder",
+            "btcOrActive"
+          ],
+          "logic": true,
+          "root": true
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T09:26:27.047Z",
+          "fetchedAt": "2026-10-07T09:26:27.047Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -225,8 +297,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T05:46:59.132Z",
-          "fetchedAt": "2026-10-07T05:46:59.132Z",
+          "observedAt": "2026-10-07T09:26:27.047Z",
+          "fetchedAt": "2026-10-07T09:26:27.047Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -246,26 +318,44 @@
         "label": "compares"
       },
       {
-        "id": "out-ethUnder",
-        "from": "condition:ethUnder",
-        "to": "action:pause",
-        "label": "if true"
+        "id": "in-vaultPaused",
+        "from": "vault:grant",
+        "to": "condition:vaultPaused",
+        "label": "state"
       },
       {
-        "id": "in-btcUnder",
-        "from": "feed:btc-usd",
-        "to": "condition:btcUnder",
-        "label": "compares"
-      },
-      {
-        "id": "out-btcUnder",
-        "from": "condition:btcUnder",
-        "to": "action:pause",
-        "label": "if true"
-      },
-      {
-        "id": "out-vaultPaused",
+        "id": "in-notPaused-0",
         "from": "condition:vaultPaused",
+        "to": "condition:notPaused",
+        "label": "negates"
+      },
+      {
+        "id": "in-btcOrActive-0",
+        "from": "condition:btcUnder",
+        "to": "condition:btcOrActive",
+        "label": "or"
+      },
+      {
+        "id": "in-btcOrActive-1",
+        "from": "condition:notPaused",
+        "to": "condition:btcOrActive",
+        "label": "or"
+      },
+      {
+        "id": "in-root-0",
+        "from": "condition:ethUnder",
+        "to": "condition:root",
+        "label": "and"
+      },
+      {
+        "id": "in-root-1",
+        "from": "condition:btcOrActive",
+        "to": "condition:root",
+        "label": "and"
+      },
+      {
+        "id": "out-root",
+        "from": "condition:root",
         "to": "action:pause",
         "label": "if true"
       },
@@ -282,7 +372,7 @@
       "threshold": 3000,
       "maxAgeSeconds": null,
       "skipPaused": false,
-      "createdAt": "2026-10-07T05:46:59.131Z",
+      "createdAt": "2026-10-07T09:26:27.046Z",
       "reason": "Composed condition graph",
       "graph": {
         "nodes": [
@@ -357,7 +447,7 @@
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T05:46:59.131Z",
+          "createdAt": "2026-10-07T09:26:27.046Z",
           "reason": "Composed condition graph",
           "graph": {
             "nodes": [
@@ -432,17 +522,17 @@
     "runs": [],
     "conversation": [
       {
-        "id": "59ee274c-dc66-4f07-9432-e1e5808408e9",
+        "id": "58e256c7-119d-4cef-8afc-e7bc7bb338fb",
         "role": "assistant",
-        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T05:46:55.129Z); Grant vault.",
-        "at": "2026-10-07T05:46:59.129Z",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T09:26:23.044Z); Grant vault.",
+        "at": "2026-10-07T09:26:27.044Z",
         "source": "mcp"
       },
       {
-        "id": "d49393cb-b80b-4326-8992-ef2c2668659b",
+        "id": "619faa9b-3968-4b43-b091-b77a65bde30b",
         "role": "assistant",
         "text": "Revision 1. Pause spending when (Coinbase ETH-USD trade < $3,000 and (Chainlink BTC/USD (mainnet) < $80,000 or not (vault is paused))). Execution fetches Coinbase ETH-USD trade and Chainlink BTC/USD (mainnet).",
-        "at": "2026-10-07T05:46:59.133Z",
+        "at": "2026-10-07T09:26:27.048Z",
         "source": "mcp"
       }
     ],
@@ -455,16 +545,16 @@
       {
         "operationId": "d",
         "tool": "discover_objects",
-        "receivedAt": "2026-10-07T05:46:59.129Z",
-        "committedAt": "2026-10-07T05:46:59.129Z",
-        "commitMs": 0.32
+        "receivedAt": "2026-10-07T09:26:27.044Z",
+        "committedAt": "2026-10-07T09:26:27.044Z",
+        "commitMs": 0.1
       },
       {
         "operationId": "c",
         "tool": "compose_graph",
-        "receivedAt": "2026-10-07T05:46:59.129Z",
-        "committedAt": "2026-10-07T05:46:59.133Z",
-        "commitMs": 3.64
+        "receivedAt": "2026-10-07T09:26:27.045Z",
+        "committedAt": "2026-10-07T09:26:27.048Z",
+        "commitMs": 3.57
       }
     ],
     "capabilities": {

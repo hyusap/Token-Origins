@@ -164,7 +164,7 @@ test("composing before discovery is refused", async () => {
     operationId: "early",
   });
   expect(result.ok).toBe(false);
-  expect(result.error).toContain("Discover price and vault");
+  expect(result.error).toContain("Discover the grant vault");
 });
 
 test("describe_policy reports the rule and the sources execution will fetch", async () => {

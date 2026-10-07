@@ -75,17 +75,15 @@ export function listFeedSymbols(): string[] {
 
 /** Accepts "BTC", "btc", "bitcoin", "BTC/USD", "$BTC". Returns null when unknown. */
 export function resolveFeedSymbol(input: string): FeedDefinition | null {
-  const cleaned = input
-    .trim()
-    .toLowerCase()
-    .replace(/^\$/, "")
-    .replace(/[\/\-\s]*(usd|usdc|dollars?)$/, "")
-    .trim();
-  if (!cleaned) return null;
-  const direct = CHAINLINK_FEEDS[cleaned.toUpperCase()];
-  if (direct) return direct;
-  const aliased = ALIASES[cleaned];
-  return aliased ? CHAINLINK_FEEDS[aliased]! : null;
+  const raw = input.trim().toLowerCase().replace(/^\$/, "").trim();
+  // An exact symbol or name wins before any suffix is stripped, so "USDC" is
+  // USD Coin rather than "USD" + "C".
+  const lookup = (value: string) => CHAINLINK_FEEDS[value.toUpperCase()] ?? (ALIASES[value] ? CHAINLINK_FEEDS[ALIASES[value]!]! : null);
+  if (!raw) return null;
+  const exact = lookup(raw);
+  if (exact) return exact;
+  const cleaned = raw.replace(/[\/\-\s]*(usd|dollars?)$/, "").trim();
+  return cleaned && cleaned !== raw ? lookup(cleaned) : null;
 }
 
 export const feedId = (symbol: string, network: Network = DEFAULT_FEED_NETWORK) =>
@@ -195,7 +193,7 @@ export async function fetchFeedPrice(
   return {
     id: feedId(feed.symbol, network),
     kind: "feed",
-    label: network === DEFAULT_FEED_NETWORK ? `${feed.symbol} / USD` : `${feed.symbol} / USD · Sepolia`,
+    label: network === DEFAULT_FEED_NETWORK ? `${feed.symbol} / USD · Chainlink` : `${feed.symbol} / USD · Chainlink Sepolia`,
     visible: true,
     pinned: false,
     data: {

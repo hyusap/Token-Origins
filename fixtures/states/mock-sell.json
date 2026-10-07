@@ -35,11 +35,11 @@
   },
   "state": {
     "stateVersion": 2,
-    "sessionId": "55d2216c-ff65-41bf-8fa8-5ff0ee838b85",
+    "sessionId": "626caca5-8d8a-4d83-a114-dedb70696fe1",
     "seq": 11,
     "mode": "run",
     "focus": {
-      "objectId": "run:run-d4b385ac-9b6f-4abc-9992-dec7e608f1e0",
+      "objectId": "run:run-94aaae31-866f-4ebe-a3b1-9483fe1af5cb",
       "label": "Execution v01"
     },
     "previousFocus": [
@@ -49,12 +49,12 @@
       {
         "name": "Treasury policy",
         "objectId": "workflow:treasury",
-        "at": "2026-10-07T05:46:59.206Z"
+        "at": "2026-10-07T09:26:27.121Z"
       },
       {
         "name": "Execution v01",
-        "objectId": "run:run-d4b385ac-9b6f-4abc-9992-dec7e608f1e0",
-        "at": "2026-10-07T05:46:59.206Z"
+        "objectId": "run:run-94aaae31-866f-4ebe-a3b1-9483fe1af5cb",
+        "at": "2026-10-07T09:26:27.121Z"
       }
     ],
     "objects": [
@@ -72,8 +72,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T05:46:55.205Z",
-          "fetchedAt": "2026-10-07T05:46:59.205Z"
+          "observedAt": "2026-10-07T09:26:23.120Z",
+          "fetchedAt": "2026-10-07T09:26:27.120Z"
         },
         "visible": false,
         "pinned": false
@@ -96,8 +96,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T05:46:55.205Z",
-          "fetchedAt": "2026-10-07T05:46:59.205Z"
+          "observedAt": "2026-10-07T09:26:23.120Z",
+          "fetchedAt": "2026-10-07T09:26:27.120Z"
         },
         "visible": true,
         "pinned": false
@@ -117,8 +117,8 @@
           "source": "Local rehearsal fixture",
           "kind": "fixture",
           "label": "Fixture vault · no deployed contract",
-          "observedAt": "2026-10-07T05:46:59.205Z",
-          "fetchedAt": "2026-10-07T05:46:59.205Z"
+          "observedAt": "2026-10-07T09:26:27.120Z",
+          "fetchedAt": "2026-10-07T09:26:27.120Z"
         },
         "visible": true,
         "pinned": false
@@ -133,14 +133,15 @@
           "input": "btc",
           "op": "<",
           "value": 90000,
-          "source": "Chainlink BTC/USD (mainnet)"
+          "source": "Chainlink BTC/USD (mainnet)",
+          "root": true
         },
         "visible": true,
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T05:46:59.205Z",
-          "fetchedAt": "2026-10-07T05:46:59.205Z",
+          "observedAt": "2026-10-07T09:26:27.121Z",
+          "fetchedAt": "2026-10-07T09:26:27.121Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -160,8 +161,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T05:46:59.205Z",
-          "fetchedAt": "2026-10-07T05:46:59.205Z",
+          "observedAt": "2026-10-07T09:26:27.121Z",
+          "fetchedAt": "2026-10-07T09:26:27.121Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -190,8 +191,8 @@
           "chainId": 1,
           "address": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
           "label": "Chainlink BTC / USD aggregator · Ethereum mainnet",
-          "observedAt": "2026-10-07T05:21:59.218Z",
-          "fetchedAt": "2026-10-07T05:46:59.218Z"
+          "observedAt": "2026-10-07T09:01:27.133Z",
+          "fetchedAt": "2026-10-07T09:26:27.133Z"
         },
         "visible": true,
         "pinned": false
@@ -199,19 +200,13 @@
     ],
     "edges": [
       {
-        "id": "e1",
-        "from": "source:coinbase",
-        "to": "price:eth-usd",
-        "label": "observes"
-      },
-      {
         "id": "in-drop",
         "from": "feed:btc-usd",
         "to": "condition:drop",
         "label": "compares"
       },
       {
-        "id": "out-drop",
+        "id": "out-root",
         "from": "condition:drop",
         "to": "action:pause",
         "label": "if true"
@@ -229,7 +224,7 @@
       "threshold": 3000,
       "maxAgeSeconds": null,
       "skipPaused": false,
-      "createdAt": "2026-10-07T05:46:59.205Z",
+      "createdAt": "2026-10-07T09:26:27.120Z",
       "reason": "Composed condition graph",
       "graph": {
         "nodes": [
@@ -266,7 +261,7 @@
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T05:46:59.205Z",
+          "createdAt": "2026-10-07T09:26:27.120Z",
           "reason": "Composed condition graph",
           "graph": {
             "nodes": [
@@ -302,14 +297,14 @@
     },
     "runs": [
       {
-        "id": "run-d4b385ac-9b6f-4abc-9992-dec7e608f1e0",
+        "id": "run-94aaae31-866f-4ebe-a3b1-9483fe1af5cb",
         "revision": 1,
         "snapshot": {
           "revision": 1,
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T05:46:59.205Z",
+          "createdAt": "2026-10-07T09:26:27.120Z",
           "reason": "Composed condition graph",
           "graph": {
             "nodes": [
@@ -343,7 +338,7 @@
         "policyHash": "0x2e654a5d3330f74a0d2dc7ba8d981e340d88b43d88336ae3383ffd3c06650e59",
         "action": "sell",
         "status": "confirmed",
-        "startedAt": "2026-10-07T05:46:59.206Z",
+        "startedAt": "2026-10-07T09:26:27.121Z",
         "executionMode": "Local policy rehearsal · fixture vault · no transaction",
         "decisions": [
           {
@@ -373,42 +368,42 @@
         ],
         "logs": [
           {
-            "at": "2026-10-07T05:46:59.206Z",
+            "at": "2026-10-07T09:26:27.121Z",
             "stage": "queued",
             "message": "Frozen draft revision 1"
           },
           {
-            "at": "2026-10-07T05:46:59.216Z",
+            "at": "2026-10-07T09:26:27.131Z",
             "stage": "fetching",
             "message": "Fetching fresh execution inputs"
           },
           {
-            "at": "2026-10-07T05:46:59.217Z",
+            "at": "2026-10-07T09:26:27.132Z",
             "stage": "reporting",
             "message": "Fixture rehearsal · live inputs, in-memory vault, no transaction"
           },
           {
-            "at": "2026-10-07T05:46:59.217Z",
+            "at": "2026-10-07T09:26:27.132Z",
             "stage": "fetching",
             "message": "Fetching Chainlink BTC/USD (mainnet)"
           },
           {
-            "at": "2026-10-07T05:46:59.218Z",
+            "at": "2026-10-07T09:26:27.133Z",
             "stage": "evaluating",
             "message": "PASS drop: Chainlink BTC/USD (mainnet) $85,000.00 < $90,000.00"
           },
           {
-            "at": "2026-10-07T05:46:59.218Z",
+            "at": "2026-10-07T09:26:27.133Z",
             "stage": "evaluating",
             "message": "PASS root: Policy root \"drop\" evaluated true"
           },
           {
-            "at": "2026-10-07T05:46:59.218Z",
+            "at": "2026-10-07T09:26:27.133Z",
             "stage": "evaluating",
             "message": "PASS source:chainlink-feed:ethereum-mainnet:BTC: Chainlink BTC/USD (mainnet) observed 1500.0s ago; limit 93600s"
           },
           {
-            "at": "2026-10-07T05:46:59.219Z",
+            "at": "2026-10-07T09:26:27.133Z",
             "stage": "reporting",
             "message": "SIMULATED sell 0.5 BTC at $85,000.00 reference (mock-venue); no transaction, no asset moved"
           }
@@ -425,8 +420,8 @@
             "usd": 85000,
             "raw": "8500000000000",
             "roundId": "110680464442257320164",
-            "observedAt": "2026-10-07T05:21:59.218Z",
-            "fetchedAt": "2026-10-07T05:46:59.218Z"
+            "observedAt": "2026-10-07T09:01:27.133Z",
+            "fetchedAt": "2026-10-07T09:26:27.133Z"
           }
         ],
         "evidence": {
@@ -439,41 +434,41 @@
             "referencePriceUsd": 85000,
             "notionalUsd": 42500,
             "referenceSource": "Chainlink BTC/USD (mainnet)",
-            "observedAt": "2026-10-07T05:21:59.218Z",
-            "placedAt": "2026-10-07T05:46:59.218Z"
+            "observedAt": "2026-10-07T09:01:27.133Z",
+            "placedAt": "2026-10-07T09:26:27.133Z"
           },
           "verification": "Simulated order; no transaction and no asset moved"
         },
-        "completedAt": "2026-10-07T05:46:59.219Z"
+        "completedAt": "2026-10-07T09:26:27.134Z"
       }
     ],
     "conversation": [
       {
-        "id": "1b3819f4-9b9e-4a27-bae3-cbbd1425e222",
+        "id": "76e6ef17-adb9-4772-b0e6-64dc4fcfa67e",
         "role": "assistant",
-        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T05:46:55.205Z); Grant vault.",
-        "at": "2026-10-07T05:46:59.205Z",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T09:26:23.120Z); Grant vault.",
+        "at": "2026-10-07T09:26:27.120Z",
         "source": "mcp"
       },
       {
-        "id": "0a83a17b-6805-41fb-9dfd-4ff22e6a345e",
+        "id": "dafe3c25-ffb1-44eb-854c-6c501ac135a6",
         "role": "assistant",
         "text": "Revision 1. Submit a simulated sell of 0.5 BTC when Chainlink BTC/USD (mainnet) < $90,000. Execution fetches Chainlink BTC/USD (mainnet). The sell is simulated and runs only in local rehearsal; no asset moves.",
-        "at": "2026-10-07T05:46:59.206Z",
+        "at": "2026-10-07T09:26:27.121Z",
         "source": "mcp"
       },
       {
-        "id": "33947930-39b3-4344-a3e8-392609b549a6",
+        "id": "e93e83c8-f528-4a70-b942-b934ba0d25c3",
         "role": "assistant",
-        "text": "Run run-d4b385ac-9b6f-4abc-9992-dec7e608f1e0 started against immutable revision 1.",
-        "at": "2026-10-07T05:46:59.206Z",
+        "text": "Run run-94aaae31-866f-4ebe-a3b1-9483fe1af5cb started against immutable revision 1.",
+        "at": "2026-10-07T09:26:27.121Z",
         "source": "mcp"
       },
       {
-        "id": "5ce23bc2-6b69-4c15-90ca-8b94ba1de456",
+        "id": "125f3739-7d30-457a-a26f-f20dc8d86801",
         "role": "assistant",
         "text": "Revision 1: simulated sell of 0.5 BTC; no transaction, no asset moved.",
-        "at": "2026-10-07T05:46:59.219Z",
+        "at": "2026-10-07T09:26:27.134Z",
         "source": "mcp"
       }
     ],
@@ -486,22 +481,22 @@
       {
         "operationId": "d",
         "tool": "discover_objects",
-        "receivedAt": "2026-10-07T05:46:59.205Z",
-        "committedAt": "2026-10-07T05:46:59.205Z",
-        "commitMs": 0.13
+        "receivedAt": "2026-10-07T09:26:27.120Z",
+        "committedAt": "2026-10-07T09:26:27.120Z",
+        "commitMs": 0.11
       },
       {
         "operationId": "c",
         "tool": "compose_graph",
-        "receivedAt": "2026-10-07T05:46:59.205Z",
-        "committedAt": "2026-10-07T05:46:59.206Z",
-        "commitMs": 0.68
+        "receivedAt": "2026-10-07T09:26:27.120Z",
+        "committedAt": "2026-10-07T09:26:27.121Z",
+        "commitMs": 0.66
       },
       {
         "operationId": "r",
         "tool": "run_workflow",
-        "receivedAt": "2026-10-07T05:46:59.206Z",
-        "committedAt": "2026-10-07T05:46:59.206Z",
+        "receivedAt": "2026-10-07T09:26:27.121Z",
+        "committedAt": "2026-10-07T09:26:27.121Z",
         "commitMs": 0.05
       }
     ],
@@ -512,7 +507,7 @@
       "voice": "Planned utterances · actual desktop voice unverified",
       "mcp": "Semantic tools · official MCP stdio transport"
     },
-    "inspectedRunId": "run-d4b385ac-9b6f-4abc-9992-dec7e608f1e0",
+    "inspectedRunId": "run-94aaae31-866f-4ebe-a3b1-9483fe1af5cb",
     "canUndoClear": false
   }
 }

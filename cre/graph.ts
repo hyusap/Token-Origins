@@ -489,10 +489,18 @@ export function describeAction(action: PolicyAction): string {
 /** One readable sentence per graph, for the agent's narration and the canvas. */
 export function describeGraph(graph: PolicyGraph): string {
   const byId = new Map(graph.nodes.map((node) => [node.id, node] as const));
-  const seen = new Set<string>();
+  // A node used by several parents (a price read by a compare and a freshness
+  // check) is phrased again each time. Validated graphs are acyclic; memoising
+  // keeps shared subtrees cheap.
+  const memo = new Map<string, string>();
   const phrase = (nodeId: string): string => {
-    if (seen.has(nodeId)) return nodeId;
-    seen.add(nodeId);
+    const cached = memo.get(nodeId);
+    if (cached !== undefined) return cached;
+    const text = phraseNode(nodeId);
+    memo.set(nodeId, text);
+    return text;
+  };
+  const phraseNode = (nodeId: string): string => {
     const node = byId.get(nodeId);
     if (!node) return nodeId;
     switch (node.kind) {

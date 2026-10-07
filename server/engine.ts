@@ -19,6 +19,7 @@ import {
 } from "./chainlink";
 import {
   legacyGraph,
+  readsVault,
   describeGraph,
   describeAction,
   validateGraph,
@@ -218,6 +219,8 @@ export class Engine {
   }
   context() {
     const state = clone(this.state);
+    const exists = new Set(state.objects.map((x) => x.id));
+    state.edges = state.edges.filter((edge) => exists.has(edge.from) && exists.has(edge.to));
     state.canUndoClear = this.isBlank() && !!this.store.latestClearedSession();
     return state;
   }
@@ -251,6 +254,31 @@ export class Engine {
         this.state.objects.find((x) => x.id === this.state.focus.objectId) ||
         null
       );
+    // A pending clarification is answered by naming one of its candidates
+    // ("the bitcoin one" after "which condition?").
+    const pending = this.state.clarification;
+    if (pending) {
+      const bare = ref.replace(/\b(the|one|condition|please|that|this|with|on)\b/g, " ").replace(/\s+/g, " ").trim();
+      const symbol = bare ? resolveFeedSymbol(bare)?.symbol.toLowerCase() : undefined;
+      const words = [bare, symbol].filter((word): word is string => Boolean(word));
+      const matches = pending.candidates
+        .map((id) => this.state.objects.find((x) => x.id === id))
+        .filter((x): x is GraphObject => Boolean(x))
+        .filter((x) => { const text = `${x.id} ${x.label} ${JSON.stringify(x.data)}`.toLowerCase(); return words.length > 0 && words.some((word) => text.includes(word)); });
+      if (matches.length === 1) return matches[0]!;
+    }
+    // "BTC feed", "chainlink BTC", "coinbase BTC": the provider decides which object.
+    const provider = /\b(feed|chainlink|oracle)\b/.test(ref) ? "feed" : /\b(coinbase|trade|exchange)\b/.test(ref) ? "price" : null;
+    if (provider) {
+      const bare = ref.replace(/\b(feed|chainlink|oracle|coinbase|trade|exchange|price|the|sepolia|mainnet)\b/g, " ").replace(/\s+/g, " ").trim();
+      if (bare) {
+        const symbol = (resolveFeedSymbol(bare)?.symbol ?? bare).toUpperCase();
+        const network = /\bsepolia\b/.test(ref) ? "ethereum-sepolia" : DEFAULT_FEED_NETWORK;
+        const match = this.state.objects.find((x) => x.kind === provider && String(x.data.symbol ?? "").toUpperCase() === symbol &&
+          (provider === "price" || (x.data.network ?? DEFAULT_FEED_NETWORK) === network));
+        if (match) return match;
+      }
+    }
     const aliases: Record<string, string> = {
       eth: "price:eth-usd",
       "eth price": "price:eth-usd",
@@ -282,7 +310,7 @@ export class Engine {
       if (object) return object;
     }
     const candidates = this.state.objects.filter(
-      (x) => ["price", "source", "vault", "condition", "action"].includes(ref) ? x.kind === ref : x.label.toLowerCase().includes(ref) || x.kind === ref ||
+      (x) => ["price", "source", "vault", "condition", "action"].includes(ref) ? x.kind === ref && !(ref === "condition" && x.data.logic) : x.label.toLowerCase().includes(ref) || x.kind === ref ||
         (x.kind === "price" && [x.data.symbol, x.data.name, x.data.token, `${x.data.symbol} price`].some(v => typeof v === "string" && v.toLowerCase() === ref)),
     );
     if (candidates.length === 1) return candidates[0]!;
@@ -349,36 +377,48 @@ export class Engine {
     // branches are focusable and inspectable by name. The fixed scalar trio
     // below only describes the single-compare shape.
     if (!isLegacyShape(w.graph)) {
+      // Every non-price node gets a focusable condition object, logic nodes
+      // included, and edges follow the graph's own input references:
+      // inputs → comparisons → AND/OR/NOT → root → action.
+      const byId = new Map(w.graph.nodes.map((node) => [node.id, node] as const));
+      const inputObject = (nodeId: string) => {
+        const node = byId.get(nodeId)!;
+        return node.kind === "price"
+          ? node.source.type === "exchange-trade" ? "price:eth-usd" : feedObjectId(node.source)
+          : `condition:${node.id}`;
+      };
+      const labels = new Map<string, string>();
+      const labelOf = (nodeId: string): string => {
+        const known = labels.get(nodeId);
+        if (known) return known;
+        const node = byId.get(nodeId)!;
+        const source = (input: string) => describeSource((byId.get(input) as Extract<PolicyGraph["nodes"][number], { kind: "price" }>).source);
+        const label =
+          node.kind === "compare" ? `${source(node.input)} ${node.op} $${node.value.toLocaleString("en-US", { maximumFractionDigits: 8 })}`
+          : node.kind === "freshness" ? `${source(node.input)} within ${node.maxAgeSeconds}s`
+          : node.kind === "vault-paused" ? `Vault ${node.equals ? "paused" : "active"}`
+          : node.kind === "not" ? `Not (${labelOf(node.input)})`
+          : node.kind === "and" ? `All of ${node.inputs.length} conditions`
+          : node.kind === "or" ? `Any of ${node.inputs.length} conditions`
+          : node.id;
+        labels.set(nodeId, label);
+        return label;
+      };
       const live = new Set<string>();
       for (const node of w.graph.nodes) {
-        if (
-          node.kind !== "compare" &&
-          node.kind !== "freshness" &&
-          node.kind !== "vault-paused"
-        )
-          continue;
+        if (node.kind === "price") continue;
         const id = `condition:${node.id}`;
         live.add(id);
-        const source =
-          node.kind === "vault-paused"
-            ? "vault:grant"
-            : describeSource(
-                (
-                  w.graph.nodes.find(
-                    (x) => x.id === (node as { input: string }).input,
-                  ) as Extract<PolicyGraph["nodes"][number], { kind: "price" }>
-                ).source,
-              );
+        const logic = node.kind === "and" || node.kind === "or" || node.kind === "not";
         this.object({
           id,
           kind: "condition",
-          label:
-            node.kind === "compare"
-              ? `${source} ${node.op} $${node.value.toLocaleString("en-US")}`
-              : node.kind === "freshness"
-                ? `${source} within ${node.maxAgeSeconds}s`
-                : `Vault ${node.equals ? "paused" : "active"}`,
-          data: { ...node, source },
+          label: labelOf(node.id),
+          data: {
+            ...node,
+            ...(logic ? { logic: true } : { source: node.kind === "vault-paused" ? "vault:grant" : describeSource((byId.get(node.input) as Extract<PolicyGraph["nodes"][number], { kind: "price" }>).source) }),
+            root: node.id === w.graph.root,
+          },
           visible: true,
           pinned: false,
           provenance,
@@ -400,45 +440,28 @@ export class Engine {
         provenance,
       });
       w.summary = describeGraph(w.graph);
-      // Edges describe the composed graph rather than the fixed scalar chain,
-      // so none of them point at condition nodes that no longer exist.
-      const edges: CanvasState["edges"] = [
-        {
-          id: "e1",
-          from: "source:coinbase",
-          to: "price:eth-usd",
-          label: "observes",
-        },
-      ];
-      for (const id of live) {
-        const node = w.graph.nodes.find((x) => `condition:${x.id}` === id)!;
-        if (node.kind !== "vault-paused") {
-          const priceNode = w.graph.nodes.find(
-            (x) => x.id === (node as { input: string }).input,
-          ) as Extract<PolicyGraph["nodes"][number], { kind: "price" }>;
-          edges.push({
-            id: `in-${node.id}`,
-            from:
-              priceNode.source.type === "exchange-trade"
-                ? "price:eth-usd"
-                : feedObjectId(priceNode.source),
-            to: id,
-            label: node.kind === "compare" ? "compares" : "timestamp",
-          });
-        }
-        edges.push({
-          id: `out-${node.id}`,
-          from: id,
-          to: "action:pause",
-          label: "if true",
-        });
+      const edges: CanvasState["edges"] = [];
+      if (collectSources(w.graph).some((source) => source.type === "exchange-trade"))
+        edges.push({ id: "e1", from: "source:coinbase", to: "price:eth-usd", label: "observes" });
+      for (const node of w.graph.nodes) {
+        if (node.kind === "price") continue;
+        const to = `condition:${node.id}`;
+        if (node.kind === "vault-paused") edges.push({ id: `in-${node.id}`, from: "vault:grant", to, label: "state" });
+        else if (node.kind === "compare" || node.kind === "freshness")
+          edges.push({ id: `in-${node.id}`, from: inputObject(node.input), to, label: node.kind === "compare" ? "compares" : "timestamp" });
+        else
+          (node.kind === "not" ? [node.input] : node.inputs).forEach((input, i) =>
+            edges.push({ id: `in-${node.id}-${i}`, from: inputObject(input), to, label: node.kind === "not" ? "negates" : node.kind }));
       }
+      edges.push({ id: "out-root", from: `condition:${w.graph.root}`, to: "action:pause", label: "if true" });
       edges.push({
         id: "e-act",
         from: "action:pause",
         to: "vault:grant",
         label: w.graph.action.type === "sell" ? "simulated · vault unchanged" : "pauses",
       });
+      // Edges to inputs not read yet (an unfetched feed) are kept here and
+      // hidden by context() until that object exists.
       this.state.edges = edges;
       return;
     }
@@ -872,18 +895,19 @@ export class Engine {
               ),
               { code: "REVISION_CONFLICT" },
             );
-          if (
-            !this.state.objects.some((x) => x.kind === "price") ||
-            !this.state.objects.some((x) => x.kind === "vault")
-          )
-            throw new Error(
-              "Discover price and vault before composing a policy",
-            );
           // validateGraph rejects unknown node kinds, dangling edges, cycles,
           // mistyped operands, orphan nodes, unregistered feeds and oversized
           // fetch plans. Nothing about execution depends on node order: the
           // receiver gets the structural policy hash, not a picked threshold.
           const { graph } = validateGraph(args.graph);
+          // Require only what this policy uses: the vault when it pauses or
+          // reads it, and the Coinbase trade when a branch uses it. Feeds are
+          // read at execution and shown as configured inputs until then.
+          const missing = [
+            readsVault(graph) && !this.state.objects.some((x) => x.kind === "vault") && 'the grant vault (discover_objects with objects ["vault"])',
+            collectSources(graph).some((source) => source.type === "exchange-trade") && !this.state.objects.some((x) => x.id === "price:eth-usd") && 'the Coinbase ETH price (discover_objects with tokens ["ETH"])',
+          ].filter(Boolean);
+          if (missing.length) throw new Error(`Discover ${missing.join(" and ")} before composing this policy`);
           const compare = graph.nodes.find((node) => node.id === graph.root);
           const revision: WorkflowRevision = {
             revision: w.revision + 1,
@@ -912,14 +936,19 @@ export class Engine {
               new Error("Draft changed; refresh context before undoing"),
               { code: "REVISION_CONFLICT" },
             );
-          if (w.revisions.length < 2)
-            throw new Error("No prior composed revision to restore");
-          const target = w.revisions.at(-2)!;
-          const revision = {
+          // An undo records which revision it restored, so the next undo steps
+          // further back instead of toggling between the last two.
+          const latest = w.revisions.at(-1);
+          const effective = latest?.restores ?? latest?.revision;
+          const index = w.revisions.findIndex((x) => x.revision === effective);
+          const target = index > 0 ? w.revisions[index - 1] : undefined;
+          if (!target) throw new Error("No earlier revision to restore");
+          const revision: WorkflowRevision = {
             ...target,
             revision: w.revision + 1,
             createdAt: now(),
             reason: `Restore revision ${target.revision}`,
+            restores: target.revision,
           };
           w.revisions.push(revision);
           Object.assign(w, revision);
