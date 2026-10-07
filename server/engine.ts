@@ -33,6 +33,7 @@ import {
   readsVault,
   describeSource,
   isLegacyShape,
+  reportedThreshold,
   policyHash,
   sourceIdentity,
   NETWORKS,
@@ -1068,11 +1069,10 @@ export class Engine {
           if(!this.researchExecution&&graph.action.type!=="pause-vault")throw Object.assign(new Error("Only pause-vault has an implemented CRE receiver workflow; direct Solana execution is disabled"),{code:"CRE_EXECUTION_REQUIRED"});
           if(readsVault(graph)&&!this.state.objects.some(x=>x.kind==='vault'))throw new Error('Discover price and vault required by this policy before composing');
           const target=graph.action.type==='solana-transfer'||this.sources.fetchVault===fetchVault ? await this.frozenTarget(graph) : undefined;
-          const compare = graph.nodes.find((node) => node.id === graph.root);
           const revision: WorkflowRevision = {
             revision: w.revision + 1,
             // The scalar field only describes the legacy single-compare shape.
-            threshold: isLegacyShape(graph) && compare?.kind === "compare" ? compare.value : w.threshold,
+            threshold: isLegacyShape(graph) ? reportedThreshold(graph,w.threshold) : w.threshold,
             maxAgeSeconds: w.maxAgeSeconds,
             skipPaused: w.skipPaused,
             createdAt: now(),

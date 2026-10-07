@@ -506,6 +506,16 @@ export function isLegacyShape(graph: PolicyGraph | undefined | null): boolean {
   );
 }
 
+/**
+ * Order-independent scalar metadata for older clients. Report v2 binds the full
+ * policy hash; this value never replaces the composed predicate or enters its report.
+ */
+export function reportedThreshold(graph: PolicyGraph, fallback: number): number {
+  const priceIds = new Set(graph.nodes.filter((node): node is Extract<GraphNode,{kind:'price'}> => node.kind==='price'&&node.source.type==='exchange-trade').map(node=>node.id));
+  const bounds=graph.nodes.filter((node):node is Extract<GraphNode,{kind:'compare'}> => node.kind==='compare'&&(node.op==='<'||node.op==='<=')&&priceIds.has(node.input)).map(node=>node.value);
+  return bounds.length?Math.min(...bounds):fallback;
+}
+
 export function describeAction(action: PolicyAction): string {
   return action.type==='pause-vault' ? 'Pause grant vault spending' : `Transfer ${action.amountLamports/1_000_000_000} SOL to ${action.recipient} on devnet`;
 }

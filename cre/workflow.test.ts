@@ -160,3 +160,34 @@ test('a missing or inconsistent evidence chunk is an error, never partial eviden
   expect(()=>joinEvidenceChunks(chunks.filter((_,i)=>i!==1).join('\n'))).toThrow(/chunk 2\/\d+ is missing/);
   expect(()=>joinEvidenceChunks('no evidence here')).toThrow(/no structured execution evidence/);
 });
+
+function assertUnsupportedSellBeforeCapabilities(answer:bigint) {
+  const t=setup(2700);
+  const updatedAt=Math.floor(now/1000)-2400;
+  const feed=withFeed(mainnet,FEED_REGISTRY['ethereum-mainnet'].BTC!,answer,updatedAt);
+  let feedReads=0,vaultReads=0;
+  feed.latestRoundData=()=>{feedReads++;return [7n,answer,BigInt(updatedAt),BigInt(updatedAt),7n];};
+  t.contract.paused=()=>{vaultReads++;return false;};
+  t.contract.reportVersion=()=>{vaultReads++;return 2n;};
+  const graph={nodes:[
+    {id:'btc',kind:'price',source:{type:'chainlink-feed',symbol:'BTC',network:'ethereum-mainnet'}},
+    {id:'drop',kind:'compare',input:'btc',op:'<',value:90_000}],
+    root:'drop',action:{type:'pause-vault'}};
+  const validSpec=specFor(graph);
+  const sellSpec={...validSpec,graph:{...validSpec.graph,action:{type:'sell',symbol:'BTC',amount:0.5,venue:'mock-venue'}}};
+  // Unsupported actions are rejected as specifications, independently of
+  // whether their proposed price condition would pass. No simulated order.
+  expect(()=>onHttp(t.runtime,payload(sellSpec))).toThrow();
+  expect(t.writes()).toBe(0);
+  expect(t.httpCalls()).toBe(0);
+  expect(feedReads).toBe(0);
+  expect(vaultReads).toBe(0);
+}
+
+test('CRE refuses an unsupported sell before reads or writes even when its proposed condition would pass',()=>{
+  assertUnsupportedSellBeforeCapabilities(8_500_000_000_000n);
+});
+
+test('CRE refuses an unsupported sell before reads or writes even when its proposed condition would fail',()=>{
+  assertUnsupportedSellBeforeCapabilities(9_500_000_000_000n);
+});

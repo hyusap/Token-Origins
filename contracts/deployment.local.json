@@ -17,6 +17,17 @@
       "deploymentHash": "0xd4be2d7375043028a75b2ee15dae7bf87e63f174e619b892f5ecbfa40620fe8b",
       "blockNumber": 2,
       "createdAt": "2026-10-07T06:35:10.438Z"
+    },
+    {
+      "address": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+      "forwarder": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+      "owner": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "chainId": 31337,
+      "rpcUrl": "http://127.0.0.1:8545",
+      "mode": "local-evm-rehearsal",
+      "deploymentHash": "0xe81d8fedbf2b923a552dc3140401b9ec3979b5b44fc2293f1508decea6b382b3",
+      "blockNumber": 2,
+      "createdAt": "2026-10-07T06:37:02.929Z"
     }
   ]
 }
