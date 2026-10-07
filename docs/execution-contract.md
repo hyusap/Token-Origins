@@ -50,6 +50,8 @@ All values are USD. Comparisons use integers at **1e-8** (Chainlink USD feed pre
   - `guard:source:<key>`: each source within its own age limit (exchange trade ≤ the run's cap, ≤ 120 s; feeds ≤ 26 h, i.e. a missed 24 h heartbeat; > 30 s in the future fails)
   - `guard:vault-active`: for `pause-vault` only, the vault is not already paused
 
+CRE reports are sent with a 2,000,000 gas limit (`ORIGINS_CRE_GAS_LIMIT`). At 350k, current Sepolia storage pricing ran `onReport` out of gas inside the forwarder, which the simulator still reports as SUCCESS; the runner's own receipt, event and state checks caught it.
+
 `decision` is `act` only when the root and every guard pass. `blockedBy` names the first failing gate, and `explainNoop` turns it into the spoken reason. A missing or invalid reading **throws** (the run fails); it is never treated as false, which a NOT would invert.
 
 ## 6. Frozen request (`ExecutionSpecification` v2)
@@ -124,6 +126,6 @@ Drafts can change while a run executes; the run's `snapshot` (graph and policy h
 | J6 | `tests/execution-contract.test.ts` |
 | J7 | `cre/workflow.test.ts` |
 | J8 | `cre/spec.test.ts`, `cre/workflow.test.ts`, `tests/anvil-integration.test.ts` |
-| J9 | `tests/anvil-integration.test.ts` (real local EVM). **Sepolia: run `scripts/prove-sepolia.ts`.** |
+| J9 | `tests/anvil-integration.test.ts` (real local EVM); Sepolia CRE broadcast [`0x82e480e1…`](https://sepolia.etherscan.io/tx/0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec), `demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json` |
 | J10 | `tests/execution-contract.test.ts`, `tests/anvil-integration.test.ts` |
 | J11 | Ayush: voice path |

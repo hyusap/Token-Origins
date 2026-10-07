@@ -52,7 +52,7 @@ are included in this planning update.
 - [x] **S2:** validate source identity, value precision, and per-source timestamps/freshness (J8).
 - [x] **S2:** fetch only required inputs, deduplicate reads, and bound the plan to CRE quotas.
 - [x] **S2:** archive every execution reading/provenance and preserve it through `get_run`/MCP compaction.
-- [ ] **S2:** correlate receipt, receiver event, and fresh post-state to the intended run/revision/target (J9). *(Done and proven on real local Anvil in `tests/anvil-integration.test.ts`; Sepolia proof pending S4.)*
+- [x] **S2:** correlate receipt, receiver event, and fresh post-state to the intended run/revision/target (J9). *(Proven on Sepolia: [`0x82e480e1…`](https://sepolia.etherscan.io/tx/0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec), verified by `scripts/verify-evidence.ts`.)*
 - [x] **S3:** migrate pre-graph workflows/revisions/restorable sessions without fabricating old evidence (J6).
 - [x] **S3:** persist deduplication and recover uncertain submitted transactions without blind replay (J10).
 - [x] **S3:** version graph semantics and reject incompatible MCP/backend combinations.
@@ -61,10 +61,10 @@ are included in this planning update.
 ## Shivam — prove execution onchain
 
 - [x] **S4:** run contract tests and local Anvil integration cases for composed graphs.
-- [ ] **S4:** confirm CRE access, CLI/SDK setup, Sepolia RPC, funded test signer, and correct simulation forwarder. *(CLI v1.37.0 install verified on macOS/Linux; MockForwarder address confirmed in the CRE forwarder directory; `cre workflow simulate` confirmed to require `cre login`. Needs: CRE login + funded wallet.)*
-- [ ] **S4:** add a repeatable Sepolia deployment and verification procedure. *(Written: `scripts/deploy-sepolia.ts`, `scripts/prove-sepolia.ts`, `scripts/verify-evidence.ts`; same proof sequence verified end to end on Anvil. Check once run on Sepolia.)*
-- [ ] **S4:** record actual CRE simulation + Sepolia broadcast: false, true, duplicate, and failure cases.
-- [ ] **S4:** publish portable receipt/event/post-state evidence that Ayush can inspect in the canvas.
+- [x] **S4:** confirm CRE access, CLI/SDK setup, Sepolia RPC, funded test signer, and correct simulation forwarder. *(CRE login, funded test signer, Sepolia RPC and MockForwarder `0x15fC…9F88` all used in the recorded run.)*
+- [x] **S4:** add a repeatable Sepolia deployment and verification procedure. *(`bun run deploy:sepolia`, `bun run prove:sepolia`, `bun run verify:evidence`.)*
+- [x] **S4:** record actual CRE simulation + Sepolia broadcast: false, true, duplicate, and failure cases. *(`demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json`: false (no write), true (pause [`0x82e480e1…`](https://sepolia.etherscan.io/tx/0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec)), duplicate (no second pause), sell (refused before any read/write).)*
+- [x] **S4:** publish portable receipt/event/post-state evidence that Ayush can inspect in the canvas. *(`demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json` + `contracts/deployment.sepolia.json`; anyone can re-check with `bun run verify:evidence demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json`.)*
 - [ ] **Separate deployed-DON milestone:** obtain deployment access, configure authenticated triggers and production receiver binding, deploy/activate, and record actual deployed execution.
 
 ## Joint integration gate — before adding features
