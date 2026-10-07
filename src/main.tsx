@@ -35,7 +35,6 @@ import "./style.css";
 import "./app-layout.css";
 import { microphoneLevels, type MicrophoneSnapshot } from "./microphone";
 import { useMicrophone } from "./use-microphone";
-import { useVoice, type VoiceStatus } from "./voice";
 import { displayReply } from "./display-reply";
 import { compactReply, replyBlocks } from "./reply-format";
 import { observationOnlyForVault } from "../shared/policy-capabilities";
@@ -155,7 +154,7 @@ function BrandMark() {
 }
 
 type SignalMode = "ready" | "working" | "running" | "speaking" | "typing" | "offline" | "blocked";
-function LiveSignal({ mode, microphone, voiceStatus }: { mode: SignalMode; microphone: MicrophoneSnapshot; voiceStatus: VoiceStatus }) {
+function LiveSignal({ mode, microphone }: { mode: SignalMode; microphone: MicrophoneSnapshot }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const input = useRef(microphone);
   useEffect(() => { input.current = microphone; }, [microphone]);
@@ -165,8 +164,8 @@ function LiveSignal({ mode, microphone, voiceStatus }: { mode: SignalMode; micro
     if (!ctx) return;
     let frame = 0;
     let disposed = false;
-    let samples = new Float32Array(2048);
     let measuredAt = 0;
+    let samples = new Float32Array(2048);
     const draw = (now: number) => {
       if (disposed) return;
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -202,10 +201,10 @@ function LiveSignal({ mode, microphone, voiceStatus }: { mode: SignalMode; micro
     frame = requestAnimationFrame(draw);
     return () => { disposed = true; cancelAnimationFrame(frame); };
   }, []);
-  const listening = voiceStatus === "listening";
-  return <div className={`live-signal signal-${mode} ${microphone.status === "live" ? "mic-live" : ""}`} role="status" aria-label={listening ? "Voice dictation listening" : voiceStatus === "requesting" ? "Starting voice dictation" : "Voice dictation off"}>
+  const active = microphone.status === "live";
+  return <div className={`live-signal signal-${mode} ${active ? "mic-live" : ""}`} role="status" aria-label={active ? "Live microphone waveform" : microphone.status === "requesting" ? "Requesting microphone access" : "Microphone off"}>
     <canvas ref={canvas} aria-hidden="true" />
-    <span className="signal-caption mono" data-state={listening ? "Listening" : voiceStatus === "requesting" ? "Starting voice" : mode === "running" ? "Executing" : mode === "working" ? "Composing" : ""}><i />{listening ? "Listening" : voiceStatus === "requesting" ? "Voice permission…" : "Mic off"}</span>
+    <span className="signal-caption mono" data-state={active ? "Visual" : ""}><i />{active ? "Visual only" : microphone.status === "requesting" ? "Starting…" : "Mic off"}</span>
   </div>;
 }
 function NodeHeader({
@@ -979,7 +978,7 @@ function Inspector({
     </div>
   );
 }
-function Capabilities({ state, close, stopMonitor, stopping, voiceProvider }: { state: CanvasState; close: () => void; stopMonitor: (id: string) => void; stopping: string | null; voiceProvider?: string }) {
+function Capabilities({ state, close, stopMonitor, stopping }: { state: CanvasState; close: () => void; stopMonitor: (id: string) => void; stopping: string | null }) {
   const supported = state.capabilities.supported;
   const [proof, setProof] = useState<{ kind: string; executionMode?: string; provenance?: string; evidence: { verifiedAt: string; transactionHash: string; blockNumber: string; status: string }; explorerUrl: string } | null>(null);
   useEffect(() => { let active = true; api("/api/proof").then(result => { if (active && result.kind === "saved-public-proof" && result.evidence?.status === "success") setProof(result); }).catch(() => {}); return () => { active = false; }; }, []);
@@ -1004,7 +1003,7 @@ function Capabilities({ state, close, stopMonitor, stopping, voiceProvider }: { 
         {(monitor.lastError || monitor.stopReason) && <p className="monitor-note">{monitor.lastError || monitor.stopReason}</p>}
         {["active", "checking"].includes(monitor.status) && <button onClick={() => stopMonitor(monitor.id)} disabled={!!stopping}>{stopping === monitor.id ? "Stopping…" : "Stop watching"}<X size={11} /></button>}
       </section>)}</dd></> : null}
-      <dt>Voice</dt><dd>{voiceProvider === "local" ? "Mic records one command and sends it to this workspace’s local Whisper speech engine." : voiceProvider === "checking" ? "Checking availability of the workspace’s local speech engine." : "Mic dictates one command through your browser’s speech recognition service, which may process audio remotely."} Recognized final speech uses the same agent bridge as typed commands. Microphone permission is required; typing remains available.</dd>
+      <dt>Microphone</dt><dd>Mic toggles a continuous visual waveform. Audio stays in the browser and is used only to animate the waveform. It is not recorded, transcribed, or sent anywhere. Type commands in the prompt.</dd>
       {proof && <><dt>Saved Sepolia proof</dt><dd>{proof.executionMode === "cre-local-simulation" && proof.provenance && <p>{proof.provenance}</p>}<p>A treasury pause was independently verified at block {proof.evidence.blockNumber}. This is a historical public-chain receipt.</p><a className="receipt-link" href={proof.explorerUrl} target="_blank" rel="noopener noreferrer">View verified transaction <ArrowUpRight size={12} /></a><p className="mono proof-verified-at">Verified {new Date(proof.evidence.verifiedAt).toLocaleString()}</p></dd></>}
     </dl>
     <p className="capability-note">Actions require the supported CRE workflow. A local CRE simulation and a public transaction receipt are distinct evidence; each run identifies its execution path.</p>
@@ -1021,11 +1020,12 @@ function App() {
   const [watching, setWatching] = useState(false);
   const [stoppingMonitor, setStoppingMonitor] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [rehearsal, setRehearsal] = useState<any>(null);
+  const [agentStatus, setAgentStatus] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [clearing, setClearing] = useState(false);
   const submitLocked = useRef(false);
   const microphone = useMicrophone();
+  const micVisualOn = ["live", "requesting"].includes(microphone.status);
   const input = useRef<HTMLInputElement>(null);
   const dockInput = useRef<HTMLInputElement>(null);
   useEffect(() => { setShowDraft(false); }, [state?.sessionId, state?.inspectedRunId]);
@@ -1070,34 +1070,11 @@ function App() {
       setBusy(false);
     }
   };
-  const voice = useVoice({
-    canStart: () => connected && !submitLocked.current && !clearing,
-    onCommand: async command => {
-      const accepted = await submit(command);
-      if (!accepted) setText(command);
-      return accepted;
-    },
-  });
-  const dictating = ["requesting", "listening"].includes(voice.status);
-  const transcribing = voice.status === "transcribing";
-  const captureSnapshot: MicrophoneSnapshot = voice.provider === "local" ? { status: voice.status === "listening" ? "live" : voice.status === "requesting" ? "requesting" : "off", analyser: voice.analyser || null, error: "" } : microphone;
-  const voiceError = voice.status === "error" ? voice.error : "";
-  const toggleVoice = () => {
-    if (dictating || transcribing) { voice.stop(); microphone.stop(); return; }
-    if (voice.status === "checking") return;
-    if (!voice.supported || !connected || submitLocked.current || clearing || voice.status === "submitting") { voice.start(); return; }
-    voice.start();
-    // The waveform is real local capture, started by the same explicit gesture.
-    if (voice.provider !== "local") microphone.toggle();
-  };
-  useEffect(() => {
-    if (voice.provider === "local" || !["requesting", "listening"].includes(voice.status)) microphone.stop();
-    if (voice.status === "error" && voice.finalTranscript) setText(previous => previous || voice.finalTranscript);
-  }, [voice.status, voice.provider]);
+  const captureSnapshot: MicrophoneSnapshot = microphone;
+  const toggleVoice = () => microphone.toggle();
   const clearCanvas = async () => {
     if (!state || clearing) return;
     setClearing(true); setError("");
-    voice.stop(); microphone.stop();
     try {
       const result = await api("/api/canvas/clear", {
         operationId: crypto.randomUUID(), expectedSessionId: state.sessionId,
@@ -1108,31 +1085,11 @@ function App() {
     } catch (e) { setError((e as Error).message); }
     finally { setClearing(false); }
   };
-  const start = async () => {
-    setError("");
-    try {
-      const result = await api("/api/rehearsal/start", {
-        mode: "auto",
-        reset: true,
-      });
-      if (result.ok === false)
-        throw new Error(result.error || "Rehearsal could not start");
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  const stop = async () => {
-    try {
-      await api("/api/rehearsal/stop", {});
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
   useEffect(() => {
     const t = setInterval(
       () =>
-        api("/api/rehearsal/status")
-          .then(setRehearsal)
+        api("/api/agent/status")
+          .then(setAgentStatus)
           .catch(() => {}),
       2000,
     );
@@ -1147,17 +1104,10 @@ function App() {
         setCapabilitiesOpen(false);
         setResponseOpen(false);
         if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-        stop();
-        microphone.stop();
-        voice.stop();
       }
       if (typing) return;
       if (e.key.toLowerCase() === "m" && !e.ctrlKey && !e.metaKey) toggleVoice();
       if (e.key === "Backspace" && e.shiftKey && (e.metaKey || e.ctrlKey)) { e.preventDefault(); clearCanvas(); }
-      if (e.code === "Space") {
-        e.preventDefault();
-        rehearsal?.running ? stop() : start();
-      }
       if (e.key === "/") {
         e.preventDefault();
         setConsoleOpen(true);
@@ -1167,7 +1117,7 @@ function App() {
     };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, [rehearsal, state?.sessionId, clearing, voice.status, connected]);
+  }, [state?.sessionId, clearing, connected]);
   if (!state)
     return (
       <div className="connecting">
@@ -1180,8 +1130,7 @@ function App() {
       </div>
     );
   const executingRun = state.runs.some(run => !["confirmed", "failed", "no-op"].includes(run.status));
-  const signalMode: SignalMode = !connected ? "offline" : error || voiceError || microphone.error ? "blocked" : executingRun ? "running" : busy || transcribing ? "working" : dictating ? "speaking" : consoleOpen ? "typing" : "ready";
-  const running = rehearsal?.running || rehearsal?.status === "running";
+  const signalMode: SignalMode = !connected ? "offline" : error || microphone.error ? "blocked" : executingRun ? "running" : busy ? "working" : micVisualOn ? "speaking" : consoleOpen ? "typing" : "ready";
   const activeMonitors = state.monitors?.filter(monitor => ["active", "checking"].includes(monitor.status)) || [];
   const activeWatchCount = activeMonitors.length;
   const frozenRun = policyView(state).run;
@@ -1199,15 +1148,14 @@ function App() {
         <div className="appbar-actions">
           {activeWatchCount > 0 && <button className="monitor-indicator mono" aria-label={`Watching ${activeWatchCount}`} title={`${activeWatchCount} active policy monitor${activeWatchCount === 1 ? "" : "s"}`} onClick={() => { setCapabilitiesOpen(true); setProofOpen(false); }}><Activity size={12} /><span className="monitor-label">Watching</span><span>{activeWatchCount}</span></button>}
           {frozenRun && <button className="draft-control" onClick={() => setShowDraft(value => !value)} aria-label={showDraft ? "Show frozen execution policy" : "Show current draft policy"} title={showDraft ? "Show frozen execution policy" : "Show current draft policy"}><span className="desktop-control-label">{showDraft ? "Frozen run" : "Draft policy"}</span><span className="mobile-control-label">{showDraft ? "Frozen" : "Draft"}</span></button>}
-          <div className="header-signal"><LiveSignal mode={signalMode} microphone={captureSnapshot} voiceStatus={voice.status} /></div>
+          <div className="header-signal"><LiveSignal mode={signalMode} microphone={captureSnapshot} /></div>
           <button className="proof-control" onClick={() => { setProofOpen(value => !value); setCapabilitiesOpen(false); setResponseOpen(false); }} aria-label="Proof" aria-pressed={proofOpen} title="Provenance and execution proof · I"><ShieldCheck size={14} /><span>Proof</span></button>
-          <button className={`mic-control ${dictating || transcribing ? "on" : ""}`} onClick={toggleVoice} aria-pressed={dictating || transcribing} disabled={voice.status === "checking" || voice.status === "submitting" || !voice.supported} title={voice.supported ? voice.provider === "local" ? "Dictate one command · audio processed by local Whisper · M" : "Dictate one command · your browser speech service may receive audio · M" : voice.error || "Checking voice availability"} aria-label={dictating || transcribing ? "Stop voice dictation" : "Start voice dictation"}>
-            {dictating || transcribing ? <Mic size={15} /> : <MicOff size={15} />}
-            <span>{transcribing ? "Transcribing" : dictating ? "Listening" : "Mic"}</span>
+          <button className={`mic-control ${micVisualOn ? "on" : ""}`} onClick={toggleVoice} aria-pressed={micVisualOn} title="Live microphone waveform only · no recording or transcription · M" aria-label={micVisualOn ? "Turn off visual microphone" : "Turn on visual microphone"}>
+            {micVisualOn ? <Mic size={15} /> : <MicOff size={15} />}
+            <span>{microphone.status === "requesting" ? "Starting…" : micVisualOn ? "Visual" : "Mic"}</span>
           </button>
-          <button className="clear-control" onClick={() => clearCanvas()} aria-label="Clear canvas" disabled={clearing || busy || running || executingRun || activeWatchCount > 0 || !state.objects.length && !state.conversation.some(c => c.role === "user")} title={activeWatchCount ? "Stop watching before clearing the canvas" : "Clear canvas · contract state is unchanged"}><Eraser size={14} /><span>{clearing ? "Clearing…" : "Clear"}</span></button>
+          <button className="clear-control" onClick={() => clearCanvas()} aria-label="Clear canvas" disabled={clearing || busy || agentStatus?.busy || executingRun || activeWatchCount > 0 || !state.objects.length && !state.conversation.some(c => c.role === "user")} title={activeWatchCount ? "Stop watching before clearing the canvas" : "Clear canvas · contract state is unchanged"}><Eraser size={14} /><span>{clearing ? "Clearing…" : "Clear"}</span></button>
           <span className="app-connection mono"><i className={connected ? "on" : ""} />{connected ? "Connected" : "Reconnecting"}</span>
-          <button className="demo-control" aria-label={running ? "Stop demo" : "Run demo"} onClick={running ? stop : start} disabled={!connected}><span className="desktop-control-label">{running ? "Stop demo" : "Run demo"}</span><span className="mobile-control-label">{running ? "Stop" : "Demo"}</span><ArrowRight size={14} /></button>
         </div>
       </header>
       <main className={`workbench ${proofOpen ? "proof-open" : ""}`}>
@@ -1222,19 +1170,19 @@ function App() {
           </div>
           <span className="mono welcome-note">Actual sources. Explicit execution.</span>
         </section>}
-        {proofOpen && <Inspector state={state} agentStatus={rehearsal} />}
-        {capabilitiesOpen && <Capabilities state={state} close={() => setCapabilitiesOpen(false)} stopMonitor={stopMonitor} stopping={stoppingMonitor} voiceProvider={voice.provider} />}
+        {proofOpen && <Inspector state={state} agentStatus={agentStatus} />}
+        {capabilitiesOpen && <Capabilities state={state} close={() => setCapabilitiesOpen(false)} stopMonitor={stopMonitor} stopping={stoppingMonitor} />}
         {responseOpen && <ResponsePanel text={reply} close={() => setResponseOpen(false)} />}
         <div className="command-center">
-          {(error || voiceError || microphone.error) ? <div className="command-feedback is-error" role="alert"><span>{error || voiceError || microphone.error}</span><button onClick={() => { setError(""); voice.stop(); microphone.stop(); }} aria-label="Dismiss error"><X size={14} /></button></div> : <div className="command-feedback" role="status" aria-live="polite">
-            {(dictating || transcribing || voice.status === "submitting") ? <><p className="last-intent">{voice.interimTranscript || voice.finalTranscript || (transcribing ? "Transcribing command…" : voice.status === "requesting" ? "Starting dictation…" : "Speak a command…")}</p><div className="voice-notice">{voice.status === "submitting" ? "Submitting recognized command" : voice.provider === "local" ? "Local Whisper · recorded audio processed by this workspace" : "Browser speech recognition · audio may be processed remotely"}</div></> : <>{prompt && <p className="last-intent" title={prompt}>{prompt}</p>}{reply && <><div className="command-response"><InlineSummary text={caption} /></div><button className="response-read" onClick={() => { setResponseOpen(value => !value); setProofOpen(false); setCapabilitiesOpen(false); }} aria-expanded={responseOpen}>Read response <ArrowUpRight size={10} /></button></>}</>}
+          {(error || microphone.error) ? <div className="command-feedback is-error" role="alert"><span>{error || microphone.error}</span><button onClick={() => { setError(""); if (microphone.error) microphone.stop(); }} aria-label="Dismiss error"><X size={14} /></button></div> : <div className="command-feedback" role="status" aria-live="polite">
+            {prompt && <p className="last-intent" title={prompt}>{prompt}</p>}{reply && <><div className="command-response"><InlineSummary text={caption} /></div><button className="response-read" onClick={() => { setResponseOpen(value => !value); setProofOpen(false); setCapabilitiesOpen(false); }} aria-expanded={responseOpen}>Read response <ArrowUpRight size={10} /></button></>}
           </div>}
           <form className={`command-dock ${busy || executingRun ? "is-working" : ""}`} onSubmit={event => { event.preventDefault(); void submit(text); }}>
             <Command size={16} className="command-symbol" />
             <input ref={dockInput} value={text} onChange={event => setText(event.target.value)} placeholder="Describe what you want to compose…" aria-label="Compose an instruction" disabled={!connected || busy || clearing} />
             <button type="submit" aria-label="Send instruction" disabled={!connected || busy || clearing || !text.trim()}>{busy ? <LoaderCircle className="loading-spinner" size={17} /> : <ArrowRight size={18} />}</button>
           </form>
-          <div className="command-hints mono"><span>{busy ? "Interpreting instruction" : executingRun ? "Verifying execution" : transcribing ? "Transcribing voice" : voice.status === "checking" ? "Checking voice" : !voice.supported ? "Voice unavailable · type a command" : "Live canvas"}</span><button onClick={() => { setConsoleOpen(true); requestAnimationFrame(() => input.current?.focus()); }}>Expand prompt <kbd>/</kbd></button></div>
+          <div className="command-hints mono"><span>{busy ? "Interpreting instruction" : executingRun ? "Verifying execution" : "Live canvas"}</span><button onClick={() => { setConsoleOpen(true); requestAnimationFrame(() => input.current?.focus()); }}>Expand prompt <kbd>/</kbd></button></div>
         </div>
       </main>
       <PolicyStrip state={presentedState} watch={watchPolicy} watching={watching} />

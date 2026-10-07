@@ -25,9 +25,6 @@ body { margin: 0; overflow: hidden; }
 .app-connection { display: flex; align-items: center; gap: 8px; font-size: 9px; color: var(--bab-text-mute); }
 .app-connection i { width: 4px; height: 4px; background: var(--bab-line-lit); }
 .app-connection i.on { background: var(--bab-gold); }
-.demo-control { background: none; border: 0; color: var(--bab-text-dim); display: flex; align-items: center; gap: 14px; font-size: 11px; padding: 8px 0; cursor: pointer; }
-.demo-control:hover { color: var(--bab-white); }
-.demo-control:disabled { opacity: .35; cursor: default; }
 .workbench { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .workbench .observatory { flex: none; position: absolute; inset: 0 0 140px; width: 100%; height: auto; background-size: 28px 28px; }
 .workbench .observatory:after { display: none; }
@@ -136,7 +133,6 @@ body { margin: 0; overflow: hidden; }
   .clear-control > span, .mic-control > span, .app-connection { display: none; }
   .app-mode { margin-right: auto; }
   .appbar-actions { margin-left: 0; }
-  .demo-control { font-size: 10px; gap: 6px; }
 }
 /* React Flow owns world coordinates, routed connections, viewport pan and zoom. */
 .workbench .flow-canvas { background: none; overflow: hidden; --graph-inverse: 1; }
@@ -214,7 +210,6 @@ body { margin: 0; overflow: hidden; }
 .cre-readiness > span { display: block; font-size: 9px; line-height: 1.65; color: var(--bab-text-mute); margin-top: 4px; }
 .cre-readiness button { padding: 7px 0; margin-top: 9px; font-size: 10px; background: none; border: 0; border-bottom: 1px solid var(--bab-line-lit); color: var(--bab-text-dim); cursor: pointer; }
 .cre-readiness button:disabled { opacity: .5; cursor: default; }
-.demo-control { border-left: 1px solid var(--bab-line); padding-left: 20px; }
 .app-connection { font-size: 9px; }
 .app-connection i { border-radius: 50%; }
 .workbench .observatory { bottom: 158px; }
@@ -330,7 +325,6 @@ body { margin: 0; overflow: hidden; }
   .appbar-actions { gap: 14px; }
   .app-brand > span { font-size: 29px; }
   .proof-control span, .app-mode { display: none; }
-  .demo-control { border: 0; padding-left: 0; font-size: 10px; }
   .canvas-welcome { inset-inline: 16px; }
   .canvas-welcome h1 { font-size: 63px; margin: 24px 0 20px; }
   .canvas-welcome > p { font-size: 12px; }
@@ -398,5 +392,4 @@ body { margin: 0; overflow: hidden; }
   .appbar .proof-control, .appbar .mic-control, .appbar .clear-control { min-width: 36px; min-height: 36px; padding: 8px; justify-content: center; }
   .desktop-control-label, .monitor-label { display: none; }
   .mobile-control-label { display: inline; }
-  .demo-control { min-width: 44px; }
 }

@@ -11,7 +11,7 @@ bun run dev
 
 Open [the observatory](http://127.0.0.1:5173). Bun and a signed-in Codex CLI are required for conversational commands. `bun run dev` starts the backend and canvas in CRE mode; it does not start a standalone chain signer. To prepare speech recognition, run `bun run voice:setup` (pinned local whisper.cpp and verified base.en model; requires the build tools printed by the installer).
 
-Type in the command dock, or select **Mic** to speak. Local transcription sends final text to the same real operator/MCP pipeline. `/` expands the dock; `I` opens proof; `0` fits the graph. Optional browser recognition may use its browser provider when local recognition is unavailable; its privacy status is visible. The timed demo uses preplanned text turns. Stop prevents future cues, and Clear preserves contract state.
+Type in the command dock, or select **Mic** to speak. Local transcription sends final text to the same real operator/MCP pipeline. `/` expands the dock; `I` opens proof; `0` fits the graph. Optional browser recognition may use its browser provider when local recognition is unavailable; its privacy status is visible. Clear removes canvas state while preserving contract state.
 
 For Codex desktop voice, use [operator/](operator/README.md). Browser dictation has its own verified implementation; desktop voice remains a separate integration requiring an actual user-started walkthrough.
 

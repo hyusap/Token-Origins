@@ -7,14 +7,11 @@ import { compactMcpResult } from './mcp-compact';
 
 export interface AgentToolTrace { name: string; server?: string; arguments?: unknown; status?: string; result?: unknown; at: string }
 export interface AgentTurn { id: string; threadId?: string; text: string; summary: string; startedAt: string; completedAt: string; durationMs: number; traceFile: string; tools: AgentToolTrace[]; ok: boolean; error?: string }
-export interface RehearsalCue { id: string; atSeconds: number; text: string; note: string }
 type Activity = CanvasState['activity'];
 export interface AgentBridgeOptions { serverUrl?: string; rootDir?: string; codexPath?: string; getContext?: () => CanvasState; onActivity?: (activity: Activity) => void | Promise<void> }
-export interface RehearsalStatus { running: boolean; mode: 'auto' | 'manual'; cueIndex: number; totalCues: number; currentCue?: RehearsalCue; nextCue?: RehearsalCue; startedAt?: string; busy: boolean; turnId?: string; turns: AgentTurn[]; error?: string; reportPath?: string; transport: string; profile: 'evaluation' | 'broadcast' }
+export interface OperatorStatus { busy: boolean; turnId?: string; turns: AgentTurn[]; error?: string; transport: string }
 
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const terminalRun = new Set(['confirmed', 'no-op', 'failed']);
-const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 /** System/runtime paths and normal Codex authentication only; backend authority never crosses. */
 export function operatorEnvironment(source: Record<string, string | undefined> = process.env): Record<string, string> {
@@ -39,26 +36,6 @@ function credentialRedactor(source: Record<string, string | undefined>) {
 }
 
 
-/** Prove a same-price contradiction is mandatory through the AND root. */
-export function hasContradictoryPriceRoot(graph: CanvasState['workflow']['graph']): boolean {
-  const byId = new Map(graph.nodes.map(node => [node.id, node]));
-  const required = new Set<string>();
-  function visit(id: string) {
-    if (required.has(id)) return;
-    required.add(id);
-    const node = byId.get(id);
-    if (node?.kind === 'and') for (const input of node.inputs) visit(input);
-  }
-  visit(graph.root);
-  const comparisons = graph.nodes.filter(node => required.has(node.id) && node.kind === 'compare');
-  return comparisons.some(left => left.kind === 'compare' && left.op === '<' && comparisons.some(right => right.kind === 'compare' && right.op === '>=' && right.input === left.input && right.value === left.value));
-}
-
-/** Rehearsal must preserve contract state; only CRE may authorize product writes. */
-export async function prepareLocalRehearsalVault(_root = defaultRoot) {
-  return { reset: false, reason: 'CRE rehearsal preserves contract state.' };
-}
-
 /** Each utterance is interpreted by a new real Codex turn with supplied state and bounded history. */
 export function createAgentBridge(options: AgentBridgeOptions = {}) {
   const root = options.rootDir ?? defaultRoot;
@@ -66,14 +43,11 @@ export function createAgentBridge(options: AgentBridgeOptions = {}) {
   const instructionsPath = resolve(operatorRoot, 'AGENTS.md');
   const base = options.serverUrl ?? process.env.WOGA_SERVER_URL ?? 'http://127.0.0.1:4318';
   let queue: Promise<unknown> = Promise.resolve();
-  let generation = 0;
-  let cues: RehearsalCue[] = [];
-  let intervalMs = 6000;
   let currentProcess: ReturnType<typeof Bun.spawn> | undefined;
   let latestContext: unknown;
   let contextSessionId: string | undefined;
   let sessionTurnStart = 0;
-  const status: RehearsalStatus = { running: false, mode: 'auto', cueIndex: 0, totalCues: 0, busy: false, turns: [], profile: 'evaluation', transport: 'Codex CLI → official MCP stdio → semantic backend → WebSocket canvas; preplanned final text → semantic operator; this rehearsal does not capture audio' };
+  const status: OperatorStatus = { busy: false, turns: [], transport: 'Codex CLI → official MCP stdio → semantic backend → WebSocket canvas; typed text or final voice transcript → semantic operator' };
 
   async function tool(name: string, args: unknown) {
     const response = await fetch(`${base}/api/tools/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args) });
@@ -135,7 +109,7 @@ export function createAgentBridge(options: AgentBridgeOptions = {}) {
       const args = [codex, 'exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--ephemeral', '--json', '--color', 'never', '-s', 'read-only', '-C', operatorRoot,
         ...Object.entries(config).flatMap(([key, value]) => ['-c', `${key}=${toml(value)}`]), '-'];
       currentProcess = Bun.spawn(args, { env: operatorEnvironment(), cwd: operatorRoot, stdin: new Blob([redact(prompt)]), stdout: 'pipe', stderr: 'pipe' });
-      const processTimeout = setTimeout(() => { error = 'Codex turn exceeded 150 seconds; future cues stopped.'; currentProcess?.kill(); }, 150_000);
+      const processTimeout = setTimeout(() => { error = 'Codex turn exceeded 150 seconds.'; currentProcess?.kill(); }, 150_000);
       const stderrPromise = new Response(currentProcess.stderr as ReadableStream).text();
       const reader = (currentProcess.stdout as ReadableStream<Uint8Array>).getReader();
       const decoder = new TextDecoder();
@@ -181,8 +155,8 @@ export function createAgentBridge(options: AgentBridgeOptions = {}) {
     const turn: AgentTurn = { id, threadId, text: safeText, summary: summary || error || 'No response', startedAt: new Date(start).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - start, traceFile, tools, ok: !error, ...(error ? { error } : {}) };
     status.turns.push(turn);
     status.error = error;
-    await appendFile(resolve(root, '.data/rehearsal-turns.jsonl'), `${JSON.stringify(turn)}\n`);
-    await tool('submit_utterance', { text: safeText, source: 'codex-cli-rehearsal', operationId: `${id}-utterance` });
+    await appendFile(resolve(root, '.data/agent-turns.jsonl'), `${JSON.stringify(turn)}\n`);
+    await tool('submit_utterance', { text: safeText, source: 'codex-cli', operationId: `${id}-utterance` });
     await activity({ status: error ? 'error' : 'idle', prompt: text, summary: turn.summary });
     return turn;
   }
@@ -191,101 +165,8 @@ export function createAgentBridge(options: AgentBridgeOptions = {}) {
     queue = task.catch(() => {});
     return task;
   }
-  async function waitForRuns(token: number) {
-    const deadline = Date.now() + 120_000;
-    while (generation === token && status.running && Date.now() < deadline) {
-      const response = await tool('get_context', {});
-      const state = response.state as CanvasState;
-      if (!state?.runs?.some(run => !terminalRun.has(run.status))) return;
-      await sleep(500);
-    }
-    if (generation === token && status.running && Date.now() >= deadline) throw new Error('Execution exceeded 120 seconds. Future cues stopped; the active chain run may still finish. Inspect its run ID.');
+  function operatorStatus(): OperatorStatus {
+    return { ...status, turns: [...status.turns] };
   }
-  async function loadScript(profile: 'evaluation' | 'broadcast' = 'evaluation') {
-    const script = JSON.parse(await readFile(resolve(root, profile === 'broadcast' ? 'demo/script.broadcast.json' : 'demo/script.json'), 'utf8'));
-    status.profile = profile;
-    cues = script.cues;
-    status.totalCues = cues.length;
-    return script;
-  }
-  function rehearsalStatus(): RehearsalStatus {
-    return { ...status, turns: [...status.turns], currentCue: status.cueIndex > 0 ? cues[status.cueIndex - 1] : undefined, nextCue: cues[status.cueIndex] };
-  }
-  async function nextRehearsalCue() {
-    if (!cues.length) await loadScript();
-    if (status.busy) return { ok: false, error: 'A Codex turn is still in progress.', status: rehearsalStatus() };
-    const cue = cues[status.cueIndex];
-    if (!cue) { status.running = false; return { ok: true, complete: true, status: rehearsalStatus() }; }
-    status.cueIndex++;
-    const turn = await submitAgentPrompt(cue.text);
-    if (!turn.ok) status.running = false;
-    return { ok: turn.ok, cue, turn, status: rehearsalStatus() };
-  }
-  async function startRehearsal(settings: { intervalMs?: number; mode?: 'auto' | 'manual'; auto?: boolean; reset?: boolean; profile?: 'evaluation' | 'broadcast' } = {}) {
-    if (status.running || status.busy) return { ok: false, error: 'A rehearsal or agent turn is already running.', status: rehearsalStatus() };
-    const script = await loadScript(settings.profile === 'broadcast' ? 'broadcast' : 'evaluation');
-    intervalMs = Math.max(1000, settings.intervalMs ?? script.intervalMs ?? 6000);
-    const capability = await tool('get_capabilities', {});
-    const readiness = capability.data?.readiness;
-    if (readiness?.readyForEvaluation !== true) return { ok: false, error: readiness?.reason || 'CRE evaluation readiness is unavailable. Restart the backend and authenticate CRE before rehearsal.', status: rehearsalStatus() };
-    if (status.profile === 'broadcast' && readiness.broadcastConfigured !== true) return { ok: false, error: 'The explicit broadcast rehearsal requires configured CRE test-wallet authority. Use the default evaluation-only demo or configure broadcast first.', status: rehearsalStatus() };
-    if (settings.reset !== false) {
-      const context = await tool('get_context', {});
-      if (context.state?.runs?.some((run: any) => !terminalRun.has(run.status))) return { ok: false, error: 'An execution is still active; wait before starting a new rehearsal.', status: rehearsalStatus() };
-      await prepareLocalRehearsalVault(root);
-      await tool('reset_session', { operationId: `rehearsal-reset-${crypto.randomUUID()}`, expectedSessionId: context.state?.sessionId });
-    }
-    status.cueIndex = 0; status.running = true; status.mode = settings.mode ?? (settings.auto === false ? 'manual' : 'auto'); status.startedAt = new Date().toISOString(); status.error = undefined; status.reportPath = undefined;
-    const token = ++generation;
-    if (status.mode === 'auto') void (async () => {
-      try {
-        while (status.running && generation === token && status.cueIndex < cues.length) {
-          const scheduledAt = Date.parse(status.startedAt!) + cues[status.cueIndex]!.atSeconds * 1000;
-          // Cue times are minimum offsets, not fabricated latency deadlines. Slow turns defer later cues.
-          while (status.running && generation === token && Date.now() < scheduledAt) await sleep(Math.min(500, scheduledAt - Date.now()));
-          // Keep the deliberate draft-interruption immediately after the run tool returns.
-          if (cues[status.cueIndex]?.id !== 'interrupt-draft') await waitForRuns(token);
-          if (!status.running || generation !== token) break;
-          await nextRehearsalCue();
-          if (cues[status.cueIndex]?.id !== 'interrupt-draft' && status.running) await sleep(intervalMs);
-        }
-        if (generation === token && status.cueIndex === cues.length && !status.error) {
-          const context = await tool('get_context', {});
-          const finalState = context.state as CanvasState;
-          const thisTake = status.turns.filter(turn => Date.parse(turn.startedAt) >= Date.parse(status.startedAt!));
-          const durations = thisTake.map(turn => turn.durationMs).sort((a, b) => a - b);
-          const confirmed = finalState.runs.filter(run => run.status === 'confirmed');
-          const assertions = {
-            everyCueUsedRealMcp: thisTake.length === cues.length && thisTake.every(turn => turn.ok && turn.tools.length > 0),
-            falseConditionWithoutTransaction: finalState.runs.some(run => run.status === 'no-op' && !run.evidence?.transactionHash && (status.profile === 'broadcast' ? run.snapshot.threshold === 1 : hasContradictoryPriceRoot(run.snapshot.graph))),
-            ...(status.profile === 'broadcast' ? { confirmedReceiptAndVaultPause: confirmed.some(run => run.evidence?.receiptStatus === 'success' && run.evidence?.pausedAfter === true),
-            canonicalVaultPaused: finalState.objects.some(object => object.kind === 'vault' && object.data.paused === true),
-            alreadyPausedNoop: finalState.runs.some(run => run.status === 'no-op' && run.snapshot.threshold > 1 && run.decisions.some(decision => !decision.passed && /paused/i.test(decision.label + decision.detail))) } : { allEvaluationsWithoutTransaction: finalState.runs.length > 0 && finalState.runs.every(run => run.evaluationOnly === true && !run.evidence?.transactionHash && run.status === 'no-op'), realCreExecution: finalState.runs.some(run => /CRE/.test(run.executionMode)) }),
-            frozenRevisionsPreserved: finalState.runs.every(run => {
-              const revision = finalState.workflow.revisions.find(entry => entry.revision === run.revision);
-              return revision?.threshold === run.snapshot.threshold && revision?.maxAgeSeconds === run.snapshot.maxAgeSeconds && revision?.skipPaused === run.snapshot.skipPaused && JSON.stringify(revision.graph) === JSON.stringify(run.snapshot.graph);
-            }),
-            noFailedRuns: finalState.runs.every(run => run.status !== 'failed'),
-          };
-          status.reportPath = resolve(root, '.data/rehearsal-report.json');
-          await Bun.write(status.reportPath, JSON.stringify({
-            completedAt: new Date().toISOString(), startedAt: status.startedAt, microphoneTested: false,
-            transport: status.transport, profile: status.profile, cueCount: cues.length, completedTurnCount: thisTake.length,
-            actualMcpCallCount: thisTake.reduce((count, turn) => count + turn.tools.length, 0),
-            agentTurnDurationMs: { min: durations[0], median: durations[Math.floor(durations.length / 2)], max: durations.at(-1) },
-            assertions, turns: thisTake, finalState,
-          }, null, 2));
-          if (Object.values(assertions).some(passed => !passed)) status.error = 'Rehearsal finished, but a scenario assertion failed. Inspect .data/rehearsal-report.json.';
-        }
-      } catch (cause) { status.error = String(cause); }
-      if (generation === token) status.running = false;
-    })();
-    return { ok: true, status: rehearsalStatus() };
-  }
-  function stopRehearsal() {
-    status.running = false; generation++;
-    // Do not kill an already-submitted semantic action or blockchain execution.
-    return { ok: true, summary: 'Future cues stopped. Any active agent turn and chain run can finish.', status: rehearsalStatus() };
-  }
-  return { submitAgentPrompt, startRehearsal, stopRehearsal, rehearsalStatus, nextRehearsalCue };
+  return { submitAgentPrompt, operatorStatus };
 }

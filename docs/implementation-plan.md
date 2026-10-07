@@ -51,7 +51,7 @@ Passing existing suites is a baseline, not completion evidence for this plan.
 | Area | Primary owner | Files and responsibilities |
 | --- | --- | --- |
 | Canvas and interaction | Ayush | `src/main.tsx`, `src/flow-model.ts`, styles; graph structure, focus, edit feedback, run inspection |
-| Voice/operator experience | Ayush | `scripts/agent.ts`, `operator/AGENTS.md`, operator setup, captions, `demo/script.json`, voice documentation |
+| Voice/operator experience | Ayush | `scripts/agent.ts`, `operator/AGENTS.md`, operator setup, captions, manual command interaction, voice documentation |
 | Typed policy and execution contract | Shivam; Ayush reviews | `cre/graph.ts`, `cre/spec.ts`, `shared/types.ts`, `server/schemas.ts` |
 | Semantic state and persistence | Shivam | `server/engine.ts`, `server/store.ts`, revision handling, migration, run lifecycle |
 | Sources and CRE | Shivam | `server/chainlink.ts`, `server/sources.ts`, `cre/runner.ts`, `cre/workflow/*` |
@@ -150,12 +150,12 @@ Files: `src/flow-model.ts`, `src/main.tsx`, layout styles, canvas-session tests.
 - Validate that stopping speech, narration, or future prompts does not claim to
   cancel a submitted transaction. Browser microphone amplitude and the working
   command-transcription path remain distinct functions.
-- Update the rehearsal and record a live voice session using the same prompts.
+- Record a live voice session using manually submitted prompts.
   Measure command-to-visible-change separately from microphone capture and
   transaction completion. Record the actual voice setup used.
 
 Files: `operator/AGENTS.md`, `operator/README.md`, `scripts/agent.ts`,
-`demo/script.json`, `docs/voice-rehearsal.md`, `docs/voice-validation.md`.
+`docs/voice-rehearsal.md`, `docs/voice-validation.md`.
 
 Acceptance: a user can speak a nested rule, see exactly that rule, revise one
 branch, and inspect the original execution without a false completion claim.
@@ -397,8 +397,8 @@ bun run --cwd cre build:wasm
 forge test --root contracts -vv
 ```
 
-Add focused regression tests for the review findings rather than only repeating
-the legacy rehearsal. Existing useful files include `tests/backend-graph.test.ts`,
+Add focused regression tests for the review findings rather than relying only on
+archived scripted takes. Existing useful files include `tests/backend-graph.test.ts`,
 `tests/canvas-session.test.ts`, `tests/agent-caption.test.ts`,
 `tests/mcp-discovery-transport.test.ts`, `cre/graph.test.ts`,
 `cre/workflow.test.ts`, and `contracts/test/GrantVault.t.sol`.

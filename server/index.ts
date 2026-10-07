@@ -170,9 +170,9 @@ const server = Bun.serve({
         return json({ ok: true });
       }
       if (url.pathname === "/api/canvas/clear" && request.method === "POST") {
-        const status = (await bridge()).rehearsalStatus();
-        if (status.busy || status.running)
-          return json({ ok: false, error: "Stop the demo and let the active agent turn finish before clearing the canvas." }, 409);
+        const status = (await bridge()).operatorStatus();
+        if (status.busy)
+          return json({ ok: false, error: "Let the active agent turn finish before clearing the canvas." }, 409);
         const name = "reset_session";
         const parsed = publicToolDefinitions[name].schema.safeParse(await request.json());
         if (!parsed.success) return json({ ok: false, error: "Invalid canvas operation." }, 400);
@@ -185,16 +185,8 @@ const server = Bun.serve({
           return json({ ok: false, error: "Text required" }, 400);
         return json(await (await bridge()).submitAgentPrompt(body.text));
       }
-      if (url.pathname === "/api/rehearsal/start" && request.method === "POST")
-        return json(
-          await (await bridge()).startRehearsal(await request.json()),
-        );
-      if (url.pathname === "/api/rehearsal/stop" && request.method === "POST")
-        return json(await (await bridge()).stopRehearsal());
-      if (url.pathname === "/api/rehearsal/next" && request.method === "POST")
-        return json(await (await bridge()).nextRehearsalCue());
-      if (url.pathname === "/api/rehearsal/status")
-        return json(await (await bridge()).rehearsalStatus());
+      if (url.pathname === "/api/agent/status" && request.method === "GET")
+        return json((await bridge()).operatorStatus());
       if (url.pathname.startsWith("/api/"))
         return json({ ok: false, error: "API route not found" }, 404);
       const root = resolve("dist");

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAgentBridge, prepareLocalRehearsalVault, operatorEnvironment } from "../scripts/agent";
+import { createAgentBridge, operatorEnvironment } from "../scripts/agent";
 import { emptyState } from "../server/engine";
 
 test("transport supplies state and publishes captions only after the agent finishes", async () => {
@@ -27,12 +27,17 @@ test("transport supplies state and publishes captions only after the agent finis
     const bridge = createAgentBridge({ rootDir: root, codexPath: executable, serverUrl: `http://127.0.0.1:${backend.port}`, getContext: () => state });
     const pending = bridge.submitAgentPrompt("What about Bitcoin?");
     await started;
+    expect(bridge.operatorStatus()).toMatchObject({ busy: true, turns: [] });
     expect(calls.some(call => call.name === "submit_utterance")).toBe(false);
     const turn = await pending;
     expect(turn.error).toBeUndefined();
     expect(turn.ok).toBe(true);
+    expect(bridge.operatorStatus()).toMatchObject({ busy: false, turns: [turn] });
+    const snapshot = bridge.operatorStatus();
+    snapshot.turns.length = 0;
+    expect(bridge.operatorStatus().turns).toHaveLength(1);
     expect(calls.map(call => call.name)).toEqual(["set_activity", "submit_utterance", "set_activity"]);
-    expect(calls[1]!.args.text).toBe("What about Bitcoin?");
+    expect(calls[1]!.args).toMatchObject({ text: "What about Bitcoin?", source: "codex-cli" });
     expect(calls[2]!.args).toMatchObject({ status: "idle", summary: "Bitcoin is $85,275." });
     const argv = await Bun.file(join(root, "argv.json")).json() as string[];
     expect(argv).toContain("--ignore-user-config");
@@ -62,40 +67,6 @@ test("transport supplies state and publishes captions only after the agent finis
     await rm(root, { recursive: true, force: true });
   }
 }, 15000);
-
-test("rehearsal preparation preserves contract state without reading or signing", async () => {
-  const result = await prepareLocalRehearsalVault("/nonexistent/no-deployment-required");
-  expect(result).toEqual({reset:false,reason:"CRE rehearsal preserves contract state."});
-});
-
-test("rehearsal checks actual CRE readiness before clearing a canvas", async () => {
-  const calls:string[]=[];
-  const backend=Bun.serve({hostname:"127.0.0.1",port:0,async fetch(request){
-    const name=new URL(request.url).pathname.split("/").at(-1)!;calls.push(name);
-    return Response.json({ok:true,data:{readiness:{readyForEvaluation:false,reason:"Authenticate CRE"}}});
-  }});
-  try {
-    const bridge=createAgentBridge({serverUrl:`http://127.0.0.1:${backend.port}`});
-    const result=await bridge.startRehearsal({mode:"manual"});
-    expect(result).toMatchObject({ok:false,error:"Authenticate CRE"});
-    expect(bridge.rehearsalStatus().running).toBe(false);
-    expect(calls).toEqual(["get_capabilities"]);
-  } finally {backend.stop(true);}
-});
-
-test("explicit broadcast demo fails before reset when broadcast authority is absent", async () => {
-  const calls:string[]=[];
-  const backend=Bun.serve({hostname:"127.0.0.1",port:0,async fetch(request){
-    const name=new URL(request.url).pathname.split("/").at(-1)!;calls.push(name);
-    return Response.json({ok:true,data:{readiness:{readyForEvaluation:true,broadcastConfigured:false}}});
-  }});
-  try {
-    const bridge=createAgentBridge({serverUrl:`http://127.0.0.1:${backend.port}`});
-    const result=await bridge.startRehearsal({mode:"manual",profile:"broadcast"});
-    expect(result.ok).toBe(false);expect(result.error).toContain("broadcast rehearsal");
-    expect(calls).toEqual(["get_capabilities"]);
-  } finally {backend.stop(true);}
-});
 
 test("operator inherits normal runtime paths and auth but no backend wallet, CRE or RPC credentials", () => {
   const env=operatorEnvironment({HOME:"/normal/home",PATH:"/normal/bin",CODEX_HOME:"/normal/codex",OPENAI_API_KEY:"normal-cli-auth",
@@ -131,7 +102,7 @@ console.log(JSON.stringify({type:"turn.completed"}));
     expect(child.args.some((arg:string)=>arg.includes('mcp_servers.woga.env=')&&arg.includes('ORIGINS_BACKEND_URL'))).toBe(true);
     const trace=await Bun.file(turn.traceFile).text();
     const stderr=await Bun.file(turn.traceFile.replace('.jsonl','.stderr.log')).text();
-    const archived=await Bun.file(join(root,".data/rehearsal-turns.jsonl")).text();
+    const archived=await Bun.file(join(root,".data/agent-turns.jsonl")).text();
     for(const secret of Object.values(protectedVars)) {expect(trace).not.toContain(secret);expect(stderr).not.toContain(secret);expect(archived).not.toContain(secret);expect(JSON.stringify(calls)).not.toContain(secret);}
     expect(turn.summary).toContain("[REDACTED]");expect(stderr).toContain("[REDACTED]");
   } finally {

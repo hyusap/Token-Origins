@@ -45,7 +45,7 @@ const checks = {
   noMonitorsActivated: !state.monitors?.some((m: any) => ["active", "checking"].includes(m.status)),
 };
 const verified = Object.values(checks).every(Boolean);
-const operator = await (await fetch(`${base}/api/rehearsal/status`)).json();
+const operator = await (await fetch(`${base}/api/agent/status`)).json();
 const proof = {verified, verifiedAt: new Date().toISOString(), independentReadOnly: true,
   rpcProvider: "sepolia.gateway.tenderly.co", claim: "Actual browser typed instruction → Codex operator → semantic MCP → CRE local simulation → public Sepolia report delivery; not deployed DON execution.",
   chainId: 11155111, vault, transactionHash: hash, blockNumber: String(receipt.blockNumber), blockHash: receipt.blockHash,

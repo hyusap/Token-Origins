@@ -11,8 +11,6 @@
     "check": "tsc --noEmit",
     "test": "bun test",
     "mcp": "bun run scripts/mcp.ts",
-    "rehearse": "bun run scripts/rehearse.ts",
-    "demo": "bun run scripts/rehearse.ts --auto",
     "share": "vite --config vite.share.config.ts",
     "test:e2e": "bun run scripts/verify-cre-acceptance.ts",
     "verify:proof": "bun run scripts/verify-evidence.ts demo/sepolia-evidence-2026-10-07T09-06-03-441Z.json",

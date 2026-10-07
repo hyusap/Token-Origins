@@ -1,6 +1,6 @@
-# Voice and agent rehearsal
+# Voice and operator interaction
 
-Woga has two inputs to the same semantic operator: typed commands and browser microphone dictation. Final text goes to `/api/agent`, a real Codex CLI turn calls Woga's MCP tools, and committed canvas state arrives over WebSocket. The timed rehearsal supplies preplanned text; it does not capture audio.
+Woga has two inputs to the same semantic operator: typed commands and browser microphone dictation. Final text goes to `/api/agent`, a real Codex CLI turn calls Woga's MCP tools, and committed canvas state arrives over WebSocket.
 
 ## Browser microphone
 
@@ -29,43 +29,33 @@ The 6.54-second recording transcribed in 1.165 seconds. Exactly one semantic tur
 
 This proves the browser dictation pipeline with synthetic spoken input. Human microphone behavior and Codex desktop voice are separate verification scopes.
 
-## Timed rehearsal
+## Manual interaction
 
-The backend and canvas must be running, and the CLI account must be signed in. In a second terminal:
-
-```sh
-bun run rehearse --auto
-```
-
-For manual cues, use `bun run rehearse`. `--no-reset` preserves the existing canvas session; the default clears the canvas before the take. **Neither path resumes, resets or redeploys a vault.** The rehearsal preserves contract state, so an already-paused vault must produce an honest no-op.
-
-Each cue in `demo/script.json` passes through a real `codex exec --json` turn and official MCP stdio transport. The bridge supplies authoritative canvas context, ignores incompatible global CLI configuration and uses the account's default model. Cue timestamps are minimum offsets. Turns are serialized, with six seconds between completed turns by default. Slow turns defer later cues. The planned draft revision immediately follows the run-return turn; the transaction might already have completed, so this is not proof of audio interruption during a transaction.
+The backend and canvas must be running, and the CLI account must be signed in. Type a command in the dock or use **Mic**. Each submitted command passes through a real `codex exec --json` turn and official MCP stdio transport. The bridge supplies authoritative canvas context, ignores incompatible global CLI configuration and uses the account's default model. Submit your next instruction after the current turn settles. There is no timed script or automatic cue playback.
 
 Product execution uses Chainlink CRE as its sole action authority. The supported action is a bounded grant-vault pause through the version 2 receiver. Source reads and drafts alone do not prove CRE readiness. A run requires configured CRE source/receiver networks and actual execution evidence; there is no standalone signer fallback. See [CRE setup](cre-integration.md).
 
-`/quit`, Ctrl+C, **Stop demo** and **Escape** stop future rehearsal cues. Active semantic operations and submitted transactions can finish.
+Clearing the canvas preserves contract state. Stopping microphone capture does not cancel an active semantic operation or submitted transaction.
 
 | Key | Action outside text inputs |
 | --- | --- |
 | M | Start or stop dictation |
 | `/` | Expand typed command input |
-| Escape | Close overlays, stop dictation/transcription and future rehearsal cues |
+| Escape | Close overlays and stop dictation/transcription |
 | I | Open proof |
 | 0 | Fit canvas |
-| Space | Start or stop the timed rehearsal |
 
 ## Traces and endpoints
 
-`.data/agent/agent-*.jsonl` contains actual CLI event streams. `.data/rehearsal-turns.jsonl` records prompts, timing and semantic tool calls. `CanvasState.latency` and `/api/rendered` acknowledgements measure committed state delivery/rendering; they exclude audio capture and transcription. The separate browser proof records actual transcription timing.
+`.data/agent/agent-*.jsonl` contains actual CLI event streams. `CanvasState.latency` and `/api/rendered` acknowledgements measure committed state delivery/rendering; they exclude audio capture and transcription. The separate browser proof records actual transcription timing.
 
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/voice/capabilities` | Local engine/model readiness and audio limits |
 | `POST /api/voice/transcribe` | Audio FormData field `audio` → recognized transcript; no action submission |
 | `POST /api/agent` | `{ "text": "Focus on the vault." }` → one semantic operator turn |
-| `POST /api/rehearsal/start` | `{ "mode": "auto", "reset": true }`; `manual` uses individual cues |
-| `POST /api/rehearsal/next` / `POST /api/rehearsal/stop` | Advance one cue / stop future cues |
-| `GET /api/rehearsal/status` / `/api/state` | Actual progress / authoritative persistent canvas |
+| `GET /api/agent/status` | Current operator progress |
+| `GET /api/state` | Authoritative persistent canvas |
 
 ## Codex desktop voice
 
