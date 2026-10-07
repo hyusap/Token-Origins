@@ -167,12 +167,15 @@ export async function loadDeployment(): Promise<Deployment | null> {
       throw new Error(
         "CRE mode requires an explicitly configured Sepolia vault",
       );
+    // The deploy record gives restart recovery a block to search logs from.
+    const record = await Bun.file("contracts/deployment.sepolia.json").json().catch(() => null);
     return {
       address,
       chainId: 11155111,
       rpcUrl:
         process.env.ORIGINS_SEPOLIA_RPC ||
         "https://ethereum-sepolia-rpc.publicnode.com",
+      ...(record?.address?.toLowerCase() === address.toLowerCase() ? { blockNumber: record.blockNumber } : {}),
     };
   }
   const file = Bun.file(process.env.DEPLOYMENT_FILE || ".data/deployment.json");

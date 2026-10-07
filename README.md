@@ -61,7 +61,8 @@ The CRE implementation is a fixed, allowlisted graph evaluator. The composed gra
 ## Honest boundaries
 
 - **The default runs actual local EVM transactions through an explicitly named rehearsal forwarder.** It does not invoke CRE or demonstrate DON consensus.
-- **The actual CRE HTTP handler passes SDK capability tests and compiles to WASM.** Authenticated CRE CLI execution and Sepolia broadcast remain untested; they require a fresh CRE account/API key and funded fresh test wallet. Existing user credentials were not inspected for chain execution.
+- **The CRE HTTP handler passes SDK capability tests and compiles to WASM.** Authenticated CRE CLI execution and Sepolia broadcast remain untested until `scripts/prove-sepolia.ts` is run with a CRE login and a funded test wallet. Existing user credentials were not inspected for chain execution.
+- **The takes above used report v1 (ETH-only threshold).** Report v2 (composed graphs bound by policy hash) is verified on real local Anvil by `tests/anvil-integration.test.ts`; its live-price and Sepolia runs have not been recorded yet.
 - **Built-in desktop voice remains untested.** Preplanned voice prompts use the real Codex/MCP agent. Browser microphone capture supplies only the requested amplitude display; speech recognition and native Codex voice are separate integrations.
 - The draft revision in the observed take arrived after the fast local run finished. Snapshot immutability was verified; audio interruption during an in-flight transaction was not.
 - Measured CLI agent turn duration was 17.1–35.3 seconds, median 20.6 seconds. These are not voice latency figures. First-render acknowledgement handling was corrected after that take; its original render numbers are not claimed as reliable performance.
@@ -73,16 +74,18 @@ The CRE implementation is a fixed, allowlisted graph evaluator. The composed gra
 ```sh
 bun run check
 bun run build
-bun test tests
+forge build --root contracts && bun test tests   # includes a real-Anvil integration test when Foundry is installed
 bun run --cwd cre typecheck
 bun run --cwd cre test
 bun run --cwd cre build:wasm
 forge test --root contracts -vv
 ```
 
-Backend safety checks cover revision conflicts, operation collisions/retries, immutable runs, run deduplication, ambiguity, strict freshness, persistence, and selecting older receipt evidence. CRE tests exercise the actual HTTP handler with the official capability mock harness. Solidity tests cover report authorization, threshold/freshness validation, replay, and paused spending.
+Policies execute through one decision path. Fixture, local EVM and CRE runs all validate the same graph, check its structural policy hash, read only the sources it names, and apply the same mandatory guards; see [the execution contract](docs/execution-contract.md). Backend tests cover revision conflicts, operation retries, immutable runs, fresh runs, migration of pre-graph saves, and restart recovery that never resubmits blindly. CRE tests run the real handler under the official capability mocks, including zero writes for simulated sells and refusal of unsupported networks. Solidity tests cover report v2 authorization, target/chain/action binding, expiry, replay and paused spending. `tests/anvil-integration.test.ts` deploys the vault on a throwaway Anvil node and proves false → verified composed pause → no duplicate → sell never writes, then re-verifies the evidence from chain data.
 
-`bun run scripts/verify-local.ts` independently verifies the real local false → true → already-paused sequence and resumes this local vault afterward. Run it outside an active demo. The development key is the public Anvil account and is explicitly rejected by the rehearsal runner outside localhost chain 31337.
+`bun run scripts/verify-local.ts` runs the same proof with live prices on the dev chain and resumes the vault afterward. Run it outside an active demo. The development key is the public Anvil account and is explicitly rejected outside localhost chain 31337. For Sepolia, see [CRE setup](docs/cre-integration.md#sepolia-deploy-and-prove).
+
+UI and voice work can build against `fixtures/states/*.json`: full canvas states produced by the real engine for a legacy rule, nested AND/OR/NOT, a false root with a true branch, a passing OR with a false branch, a guard-blocked root, an unsupported source, a simulated sell, a failed write, and a verified pause. Regenerate them with `bun run scripts/generate-fixtures.ts`.
 
 ## Files
 
@@ -91,8 +94,12 @@ Backend safety checks cover revision conflicts, operation collisions/retries, im
 - `scripts/mcp.ts` — official MCP SDK stdio server
 - `scripts/agent.ts` — real Codex CLI bridge, traces and timed cues
 - `demo/script.json` — filming transcript and minimum cue offsets
-- `cre/workflow/main.ts` — actual fixed CRE workflow
-- `contracts/src/GrantVault.sol` — receiver-enabled grant vault
+- `cre/graph.ts` — policy graph, source registry, policy hash, shared evaluator, report v2
+- `cre/runner.ts` — fixture / local EVM / CRE execution paths and chain verification
+- `cre/workflow/handler.ts` — the CRE workflow
+- `contracts/src/GrantVault.sol` — receiver-enabled grant vault (report v2)
+- `scripts/deploy-sepolia.ts`, `scripts/prove-sepolia.ts`, `scripts/verify-evidence.ts` — Sepolia deploy, proof and independent verification
+- `fixtures/states/` — reference UI/API states; `docs/execution-contract.md` — the shared contract
 - `.codex/config.toml` — project-scoped Sotto MCP connection
 
 The public frontend and backend bind only to localhost. Live broadcasts use an explicitly selected CRE mode and fresh configuration; the local forwarder is not a production Chainlink forwarder.

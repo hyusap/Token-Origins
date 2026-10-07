@@ -1,0 +1,320 @@
+{
+  "name": "legacy-rule",
+  "description": "Single-threshold rule composed with a scalar edit. The graph is the two-node legacy shape.",
+  "expected": {
+    "utterance": "If ETH drops below three thousand dollars, pause spending from the grant vault.",
+    "policySentence": "Pause spending when Coinbase ETH-USD trade < $3,000.",
+    "policyHash": "0xa486154b934ef69a64205362c2c5fb2ba1d97b12f5dda07e6f6dc3ee198e1da5",
+    "structure": {
+      "root": "under-threshold",
+      "action": {
+        "type": "pause-vault"
+      },
+      "nodes": [
+        {
+          "id": "eth",
+          "kind": "price",
+          "inputs": []
+        },
+        {
+          "id": "under-threshold",
+          "kind": "compare",
+          "inputs": [
+            "eth"
+          ]
+        }
+      ]
+    }
+  },
+  "state": {
+    "stateVersion": 2,
+    "sessionId": "1c671c85-bf2c-41b4-b445-4f077a76f960",
+    "seq": 2,
+    "mode": "compose",
+    "focus": {
+      "objectId": "workflow:treasury",
+      "label": "Treasury policy"
+    },
+    "previousFocus": [],
+    "references": [
+      {
+        "name": "Treasury policy",
+        "objectId": "workflow:treasury",
+        "at": "2026-10-07T05:46:59.126Z"
+      }
+    ],
+    "objects": [
+      {
+        "id": "source:coinbase",
+        "kind": "source",
+        "label": "Coinbase Exchange",
+        "data": {
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "token": "coinbase:ETH-USD",
+          "priceObjectId": "price:eth-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T05:46:55.122Z",
+          "fetchedAt": "2026-10-07T05:46:59.122Z"
+        },
+        "visible": false,
+        "pinned": false
+      },
+      {
+        "id": "price:eth-usd",
+        "kind": "price",
+        "label": "ETH / USD",
+        "data": {
+          "price": 2500,
+          "unit": "USD",
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "token": "coinbase:ETH-USD",
+          "history": [],
+          "sourceObjectId": "source:coinbase"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T05:46:55.122Z",
+          "fetchedAt": "2026-10-07T05:46:59.122Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "data": {
+          "paused": false,
+          "balance": "1.2049",
+          "balanceEth": 1.2049,
+          "fixture": true,
+          "network": "Local rehearsal fixture"
+        },
+        "provenance": {
+          "source": "Local rehearsal fixture",
+          "kind": "fixture",
+          "label": "Fixture vault · no deployed contract",
+          "observedAt": "2026-10-07T05:46:59.122Z",
+          "fetchedAt": "2026-10-07T05:46:59.122Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "condition:threshold",
+        "kind": "condition",
+        "label": "Price threshold",
+        "data": {
+          "threshold": 3000,
+          "operator": "<",
+          "unit": "USD"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.124Z",
+          "fetchedAt": "2026-10-07T05:46:59.124Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "action:pause",
+        "kind": "action",
+        "label": "Pause spending",
+        "data": {
+          "target": "vault:grant"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.124Z",
+          "fetchedAt": "2026-10-07T05:46:59.124Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:freshness",
+        "kind": "condition",
+        "label": "Fresh observation",
+        "data": {
+          "maxAgeSeconds": 60
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.124Z",
+          "fetchedAt": "2026-10-07T05:46:59.124Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "from": "source:coinbase",
+        "to": "price:eth-usd",
+        "label": "observes"
+      },
+      {
+        "id": "e2",
+        "from": "price:eth-usd",
+        "to": "condition:threshold",
+        "label": "compares"
+      },
+      {
+        "id": "e3",
+        "from": "condition:threshold",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "e4",
+        "from": "action:pause",
+        "to": "vault:grant",
+        "label": "pauses"
+      },
+      {
+        "id": "e5",
+        "from": "price:eth-usd",
+        "to": "condition:freshness",
+        "label": "timestamp"
+      },
+      {
+        "id": "e6",
+        "from": "condition:freshness",
+        "to": "action:pause",
+        "label": "and"
+      }
+    ],
+    "workflow": {
+      "id": "workflow:treasury",
+      "revision": 1,
+      "threshold": 3000,
+      "maxAgeSeconds": 60,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T05:46:59.123Z",
+      "reason": "Voice policy revision",
+      "graph": {
+        "nodes": [
+          {
+            "id": "eth",
+            "kind": "price",
+            "source": {
+              "type": "exchange-trade",
+              "pair": "ETH-USD"
+            }
+          },
+          {
+            "id": "under-threshold",
+            "kind": "compare",
+            "input": "eth",
+            "op": "<",
+            "value": 3000
+          }
+        ],
+        "root": "under-threshold",
+        "action": {
+          "type": "pause-vault"
+        }
+      },
+      "policyHash": "0xa486154b934ef69a64205362c2c5fb2ba1d97b12f5dda07e6f6dc3ee198e1da5",
+      "summary": "When ETH / USD is below $3,000, the observation is no more than 60 seconds old, pause grant vault spending.",
+      "revisions": [
+        {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": 60,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T05:46:59.123Z",
+          "reason": "Voice policy revision",
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "ETH-USD"
+                }
+              },
+              {
+                "id": "under-threshold",
+                "kind": "compare",
+                "input": "eth",
+                "op": "<",
+                "value": 3000
+              }
+            ],
+            "root": "under-threshold",
+            "action": {
+              "type": "pause-vault"
+            }
+          },
+          "policyHash": "0xa486154b934ef69a64205362c2c5fb2ba1d97b12f5dda07e6f6dc3ee198e1da5"
+        }
+      ],
+      "created": true
+    },
+    "runs": [],
+    "conversation": [
+      {
+        "id": "ed7b6b98-5f48-4fdc-8ab4-2f0e10df9c44",
+        "role": "assistant",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T05:46:55.122Z); Grant vault.",
+        "at": "2026-10-07T05:46:59.123Z",
+        "source": "mcp"
+      },
+      {
+        "id": "d414d958-4b92-4bc9-8ff9-4ffef122eb21",
+        "role": "assistant",
+        "text": "Revision 1. When ETH / USD is below $3,000, the observation is no more than 60 seconds old, pause grant vault spending.",
+        "at": "2026-10-07T05:46:59.126Z",
+        "source": "mcp"
+      }
+    ],
+    "activity": {
+      "status": "idle",
+      "prompt": "",
+      "summary": "Revision 1. When ETH / USD is below $3,000, the observation is no more than 60 seconds old, pause grant vault spending."
+    },
+    "latency": [
+      {
+        "operationId": "d",
+        "tool": "discover_objects",
+        "receivedAt": "2026-10-07T05:46:59.122Z",
+        "committedAt": "2026-10-07T05:46:59.123Z",
+        "commitMs": 1.07
+      },
+      {
+        "operationId": "p",
+        "tool": "patch_workflow",
+        "receivedAt": "2026-10-07T05:46:59.123Z",
+        "committedAt": "2026-10-07T05:46:59.126Z",
+        "commitMs": 3.27
+      }
+    ],
+    "capabilities": {
+      "price": "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
+      "vault": "Fixture vault · no deployed contract",
+      "execution": "Local policy rehearsal · no blockchain evidence yet",
+      "voice": "Planned utterances · actual desktop voice unverified",
+      "mcp": "Semantic tools · official MCP stdio transport"
+    },
+    "canUndoClear": false
+  }
+}

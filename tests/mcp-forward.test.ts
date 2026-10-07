@@ -16,6 +16,26 @@ test("discovery refuses an old runtime before posting arguments that it would st
   expect(calls).toEqual(["http://backend/api/health"]);
 });
 
+test("graph-changing tools refuse an old backend before posting", async () => {
+  for (const name of ["compose_graph", "run_workflow", "patch_workflow"]) {
+    const calls: string[] = [];
+    const request = (async (url: any) => {
+      calls.push(String(url));
+      return Response.json({ ok: true, runtime: { semanticApiVersion: SEMANTIC_API_VERSION - 1 } });
+    }) as typeof fetch;
+    const result = await forwardTool("http://backend", name, { expectedRevision: 0, operationId: "old" }, request);
+    expect(result.code).toBe("BACKEND_VERSION_MISMATCH");
+    expect(calls).toEqual(["http://backend/api/health"]);
+  }
+});
+
+test("read-only focus tools forward without a version round trip", async () => {
+  const calls: string[] = [];
+  const request = (async (url: any) => { calls.push(String(url)); return Response.json({ ok: true, summary: "Focused", state: emptyState() }); }) as typeof fetch;
+  await forwardTool("http://backend", "focus_object", { reference: "price", operationId: "f" }, request);
+  expect(calls).toEqual(["http://backend/api/tools/focus_object"]);
+});
+
 test("MCP forwards names, symbols, qualified IDs and omitted-token default unchanged", async () => {
   for (const tokens of [["Solana", "Bitcoin"], ["SOL", "BTC"], ["coinbase:SOL-USD", "coinbase:BTC-USD"], undefined]) {
     const args = { objects: ["price"], ...(tokens ? { tokens } : {}), operationId: "forward" };

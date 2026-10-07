@@ -5,23 +5,10 @@ import {
   validateLocalStateFile,
   snapshotLocalChain,
 } from "./snapshot-local";
+import { alignLocalClock, deployedReportVersion, rpcAt } from "./local-chain";
+import { REPORT_VERSION } from "../cre/graph";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** How far behind real time the newest block in the saved snapshot sits. */
-async function savedStateDriftSeconds(): Promise<number> {
-  try {
-    const state = await Bun.file(localStatePath).json();
-    const blocks = state.blocks;
-    const newest = Array.isArray(blocks) ? blocks[blocks.length - 1] : null;
-    const raw = newest?.header?.timestamp;
-    const seconds =
-      typeof raw === "string" ? Number.parseInt(raw, 16) : Number(raw);
-    if (!Number.isFinite(seconds) || seconds <= 0) return 0;
-    return Math.floor(Date.now() / 1000) - seconds;
-  } catch {
-    return 0;
-  }
-}
 const bun = Bun.which("bun") ?? "bun";
 const children: ReturnType<typeof Bun.spawn>[] = [];
 let ownsLocalAnvil = false;
@@ -48,22 +35,13 @@ if (process.env.ORIGINS_EXECUTION_MODE !== "cre") {
         "Local rehearsal needs Foundry Anvil. Install Foundry, then run bun run dev.",
       );
     if (await Bun.file(localStatePath).exists()) {
-      await validateLocalStateFile();
-      // Anvil restores the saved chain's clock along with its state, and keeps
-      // lagging afterwards even if the clock is pushed forward. Once the saved
-      // chain is further behind than the receiver's own report age, a freshly
-      // observed price reads as future-dated and every delivery reverts
-      // StaleObservation. Set that snapshot aside and start clean rather than
-      // rehearse against a chain whose clock cannot be trusted.
-      const drift = await savedStateDriftSeconds();
-      if (drift > 120) {
-        const aside = `${localStatePath}.stale-${Date.now()}`;
+      if (process.env.ORIGINS_RESET_LOCAL_CHAIN === "1") {
+        // Explicit request only. The old chain is kept aside, never deleted.
+        const aside = `${localStatePath}.aside-${Date.now()}`;
         await Bun.$`mv ${localStatePath} ${aside}`.quiet();
         await Bun.$`rm -f ${localStatePath}.metadata.json`.quiet();
-        console.log(
-          `Saved local chain was ${drift}s behind real time; started a clean chain and kept the old snapshot at ${aside}.`,
-        );
-      }
+        console.log(`ORIGINS_RESET_LOCAL_CHAIN=1: starting a clean chain; previous snapshot kept at ${aside}.`);
+      } else await validateLocalStateFile();
     }
     children.push(
       Bun.spawn(
@@ -97,17 +75,29 @@ if (process.env.ORIGINS_EXECUTION_MODE !== "cre") {
   }
   if (chain?.result !== "0x7a69")
     throw new Error("Refusing local setup: localhost RPC is not chain 31337.");
+  // A restored chain's clock lags until the next block; align it without
+  // discarding any saved history.
+  const clock = await alignLocalClock(rpcAt(rpc));
+  if (clock.minedAlignmentBlock)
+    console.log(`Local chain clock was ${clock.lagBefore}s behind; mined one alignment block. Saved history is intact.`);
   let deployed = false;
   try {
     const metadata = await Bun.file(
       resolve(root, "contracts/deployment.local.json"),
     ).json();
-    const code = await rpcCall("eth_getCode", [metadata.address, "latest"]);
+    const version = await deployedReportVersion(rpcAt(rpc), metadata.address);
     deployed =
       metadata.chainId === 31337 &&
       metadata.rpcUrl === rpc &&
-      code.result &&
-      code.result !== "0x";
+      version === REPORT_VERSION;
+    if (!deployed && metadata.address) {
+      const code = await rpcCall("eth_getCode", [metadata.address, "latest"]);
+      console.log(
+        code.result && code.result !== "0x"
+          ? `Vault ${metadata.address} predates report v${REPORT_VERSION}; deploying a new vault beside it (its history stays on chain).`
+          : `No vault at ${metadata.address} on this chain; deploying one.`,
+      );
+    }
   } catch {}
   if (!deployed) {
     const deploy = Bun.spawn([bun, "run", "scripts/deploy-local.ts"], {

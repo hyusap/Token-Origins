@@ -13,6 +13,7 @@ export function compactMcpResult(result: Omit<ToolResult, "state"> & { state?: C
       id: run.id, revision: run.revision, snapshot: run.snapshot, status: run.status,
       executionMode: run.executionMode, startedAt: run.startedAt, completedAt: run.completedAt,
       error: run.error,
+      policyHash: run.policyHash, action: run.action, noopReason: run.noopReason, uncertain: run.uncertain,
       verification: run.evidence?.verification,
     };
   }

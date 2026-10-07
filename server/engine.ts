@@ -6,24 +6,43 @@ import type {
   WorkflowRevision,
 } from "../shared/types";
 import { StateStore } from "./store";
+import { migrateState, STATE_VERSION } from "./migrate";
 import { buildExecutionPrice } from "./execution-price";
-import { fetchPrice, fetchVault, loadDeployment } from "./sources";
+import { fetchPrice, fetchVault, loadDeployment, type Deployment } from "./sources";
 import {
   fetchFeedPrice,
   listFeedSymbols,
   resolveFeedSymbol,
-  feedId,
-  CHAINLINK_FEEDS,
+  feedObjectId,
+  feedObservation,
+  feedsOn,
 } from "./chainlink";
 import {
   legacyGraph,
   describeGraph,
+  describeAction,
   validateGraph,
   collectSources,
   describeSource,
   isLegacyShape,
+  policyHash,
+  sourceIdentity,
+  NETWORKS,
+  DEFAULT_FEED_NETWORK,
+  REPORT_VERSION,
+  type FeedSource,
+  type Network,
+  type Observation,
   type PolicyGraph,
 } from "../cre/graph";
+import type { ExecutionSpecification } from "../cre/spec";
+import {
+  executeCreRun,
+  executePolicy,
+  findSubmittedPause,
+  type ExecutionEvidence,
+  type PolicyEnvironment,
+} from "../cre/runner";
 const now = () => new Date().toISOString();
 const clone = <T>(v: T): T => structuredClone(v);
 const baseRevision = (): WorkflowRevision => ({
@@ -34,9 +53,22 @@ const baseRevision = (): WorkflowRevision => ({
   createdAt: now(),
   reason: "Initial policy",
   graph: legacyGraph(3000),
+  policyHash: policyHash(legacyGraph(3000)),
 });
+const TERMINAL = ["confirmed", "no-op", "failed"];
+/** Archive form of an exchange trade object. */
+export function exchangeObservation(object: GraphObject): Observation {
+  return {
+    ...sourceIdentity({ type: "exchange-trade", pair: "ETH-USD" }),
+    usd: Number(object.data.price),
+    raw: String(object.data.price),
+    observedAt: object.provenance.observedAt,
+    fetchedAt: object.provenance.fetchedAt,
+  };
+}
 export function emptyState(): CanvasState {
   return {
+    stateVersion: STATE_VERSION,
     sessionId: crypto.randomUUID(),
     seq: 0,
     mode: "explore",
@@ -74,6 +106,10 @@ export interface EngineSources {
   fetchVault: typeof fetchVault;
   loadDeployment: typeof loadDeployment;
   fetchFeedPrice: typeof fetchFeedPrice;
+  /** Runs a frozen spec against a deployed vault (local EVM or CRE). */
+  executeRun: typeof executeCreRun;
+  /** Reads the chain to learn whether an interrupted run's report landed. */
+  findSubmittedPause: typeof findSubmittedPause;
 }
 export class Engine {
   state: CanvasState;
@@ -88,31 +124,97 @@ export class Engine {
       fetchVault,
       loadDeployment,
       fetchFeedPrice,
+      executeRun: executeCreRun,
+      findSubmittedPause,
       ...sources,
     };
     this.store = store;
-    this.state = store.load() || emptyState();
+    this.state = migrateState(store.load() as CanvasState) || emptyState();
     this.fixturePaused = Boolean(
       this.state.objects.find((x) => x.id === "vault:grant" && x.data.fixture)
         ?.data.paused,
     );
     let interruptedRun = false;
     for (const run of this.state.runs)
-      if (!["confirmed", "failed", "no-op"].includes(run.status)) {
+      if (!TERMINAL.includes(run.status)) {
+        // The report may or may not have landed. Never resubmit blindly:
+        // hold new runs until the chain answers.
         interruptedRun = true;
         run.status = "failed";
+        run.uncertain = true;
         run.error =
-          "Backend restarted during execution; inspect chain before retrying";
+          "Backend restarted during execution; checking the chain before allowing a retry";
         run.completedAt = now();
+        run.logs.push({ at: now(), stage: "failed", message: run.error });
       }
     this.state.activity = {
       ...this.state.activity,
       status: interruptedRun ? "error" : "idle",
       summary: interruptedRun
-        ? "Backend restarted during execution; inspect chain before retrying"
+        ? "Backend restarted during execution; checking the chain before allowing a retry"
         : this.state.activity.summary,
     };
     this.store.save(this.state);
+    if (interruptedRun) this.reconcileQueued();
+  }
+  /** Settles every interrupted run from chain state, inside the operation queue. */
+  reconcileQueued() {
+    const work = this.queue.then(() => this.reconcileAll());
+    this.queue = work.catch(() => {});
+    return work;
+  }
+  async reconcileAll() {
+    let changed = false;
+    for (const run of this.state.runs.filter((x) => x.uncertain))
+      changed = (await this.reconcile(run)) || changed;
+    if (changed) this.commit();
+  }
+  async reconcile(run: ExecutionRun): Promise<boolean> {
+    if (!run.uncertain) return false;
+    const record = (message: string) =>
+      run.logs.push({ at: now(), stage: "recovery", message });
+    try {
+      const deployment = await this.sources.loadDeployment();
+      if (!deployment) {
+        run.uncertain = false;
+        run.error = "Backend restarted during a fixture rehearsal; nothing reached a chain. Safe to run again.";
+        record(run.error);
+        return true;
+      }
+      const found = await this.sources.findSubmittedPause(run.id, deployment);
+      run.uncertain = false;
+      if (found.landed && found.transactionHash) {
+        run.status = "confirmed";
+        delete run.error;
+        run.evidence = {
+          ...run.evidence,
+          transactionHash: found.transactionHash,
+          blockNumber: String(found.blockNumber),
+          receiptStatus: "success",
+          pausedAfter: found.paused,
+          chainId: deployment.chainId,
+          contractAddress: deployment.address,
+          policyHash: run.policyHash ?? run.snapshot.policyHash,
+          verification: "Recovered after restart from the receiver event for this run",
+          ...(deployment.chainId === 11155111
+            ? { explorerUrl: `https://sepolia.etherscan.io/tx/${found.transactionHash}` }
+            : {}),
+        };
+        record(`Recovered after restart: this run's report landed at block ${found.blockNumber}`);
+      } else if (found.landed) {
+        run.status = "no-op";
+        delete run.error;
+        run.noopReason = "This run's report landed before the restart, but no pause event was found for it; the vault was likely already paused.";
+        record(run.noopReason);
+      } else {
+        run.error = "Backend restarted before this run's report landed; nothing reached the chain. Safe to run again.";
+        record(run.error);
+      }
+      return true;
+    } catch (error) {
+      run.error = `Outcome unknown after restart (${error instanceof Error ? error.message : String(error)}); inspect the chain before retrying.`;
+      return true;
+    }
   }
   context() {
     const state = clone(this.state);
@@ -175,7 +277,7 @@ export class Engine {
     const feed = resolveFeedSymbol(ref);
     if (feed) {
       const object = this.state.objects.find(
-        (x) => x.id === feedId(feed.symbol),
+        (x) => x.kind === "feed" && x.data.symbol === feed.symbol,
       );
       if (object) return object;
     }
@@ -285,11 +387,14 @@ export class Engine {
       this.state.objects = this.state.objects.filter(
         (x) => !x.id.startsWith("condition:") || live.has(x.id),
       );
+      // The id stays stable for the canvas; the label and data name the actual action.
       this.object({
         id: "action:pause",
         kind: "action",
-        label: "Pause spending",
-        data: { target: "vault:grant" },
+        label: describeAction(w.graph.action),
+        data: w.graph.action.type === "sell"
+          ? { ...w.graph.action, simulated: true }
+          : { type: "pause-vault", target: "vault:grant" },
         visible: true,
         pinned: false,
         provenance,
@@ -316,7 +421,7 @@ export class Engine {
             from:
               priceNode.source.type === "exchange-trade"
                 ? "price:eth-usd"
-                : feedId(priceNode.source.symbol),
+                : feedObjectId(priceNode.source),
             to: id,
             label: node.kind === "compare" ? "compares" : "timestamp",
           });
@@ -332,7 +437,7 @@ export class Engine {
         id: "e-act",
         from: "action:pause",
         to: "vault:grant",
-        label: "pauses",
+        label: w.graph.action.type === "sell" ? "simulated · vault unchanged" : "pauses",
       });
       this.state.edges = edges;
       return;
@@ -511,20 +616,21 @@ export class Engine {
           break;
         }
         case "list_price_feeds": {
-          const symbols = listFeedSymbols();
-          summary = `Chainlink mainnet feeds available: ${symbols
-            .map((x) => `${x} (${CHAINLINK_FEEDS[x]!.name})`)
-            .join(", ")}.`;
+          const mainnetFeeds = feedsOn("ethereum-mainnet");
+          summary = `Chainlink mainnet feeds available: ${listFeedSymbols()
+            .map((x) => `${x} (${mainnetFeeds[x]!.name})`)
+            .join(", ")}. Sepolia feeds: ${Object.keys(feedsOn("ethereum-sepolia")).join(", ")}.`;
           break;
         }
         case "read_price_feed": {
           const requested = String(args.symbol ?? "").trim();
+          const network: Network = args.network ?? DEFAULT_FEED_NETWORK;
           const feed = resolveFeedSymbol(requested);
-          if (!feed)
+          if (!feed || !feedsOn(network)[feed.symbol])
             throw new Error(
-              `No Chainlink mainnet feed is configured for "${requested}". Available: ${listFeedSymbols().join(", ")}`,
+              `No Chainlink feed is configured for "${requested}" on ${NETWORKS[network].label}. Available: ${Object.keys(feedsOn(network)).join(", ")}`,
             );
-          const object = await this.sources.fetchFeedPrice(feed.symbol);
+          const object = await this.sources.fetchFeedPrice(feed.symbol, network);
           this.object(object);
           this.focus(object.id, object.label);
           // The aggregator's own write time, not our fetch time. Feeds publish
@@ -536,7 +642,7 @@ export class Engine {
               {
                 maximumFractionDigits: Number(object.data.price) < 10 ? 6 : 2,
               },
-            )} per the Chainlink ${object.data.description} feed on Ethereum mainnet, ` +
+            )} per the Chainlink ${object.data.description} feed on ${NETWORKS[network].label}, ` +
             `last written ${object.data.ageLabel}. This is an on-chain oracle read, not the vault's execution price.`;
           break;
         }
@@ -660,12 +766,12 @@ export class Engine {
               this.observePrice(await this.sources.fetchPrice(object.data.token || object.data.symbol ||
                 (object.id === "price:eth-usd" ? "ETH" : object.label.split(" / ")[0])));
             } else if (object.kind === "feed") {
-              this.object(await this.sources.fetchFeedPrice(object.data.symbol));
+              this.object(await this.sources.fetchFeedPrice(object.data.symbol, object.data.network ?? DEFAULT_FEED_NETWORK));
             } else this.object(await this.sources.fetchVault(this.fixturePaused));
           const current = this.state.objects.find((x) => x.id === object.id)!;
           summary =
             current.kind === "feed"
-              ? `${current.label}: $${current.data.price} from the Chainlink aggregator at ${current.data.feedAddress} on Ethereum mainnet, round ${current.data.roundId} written ${current.data.ageLabel}. On-chain oracle read; not the vault's execution price.`
+              ? `${current.label}: $${current.data.price} from the Chainlink aggregator at ${current.data.feedAddress} on ${NETWORKS[(current.data.network ?? DEFAULT_FEED_NETWORK) as Network].label}, round ${current.data.roundId} written ${current.data.ageLabel}. On-chain oracle read; not the vault's execution price.`
               : current.kind === "price"
                 ? `${current.label}: $${current.data.price}. ${current.provenance.label}. Observed ${current.provenance.observedAt}.`
                 : current.kind === "vault"
@@ -738,6 +844,7 @@ export class Engine {
               ? legacyGraph(threshold)
               : clone(current.graph),
           };
+          revision.policyHash = policyHash(revision.graph);
           current.revisions.push(revision);
           Object.assign(current, revision, { created: true });
           this.state.mode = "compose";
@@ -753,7 +860,7 @@ export class Engine {
             break;
           }
           const sources = collectSources(w.graph).map(describeSource);
-          summary = `Revision ${w.revision}. ${describeGraph(w.graph)} Execution fetches ${sources.join(" and ")}, and always keeps the receiver freshness cap plus the already-paused no-op.`;
+          summary = `Revision ${w.revision}. ${describeGraph(w.graph)} Execution fetches ${sources.join(" and ")}, and always enforces each source's freshness cap${w.graph.action.type === "pause-vault" ? " plus the already-paused no-op" : ""}.`;
           break;
         }
         case "compose_graph": {
@@ -773,21 +880,21 @@ export class Engine {
               "Discover price and vault before composing a policy",
             );
           // validateGraph rejects unknown node kinds, dangling edges, cycles,
-          // mistyped operands and any source outside the allowlist.
+          // mistyped operands, orphan nodes, unregistered feeds and oversized
+          // fetch plans. Nothing about execution depends on node order: the
+          // receiver gets the structural policy hash, not a picked threshold.
           const { graph } = validateGraph(args.graph);
-          const threshold =
-            graph.nodes.find(
-              (node): node is Extract<PolicyGraph["nodes"][number], { kind: "compare" }> =>
-                node.kind === "compare",
-            )?.value ?? w.threshold;
+          const compare = graph.nodes.find((node) => node.id === graph.root);
           const revision: WorkflowRevision = {
             revision: w.revision + 1,
-            threshold,
+            // The scalar field only describes the legacy single-compare shape.
+            threshold: isLegacyShape(graph) && compare?.kind === "compare" ? compare.value : w.threshold,
             maxAgeSeconds: w.maxAgeSeconds,
             skipPaused: w.skipPaused,
             createdAt: now(),
             reason: args.reason || "Composed condition graph",
             graph,
+            policyHash: policyHash(graph),
           };
           w.revisions.push(revision);
           Object.assign(w, revision, { created: true });
@@ -795,7 +902,7 @@ export class Engine {
           this.updateGraph();
           this.focus(w.id, "Treasury policy");
           const sources = collectSources(graph).map(describeSource);
-          summary = `Revision ${w.revision}. ${describeGraph(graph)} Execution fetches ${sources.join(" and ")}.`;
+          summary = `Revision ${w.revision}. ${describeGraph(graph)} Execution fetches ${sources.join(" and ")}.${graph.action.type === "sell" ? " The sell is simulated and runs only in local rehearsal; no asset moves." : ""}`;
           break;
         }
         case "undo_revision": {
@@ -828,21 +935,33 @@ export class Engine {
               new Error("Draft changed; run the explicit current revision"),
               { code: "REVISION_CONFLICT" },
             );
-          const prior = this.state.runs.find(
-            (x) => x.revision === w.revision && x.status !== "failed",
+          // A retried request reuses its operationId and gets the stored
+          // result. A new request while this revision is still executing
+          // joins that run. Once it has finished, an explicit run is a fresh
+          // execution with fresh inputs and a new run ID.
+          const unsettled = this.state.runs.find((x) => x.uncertain);
+          if (unsettled)
+            throw new Error(
+              `Run ${unsettled.id} was interrupted by a restart and its outcome is still unknown; inspect it with get_run before running again.`,
+            );
+          const inflight = this.state.runs.find(
+            (x) => x.revision === w.revision && !TERMINAL.includes(x.status),
           );
-          if (prior) {
-            runId = prior.id;
-            this.selectRun(prior);
-            summary = `Revision ${w.revision} already has run ${prior.id}; returning it without duplicate execution.`;
+          if (inflight) {
+            runId = inflight.id;
+            this.selectRun(inflight);
+            summary = `Revision ${w.revision} is already executing as run ${inflight.id}; joined it without starting a duplicate.`;
             break;
           }
           const snapshot = clone(w.revisions.at(-1)!);
+          snapshot.policyHash ??= policyHash(snapshot.graph);
           runId = `run-${crypto.randomUUID()}`;
           const run: ExecutionRun = {
             id: runId,
             revision: w.revision,
             snapshot,
+            policyHash: snapshot.policyHash,
+            action: snapshot.graph.action.type,
             status: "queued",
             startedAt: now(),
             executionMode: "Preparing execution",
@@ -872,9 +991,10 @@ export class Engine {
             ? this.state.runs.find((x) => x.id === args.runId)
             : this.state.runs[0];
           if (!run) throw new Error("No run found");
+          if (run.uncertain) await this.reconcile(run);
           runId = run.id;
           this.selectRun(run);
-          summary = `Run revision ${run.revision}: ${run.status}. ${run.error || run.logs.at(-1)?.message || ""}`;
+          summary = `Run revision ${run.revision}: ${run.status}${run.uncertain ? " (outcome unknown)" : ""}. ${run.error || run.noopReason || run.logs.at(-1)?.message || ""}`;
           this.state.mode = "run";
           break;
         }
@@ -930,7 +1050,7 @@ export class Engine {
           if (!this.isBlank()) throw new Error("Undo clear is available only before starting a new canvas session.");
           const archived = this.store.latestClearedSession();
           if (!archived) throw new Error("There is no cleared session to restore.");
-          this.state = clone(archived);
+          this.state = migrateState(clone(archived));
           this.state.sessionId = crypto.randomUUID();
           this.state.activity = { status: "idle", prompt: "", summary: "Canvas restored." };
           this.fixturePaused = Boolean(this.state.objects.find(x => x.id === "vault:grant" && x.data.fixture)?.data.paused);
@@ -987,6 +1107,50 @@ export class Engine {
       };
     }
   }
+  /** The frozen request every runner receives for this run. */
+  specFor(run: ExecutionRun): ExecutionSpecification {
+    const graph = run.snapshot.graph;
+    return {
+      version: 2,
+      runId: run.id,
+      revision: run.revision,
+      graph,
+      policyHash: run.snapshot.policyHash ?? policyHash(graph),
+      maxAgeSeconds: run.snapshot.maxAgeSeconds ?? 60,
+      broadcast: true,
+    };
+  }
+  /** Reads a feed for execution and refreshes its canvas card with the same read. */
+  async readFeed(source: FeedSource): Promise<Observation> {
+    const object = await this.sources.fetchFeedPrice(source.symbol, source.network);
+    this.object(object);
+    return feedObservation(object, source);
+  }
+  /** No deployed vault: live inputs, the shared evaluator, and an in-memory vault. */
+  fixtureEnvironment(): PolicyEnvironment {
+    return {
+      mode: "fixture-rehearsal",
+      readVault: async () => {
+        const vault = await this.sources.fetchVault(this.fixturePaused);
+        if (!vault.data.fixture)
+          throw new Error("Real contract configured but no runner deployment is available; execution prevented");
+        this.object(vault);
+        return { address: "fixture", chainId: 0, paused: Boolean(vault.data.paused), balanceWei: "0", reportVersion: REPORT_VERSION };
+      },
+      readSource: async (source) => {
+        if (source.type === "chainlink-feed") return this.readFeed(source);
+        const price = await this.sources.fetchPrice("ETH");
+        this.observePrice(price);
+        return exchangeObservation(price);
+      },
+      referencePrice: (symbol) =>
+        this.readFeed({ type: "chainlink-feed", symbol: symbol as FeedSource["symbol"], network: DEFAULT_FEED_NETWORK }),
+      fixturePause: async () => {
+        this.fixturePaused = true;
+        this.object(await this.sources.fetchVault(true));
+      },
+    };
+  }
   async execute(runId: string, sessionId: string) {
     const run = this.state.runs.find((x) => x.id === runId);
     if (!run || this.state.sessionId !== sessionId) return;
@@ -1001,229 +1165,28 @@ export class Engine {
       };
       this.commit();
     };
+    const progress = (message: string) =>
+      mark(
+        /report|deliver|transaction|Confirmed|SIMULATED|Fixture vault paused/i.test(message)
+          ? "reporting"
+          : /PASS|STOP|No action|evaluat/i.test(message)
+            ? "evaluating"
+            : "fetching",
+        message,
+      );
     try {
       mark("fetching", "Fetching fresh execution inputs");
-      const runnerFile = Bun.file(new URL("../cre/runner.ts", import.meta.url));
+      const spec = this.specFor(run);
       const deployment = await this.sources.loadDeployment();
-      if (deployment && (await runnerFile.exists())) {
-        const { executeCreRun } = await import("../cre/runner");
-        const result = await executeCreRun(
-          {
-            runId,
-            revision: run.revision,
-            thresholdUsd: run.snapshot.threshold,
-            maxAgeSeconds: run.snapshot.maxAgeSeconds ?? 60,
-            requireFresh: true,
-            skipIfPaused: run.snapshot.skipPaused,
-            broadcast: true,
-            graph: run.snapshot.graph,
-          },
-          (event: any) => {
-            const message =
-              typeof event === "string"
-                ? event
-                : event.message || String(event);
-            mark(
-              /report|deliver|transaction|Confirmed/i.test(message)
-                ? "reporting"
-                : /PASS|STOP|condition|evaluat/i.test(message)
-                  ? "evaluating"
-                  : "fetching",
-              message,
-            );
-          },
-          async (symbol: string) => {
-            const object = await this.sources.fetchFeedPrice(symbol);
-            return {
-              usd: Number(object.data.price),
-              observedAt: object.provenance.observedAt,
-            };
-          },
-        );
-        run.executionMode =
-          result.mode === "cre-local-simulation"
-            ? deployment.chainId === 11155111
-              ? "CRE local simulation · Sepolia broadcast"
-              : "CRE local simulation · local EVM"
-            : "Local EVM rehearsal · no CRE consensus";
-        const priorPrice = this.state.objects.find(
-          (x) => x.id === "price:eth-usd",
-        )!;
-        const priorVault = this.state.objects.find(
-          (x) => x.id === "vault:grant",
-        )!;
-        const { input: executionPrice, canvas: price } = buildExecutionPrice(
-          priorPrice,
-          result.price,
-          now(),
-        );
-        const executionVault: GraphObject = {
-          ...clone(priorVault),
-          data: {
-            ...clone(priorVault.data),
-            paused: result.vault.paused,
-            balanceWei: result.vault.balanceWei,
-            address: result.vault.address,
-            chainId: result.vault.chainId,
-          },
-          provenance: {
-            ...priorVault.provenance,
-            address: result.vault.address,
-            chainId: result.vault.chainId,
-            fetchedAt: now(),
-          },
-        };
-        let vault = clone(executionVault);
-        if (result.transaction?.pausedAfter) vault.data.paused = true;
-        run.inputs = { price: executionPrice, vault: executionVault };
-        run.decisions = result.conditions.map((x: any) => ({
-          id: x.kind,
-          label: x.kind,
-          passed: x.passed,
-          detail: x.detail,
-          nodeId: x.nodeId,
-        }));
-        if (result.transaction) {
-          const tx = result.transaction;
-          run.evidence = {
-            transactionHash: tx.hash,
-            blockNumber: String(tx.blockNumber),
-            receiptStatus: tx.status,
-            pausedAfter: tx.pausedAfter,
-            chainId: result.vault.chainId,
-            contractAddress: result.vault.address,
-            verification: tx.receiverConfirmed
-              ? "Receiver event and paused state confirmed"
-              : "Receiver confirmation unavailable",
-            ...(result.vault.chainId === 11155111
-              ? { explorerUrl: `https://sepolia.etherscan.io/tx/${tx.hash}` }
-              : {}),
-          };
-          if (
-            !tx.receiverConfirmed ||
-            !tx.pausedAfter ||
-            !["success", "confirmed", 1, "0x1"].includes(tx.status as any)
-          )
-            throw new Error(
-              "Report transaction did not verify receiver execution and paused state",
-            );
-          run.status = "confirmed";
-        } else if (result.simulatedOrder) {
-          // A mock sell produces no transaction by design. It is recorded as
-          // evidence and labelled simulated wherever it is shown.
-          run.evidence = {
-            simulatedOrder: result.simulatedOrder,
-            verification: "Simulated order; no transaction and no asset moved",
-          };
-          run.status = "confirmed";
-        } else {
-          if (result.decision === "pause")
-            throw new Error(
-              "Pause decision returned without verified report transaction",
-            );
-          run.status = "no-op";
-        }
-        for (const message of result.logs)
-          run.logs.push({ at: now(), stage: "runner", message });
-        if (result.transaction) {
-          // Refresh display provenance independently of already verified execution.
-          // A presentation refresh must never erase confirmed transaction evidence.
-          try {
-            vault = await this.sources.fetchVault(this.fixturePaused);
-          } catch (error) {
-            run.logs.push({
-              at: now(),
-              stage: "display",
-              message: `Verified post-report state retained; display refresh unavailable: ${String(error)}`,
-            });
-          }
-        }
-        this.object(vault);
-        this.object(price);
-        this.state.capabilities.execution = run.executionMode;
-        this.state.capabilities.vault = vault.provenance.label;
-      } else {
-        run.executionMode =
-          "Local policy rehearsal · fixture vault · no transaction";
-        const [price, vault] = await Promise.all([
-          this.sources.fetchPrice(),
-          this.sources.fetchVault(this.fixturePaused),
-        ]);
-        if (!vault.data.fixture)
-          throw new Error(
-            "Real contract configured but CRE runner is unavailable; execution prevented",
-          );
-        run.inputs = { price: clone(price), vault: clone(vault) };
-        this.object(price);
-        this.object(vault);
-        mark(
-          "evaluating",
-          "Evaluating immutable rule against actual exchange trade and explicit fixture state",
-        );
-        const age =
-          (Date.now() - Date.parse(price.provenance.observedAt)) / 1000;
-        run.decisions = [
-          {
-            id: "threshold",
-            label: "ETH below threshold",
-            passed: price.data.price < run.snapshot.threshold,
-            detail: `$${price.data.price} < $${run.snapshot.threshold}`,
-          },
-          {
-            id: "freshness",
-            label: "Observation fresh",
-            passed: age >= 0 && age <= (run.snapshot.maxAgeSeconds ?? 60),
-            detail: `${age.toFixed(1)} seconds old; maximum ${run.snapshot.maxAgeSeconds ?? 60}s (safety default)`,
-          },
-          {
-            id: "unpaused",
-            label: "Vault spending enabled",
-            passed: !vault.data.paused,
-            detail: vault.data.paused
-              ? "Already paused: skip the action"
-              : "Vault is not paused",
-          },
-        ];
-        if (run.decisions.every((x) => x.passed)) {
-          mark(
-            "reporting",
-            "Rehearsing pause in local fixture state; no report transaction",
-          );
-          this.fixturePaused = true;
-          const updated = await this.sources.fetchVault(true);
-          this.object(updated);
-          run.status = "confirmed";
-          run.evidence = {
-            pausedAfter: true,
-            verification:
-              "Local fixture changed only · no deployed contract or transaction",
-          };
-          run.logs.push({
-            at: now(),
-            stage: "confirmed",
-            message:
-              "Fixture spending paused. No blockchain execution was performed.",
-          });
-        } else {
-          run.status = "no-op";
-          run.logs.push({
-            at: now(),
-            stage: "no-op",
-            message: `No action. ${run.decisions
-              .filter((x) => !x.passed)
-              .map((x) => x.detail)
-              .join("; ")}`,
-          });
-        }
-      }
+      const result = deployment
+        ? await this.sources.executeRun(spec, progress, { resolveFeed: (source) => this.readFeed(source) })
+        : await executePolicy(spec, this.fixtureEnvironment(), progress);
+      await this.applyResult(run, result, deployment);
       run.completedAt = now();
       this.state.activity = {
         status: "idle",
         prompt: this.state.activity.prompt,
-        summary:
-          run.status === "confirmed"
-            ? `Revision ${run.revision}: ${run.executionMode}`
-            : `Revision ${run.revision}: no action`,
+        summary: this.completionSummary(run),
       };
       this.say(this.state.activity.summary);
       this.commit();
@@ -1240,5 +1203,128 @@ export class Engine {
       this.say(`Execution failed: ${run.error}`);
       this.commit();
     }
+  }
+  completionSummary(run: ExecutionRun): string {
+    const v = `Revision ${run.revision}`;
+    if (run.status === "no-op") return `${v}: no action. ${run.noopReason ?? ""}`.trim();
+    if (run.evidence?.simulatedOrder)
+      return `${v}: simulated sell of ${run.evidence.simulatedOrder.amount} ${run.evidence.simulatedOrder.symbol}; no transaction, no asset moved.`;
+    if (run.evidence?.fixture) return `${v}: fixture vault paused in memory; no transaction.`;
+    if (run.evidence?.transactionHash)
+      return `${v}: vault paused at block ${run.evidence.blockNumber}, verified by receipt, receiver event and a fresh read.`;
+    return `${v}: ${run.executionMode}`;
+  }
+  /** Maps runner evidence onto the run record and the canvas. Throws if a claimed action is not verified. */
+  async applyResult(run: ExecutionRun, result: ExecutionEvidence, deployment: Deployment | null) {
+    if (result.runId !== run.id || result.revision !== run.revision || result.policyHash !== (run.snapshot.policyHash ?? run.policyHash))
+      throw new Error("Runner evidence does not match this run's identity and policy hash");
+    run.executionMode =
+      result.mode === "cre-local-simulation"
+        ? deployment?.chainId === 11155111
+          ? "CRE local simulation · Sepolia broadcast"
+          : "CRE local simulation · local EVM"
+        : result.mode === "local-evm-rehearsal"
+          ? "Local EVM rehearsal · no CRE consensus"
+          : "Local policy rehearsal · fixture vault · no transaction";
+    run.policyHash = result.policyHash;
+    run.action = result.action;
+    run.observations = result.observations;
+    run.decisions = result.conditions.map((c) => ({
+      id: c.kind,
+      label: c.kind,
+      passed: c.passed,
+      detail: c.detail,
+      nodeId: c.nodeId,
+      role: c.role,
+    }));
+    if (result.noopReason) run.noopReason = result.noopReason;
+    // Canvas compatibility: the exchange trade and vault as runner inputs.
+    const exchange = result.observations.find((o) => o.provider === "coinbase");
+    const priorPrice = this.state.objects.find((x) => x.id === "price:eth-usd");
+    const priorVault = this.state.objects.find((x) => x.id === "vault:grant");
+    let executionPrice: GraphObject | undefined;
+    if (exchange && priorPrice) {
+      const { input, canvas } = buildExecutionPrice(
+        priorPrice,
+        { usd: exchange.usd, observedAt: exchange.observedAt, source: exchange.url ?? exchange.label },
+        now(),
+      );
+      executionPrice = input;
+      this.object(canvas);
+    }
+    let executionVault: GraphObject | undefined;
+    if (priorVault && result.vault) {
+      executionVault =
+        result.mode === "fixture-rehearsal"
+          ? clone(priorVault)
+          : {
+              ...clone(priorVault),
+              data: {
+                ...clone(priorVault.data),
+                paused: result.vault.paused,
+                balanceWei: result.vault.balanceWei,
+                address: result.vault.address,
+                chainId: result.vault.chainId,
+              },
+              provenance: {
+                ...priorVault.provenance,
+                address: result.vault.address,
+                chainId: result.vault.chainId,
+                fetchedAt: now(),
+              },
+            };
+    }
+    if (executionPrice && executionVault) run.inputs = { price: executionPrice, vault: executionVault };
+    if (result.transaction) {
+      const tx = result.transaction;
+      run.evidence = {
+        transactionHash: tx.hash,
+        blockNumber: String(tx.blockNumber),
+        receiptStatus: tx.status,
+        pausedAfter: tx.pausedAfter,
+        chainId: result.vault?.chainId,
+        contractAddress: result.vault?.address,
+        policyHash: result.policyHash,
+        verification: tx.receiverConfirmed
+          ? "Receipt, receiver event (run, revision, policy hash) and fresh paused() read confirmed"
+          : "Receiver confirmation unavailable",
+        ...(result.vault?.chainId === 11155111
+          ? { explorerUrl: `${NETWORKS["ethereum-sepolia"].explorer}/tx/${tx.hash}` }
+          : {}),
+      };
+      if (!tx.receiverConfirmed || !tx.pausedAfter || !["success", "confirmed", 1, "0x1"].includes(tx.status as any))
+        throw new Error("Report transaction did not verify receiver execution and paused state");
+      run.status = "confirmed";
+      // Refresh display provenance independently of already verified execution.
+      try {
+        this.object(await this.sources.fetchVault(this.fixturePaused));
+      } catch (error) {
+        run.logs.push({ at: now(), stage: "display", message: `Verified post-report state retained; display refresh unavailable: ${String(error)}` });
+      }
+    } else if (result.simulatedOrder) {
+      // A mock sell produces no transaction by design, and says so.
+      run.evidence = {
+        simulatedOrder: result.simulatedOrder,
+        verification: "Simulated order; no transaction and no asset moved",
+      };
+      run.status = "confirmed";
+    } else if (result.fixturePaused) {
+      run.evidence = {
+        pausedAfter: true,
+        fixture: true,
+        verification: "Local fixture changed only · no deployed contract or transaction",
+      };
+      run.status = "confirmed";
+    } else if (result.dryRun) {
+      run.noopReason = "Dry run: the policy passed; no report was submitted.";
+      run.status = "no-op";
+    } else {
+      if (result.decision === "act") throw new Error("Action decision returned without verified evidence");
+      run.status = "no-op";
+    }
+    if (executionVault && result.mode !== "fixture-rehearsal" && !result.transaction) this.object(executionVault);
+    this.state.capabilities.execution = run.executionMode;
+    const vaultObject = this.state.objects.find((x) => x.id === "vault:grant");
+    if (vaultObject) this.state.capabilities.vault = vaultObject.provenance.label;
   }
 }

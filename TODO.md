@@ -4,26 +4,27 @@ Baseline: `b19a04b` · Plan created 2026-10-07.
 Read the [detailed implementation plan](docs/implementation-plan.md) for code
 locations, interfaces, dependencies, and acceptance scenarios J1–J11.
 
-Check items only after their acceptance evidence exists. The review's passing
+Check items only after their acceptance evidence exists. Shivam's S1–S3 evidence: `cre/*.test.ts`,
+`tests/execution-contract.test.ts`, `tests/anvil-integration.test.ts`, `contracts/test/GrantVault.t.sol`. The review's passing
 baseline tests do not mean these tasks are finished. No implementation changes
 are included in this planning update.
 
 ## Shared contract — first handoff
 
-- [ ] **Shivam; Ayush reviews:** agree on versioned graph, source identity, units/precision, and action schema.
-- [ ] **Shivam; Ayush reviews:** define complete immutable observations, node/root/guard results, and action outcomes.
-- [ ] **Shivam; Ayush reviews:** separate retries from fresh runs and define test/run/activate semantics.
-- [ ] **Both:** publish representative UI/API fixture states with expected graph and spoken summaries.
+- [ ] **Shivam; Ayush reviews:** agree on versioned graph, source identity, units/precision, and action schema. *(Proposed and implemented: [execution contract](docs/execution-contract.md) §1–4. Awaiting Ayush's review.)*
+- [ ] **Shivam; Ayush reviews:** define complete immutable observations, node/root/guard results, and action outcomes. *(Proposed and implemented: contract §5, §9, §10.)*
+- [ ] **Shivam; Ayush reviews:** separate retries from fresh runs and define test/run/activate semantics. *(Proposed and implemented: contract §9; activate deferred to Phase 2.)*
+- [ ] **Both:** publish representative UI/API fixture states with expected graph and spoken summaries. *(Shivam side done: `fixtures/states/` + `tests/fixtures.test.ts`. Ayush to confirm they cover the UI.)*
 - [ ] **Both:** agree on shared-file ownership and merge the contract PR before divergent implementations.
 
 ## Shivam — priority execution fixes
 
-- [ ] **S1:** prevent simulated sells from reaching CRE `writeReport`; test zero writes (J3).
-- [ ] **S1:** make fixture, local EVM, and CRE paths evaluate the same validated graph (J2).
-- [ ] **S1:** eliminate first-comparison/node-order-dependent receiver thresholds (J1).
-- [ ] **S1:** validate graph structure at every execution boundary, including direct CRE input (J8).
-- [ ] **S1:** define the new receiver/report contract and reject unsupported old-receiver combinations before submission.
-- [ ] **S1:** test action-specific guards, authorization, expiry, replay, and target/chain/policy binding.
+- [x] **S1:** prevent simulated sells from reaching CRE `writeReport`; test zero writes (J3).
+- [x] **S1:** make fixture, local EVM, and CRE paths evaluate the same validated graph (J2).
+- [x] **S1:** eliminate first-comparison/node-order-dependent receiver thresholds (J1).
+- [x] **S1:** validate graph structure at every execution boundary, including direct CRE input (J8).
+- [x] **S1:** define the new receiver/report contract and reject unsupported old-receiver combinations before submission.
+- [x] **S1:** test action-specific guards, authorization, expiry, replay, and target/chain/policy binding.
 
 ## Ayush — priority UI fixes
 
@@ -47,21 +48,21 @@ are included in this planning update.
 
 ## Shivam — Chainlink, persistence, and evidence
 
-- [ ] **S2:** bind every source to provider/network/address; reject unsupported mode combinations (J7).
-- [ ] **S2:** validate source identity, value precision, and per-source timestamps/freshness (J8).
-- [ ] **S2:** fetch only required inputs, deduplicate reads, and bound the plan to CRE quotas.
-- [ ] **S2:** archive every execution reading/provenance and preserve it through `get_run`/MCP compaction.
-- [ ] **S2:** correlate receipt, receiver event, and fresh post-state to the intended run/revision/target (J9).
-- [ ] **S3:** migrate pre-graph workflows/revisions/restorable sessions without fabricating old evidence (J6).
-- [ ] **S3:** persist deduplication and recover uncertain submitted transactions without blind replay (J10).
-- [ ] **S3:** version graph semantics and reject incompatible MCP/backend combinations.
-- [ ] **S3:** remove automatic destructive chain replacement; verify restart persistence (J10).
+- [x] **S2:** bind every source to provider/network/address; reject unsupported mode combinations (J7).
+- [x] **S2:** validate source identity, value precision, and per-source timestamps/freshness (J8).
+- [x] **S2:** fetch only required inputs, deduplicate reads, and bound the plan to CRE quotas.
+- [x] **S2:** archive every execution reading/provenance and preserve it through `get_run`/MCP compaction.
+- [ ] **S2:** correlate receipt, receiver event, and fresh post-state to the intended run/revision/target (J9). *(Done and proven on real local Anvil in `tests/anvil-integration.test.ts`; Sepolia proof pending S4.)*
+- [x] **S3:** migrate pre-graph workflows/revisions/restorable sessions without fabricating old evidence (J6).
+- [x] **S3:** persist deduplication and recover uncertain submitted transactions without blind replay (J10).
+- [x] **S3:** version graph semantics and reject incompatible MCP/backend combinations.
+- [x] **S3:** remove automatic destructive chain replacement; verify restart persistence (J10).
 
 ## Shivam — prove execution onchain
 
-- [ ] **S4:** run contract tests and local Anvil integration cases for composed graphs.
-- [ ] **S4:** confirm CRE access, CLI/SDK setup, Sepolia RPC, funded test signer, and correct simulation forwarder.
-- [ ] **S4:** add a repeatable Sepolia deployment and verification procedure.
+- [x] **S4:** run contract tests and local Anvil integration cases for composed graphs.
+- [ ] **S4:** confirm CRE access, CLI/SDK setup, Sepolia RPC, funded test signer, and correct simulation forwarder. *(CLI v1.37.0 install verified on macOS/Linux; MockForwarder address confirmed in the CRE forwarder directory; `cre workflow simulate` confirmed to require `cre login`. Needs: CRE login + funded wallet.)*
+- [ ] **S4:** add a repeatable Sepolia deployment and verification procedure. *(Written: `scripts/deploy-sepolia.ts`, `scripts/prove-sepolia.ts`, `scripts/verify-evidence.ts`; same proof sequence verified end to end on Anvil. Check once run on Sepolia.)*
 - [ ] **S4:** record actual CRE simulation + Sepolia broadcast: false, true, duplicate, and failure cases.
 - [ ] **S4:** publish portable receipt/event/post-state evidence that Ayush can inspect in the canvas.
 - [ ] **Separate deployed-DON milestone:** obtain deployment access, configure authenticated triggers and production receiver binding, deploy/activate, and record actual deployed execution.

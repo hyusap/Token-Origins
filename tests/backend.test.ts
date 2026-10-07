@@ -160,8 +160,9 @@ test("stale and future price data cannot pause; paused vault is clear no-op", as
   await complete(e);
   expect(e.state.runs[0]!.status).toBe("no-op");
   expect(
-    e.state.runs[0]!.decisions.find((x) => x.id === "unpaused")?.passed,
+    e.state.runs[0]!.decisions.find((x) => x.nodeId === "guard:vault-active")?.passed,
   ).toBe(false);
+  expect(e.state.runs[0]!.noopReason).toContain("already paused");
 });
 
 test("run fetching errors remain visible and produce no success evidence", async () => {
@@ -251,13 +252,23 @@ test("explicit inspection selects older immutable run without changing drafts or
   expect(e.state.mode).toBe("run");
   expect(e.state.workflow).toEqual(beforeDraft);
   expect(e.state.runs).toEqual(beforeRuns);
-  // Returning a previously executed current version selects it, without duplicate execution.
-  await e.invoke("run_workflow", {
+  // Retrying the same request returns its original result without executing again.
+  const retried = await e.invoke("run_workflow", {
     expectedRevision: 2,
-    operationId: "inspect-return-latest",
+    operationId: "inspect-run-latest",
   });
-  expect(e.state.inspectedRunId).toBe(latest.id);
+  expect(retried.duplicate).toBe(true);
+  expect(retried.runId).toBe(latest.id);
   expect(e.state.runs).toHaveLength(2);
+  // An explicit new run of a finished revision is a fresh execution with fresh inputs.
+  const fresh = await e.invoke("run_workflow", {
+    expectedRevision: 2,
+    operationId: "inspect-run-again",
+  });
+  await complete(e);
+  expect(fresh.runId).not.toBe(latest.id);
+  expect(e.state.runs).toHaveLength(3);
+  expect(e.state.runs.find((r) => r.id === older.id)).toEqual(beforeRuns.find((r) => r.id === older.id));
 });
 
 test("back restores workflow and selected run contexts while skipping removed conditions", async () => {

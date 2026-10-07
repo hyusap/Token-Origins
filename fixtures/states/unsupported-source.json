@@ -1,0 +1,405 @@
+{
+  "name": "unsupported-source",
+  "description": "SOL has no Sepolia feed: the edit is refused, the draft stays at its previous revision, and the error is visible.",
+  "expected": {
+    "utterance": "Use the Solana price on Sepolia instead.",
+    "policySentence": "Pause spending when (Coinbase ETH-USD trade < $3,000 and Chainlink BTC/USD (mainnet) < $80,000).",
+    "policyHash": "0xff8b8dd8f93ae1b5c2c22aa0ab7accc4988b18ffa9b182d06083a5fcefd621ee",
+    "structure": {
+      "root": "both",
+      "action": {
+        "type": "pause-vault"
+      },
+      "nodes": [
+        {
+          "id": "eth",
+          "kind": "price",
+          "inputs": []
+        },
+        {
+          "id": "btc",
+          "kind": "price",
+          "inputs": []
+        },
+        {
+          "id": "ethUnder",
+          "kind": "compare",
+          "inputs": [
+            "eth"
+          ]
+        },
+        {
+          "id": "btcUnder",
+          "kind": "compare",
+          "inputs": [
+            "btc"
+          ]
+        },
+        {
+          "id": "both",
+          "kind": "and",
+          "inputs": [
+            "ethUnder",
+            "btcUnder"
+          ]
+        }
+      ]
+    },
+    "error": "No Chainlink SOL/USD feed is configured on Ethereum Sepolia"
+  },
+  "state": {
+    "stateVersion": 2,
+    "sessionId": "005632c2-b324-4a1b-80e5-edc014f8a4ad",
+    "seq": 3,
+    "mode": "compose",
+    "focus": {
+      "objectId": "workflow:treasury",
+      "label": "Treasury policy"
+    },
+    "previousFocus": [],
+    "references": [
+      {
+        "name": "Treasury policy",
+        "objectId": "workflow:treasury",
+        "at": "2026-10-07T05:46:59.201Z"
+      }
+    ],
+    "objects": [
+      {
+        "id": "source:coinbase",
+        "kind": "source",
+        "label": "Coinbase Exchange",
+        "data": {
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "token": "coinbase:ETH-USD",
+          "priceObjectId": "price:eth-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T05:46:55.200Z",
+          "fetchedAt": "2026-10-07T05:46:59.200Z"
+        },
+        "visible": false,
+        "pinned": false
+      },
+      {
+        "id": "price:eth-usd",
+        "kind": "price",
+        "label": "ETH / USD",
+        "data": {
+          "price": 2500,
+          "unit": "USD",
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "token": "coinbase:ETH-USD",
+          "history": [],
+          "sourceObjectId": "source:coinbase"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T05:46:55.200Z",
+          "fetchedAt": "2026-10-07T05:46:59.200Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "data": {
+          "paused": false,
+          "balance": "1.2049",
+          "balanceEth": 1.2049,
+          "fixture": true,
+          "network": "Local rehearsal fixture"
+        },
+        "provenance": {
+          "source": "Local rehearsal fixture",
+          "kind": "fixture",
+          "label": "Fixture vault · no deployed contract",
+          "observedAt": "2026-10-07T05:46:59.200Z",
+          "fetchedAt": "2026-10-07T05:46:59.200Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "condition:ethUnder",
+        "kind": "condition",
+        "label": "Coinbase ETH-USD trade < $3,000",
+        "data": {
+          "id": "ethUnder",
+          "kind": "compare",
+          "input": "eth",
+          "op": "<",
+          "value": 3000,
+          "source": "Coinbase ETH-USD trade"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.201Z",
+          "fetchedAt": "2026-10-07T05:46:59.201Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:btcUnder",
+        "kind": "condition",
+        "label": "Chainlink BTC/USD (mainnet) < $80,000",
+        "data": {
+          "id": "btcUnder",
+          "kind": "compare",
+          "input": "btc",
+          "op": "<",
+          "value": 80000,
+          "source": "Chainlink BTC/USD (mainnet)"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.201Z",
+          "fetchedAt": "2026-10-07T05:46:59.201Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "action:pause",
+        "kind": "action",
+        "label": "Pause grant vault spending",
+        "data": {
+          "type": "pause-vault",
+          "target": "vault:grant"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.201Z",
+          "fetchedAt": "2026-10-07T05:46:59.201Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "from": "source:coinbase",
+        "to": "price:eth-usd",
+        "label": "observes"
+      },
+      {
+        "id": "in-ethUnder",
+        "from": "price:eth-usd",
+        "to": "condition:ethUnder",
+        "label": "compares"
+      },
+      {
+        "id": "out-ethUnder",
+        "from": "condition:ethUnder",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "in-btcUnder",
+        "from": "feed:btc-usd",
+        "to": "condition:btcUnder",
+        "label": "compares"
+      },
+      {
+        "id": "out-btcUnder",
+        "from": "condition:btcUnder",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "e-act",
+        "from": "action:pause",
+        "to": "vault:grant",
+        "label": "pauses"
+      }
+    ],
+    "workflow": {
+      "id": "workflow:treasury",
+      "revision": 1,
+      "threshold": 3000,
+      "maxAgeSeconds": null,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T05:46:59.201Z",
+      "reason": "Composed condition graph",
+      "graph": {
+        "nodes": [
+          {
+            "id": "eth",
+            "kind": "price",
+            "source": {
+              "type": "exchange-trade",
+              "pair": "ETH-USD"
+            }
+          },
+          {
+            "id": "btc",
+            "kind": "price",
+            "source": {
+              "type": "chainlink-feed",
+              "symbol": "BTC",
+              "network": "ethereum-mainnet"
+            }
+          },
+          {
+            "id": "ethUnder",
+            "kind": "compare",
+            "input": "eth",
+            "op": "<",
+            "value": 3000
+          },
+          {
+            "id": "btcUnder",
+            "kind": "compare",
+            "input": "btc",
+            "op": "<",
+            "value": 80000
+          },
+          {
+            "id": "both",
+            "kind": "and",
+            "inputs": [
+              "ethUnder",
+              "btcUnder"
+            ]
+          }
+        ],
+        "root": "both",
+        "action": {
+          "type": "pause-vault"
+        }
+      },
+      "policyHash": "0xff8b8dd8f93ae1b5c2c22aa0ab7accc4988b18ffa9b182d06083a5fcefd621ee",
+      "summary": "Pause spending when (Coinbase ETH-USD trade < $3,000 and Chainlink BTC/USD (mainnet) < $80,000).",
+      "revisions": [
+        {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T05:46:59.201Z",
+          "reason": "Composed condition graph",
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "ETH-USD"
+                }
+              },
+              {
+                "id": "btc",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "BTC",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "ethUnder",
+                "kind": "compare",
+                "input": "eth",
+                "op": "<",
+                "value": 3000
+              },
+              {
+                "id": "btcUnder",
+                "kind": "compare",
+                "input": "btc",
+                "op": "<",
+                "value": 80000
+              },
+              {
+                "id": "both",
+                "kind": "and",
+                "inputs": [
+                  "ethUnder",
+                  "btcUnder"
+                ]
+              }
+            ],
+            "root": "both",
+            "action": {
+              "type": "pause-vault"
+            }
+          },
+          "policyHash": "0xff8b8dd8f93ae1b5c2c22aa0ab7accc4988b18ffa9b182d06083a5fcefd621ee"
+        }
+      ],
+      "created": true
+    },
+    "runs": [],
+    "conversation": [
+      {
+        "id": "16c86d7a-e568-401a-81e1-5820042d32bb",
+        "role": "assistant",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T05:46:55.200Z); Grant vault.",
+        "at": "2026-10-07T05:46:59.200Z",
+        "source": "mcp"
+      },
+      {
+        "id": "233285fe-94d2-48c6-a67a-2bc711bead06",
+        "role": "assistant",
+        "text": "Revision 1. Pause spending when (Coinbase ETH-USD trade < $3,000 and Chainlink BTC/USD (mainnet) < $80,000). Execution fetches Coinbase ETH-USD trade and Chainlink BTC/USD (mainnet).",
+        "at": "2026-10-07T05:46:59.201Z",
+        "source": "mcp"
+      },
+      {
+        "id": "700d58a3-92ff-4dac-a55b-7b5684513dea",
+        "role": "assistant",
+        "text": "No Chainlink SOL/USD feed is configured on Ethereum Sepolia",
+        "at": "2026-10-07T05:46:59.203Z",
+        "source": "mcp"
+      }
+    ],
+    "activity": {
+      "status": "error",
+      "prompt": "",
+      "summary": "No Chainlink SOL/USD feed is configured on Ethereum Sepolia"
+    },
+    "latency": [
+      {
+        "operationId": "d",
+        "tool": "discover_objects",
+        "receivedAt": "2026-10-07T05:46:59.200Z",
+        "committedAt": "2026-10-07T05:46:59.200Z",
+        "commitMs": 0.08
+      },
+      {
+        "operationId": "c",
+        "tool": "compose_graph",
+        "receivedAt": "2026-10-07T05:46:59.200Z",
+        "committedAt": "2026-10-07T05:46:59.201Z",
+        "commitMs": 0.88
+      }
+    ],
+    "capabilities": {
+      "price": "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
+      "vault": "Fixture vault · no deployed contract",
+      "execution": "Local policy rehearsal · no blockchain evidence yet",
+      "voice": "Planned utterances · actual desktop voice unverified",
+      "mcp": "Semantic tools · official MCP stdio transport"
+    },
+    "canUndoClear": false
+  }
+}

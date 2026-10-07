@@ -12,7 +12,12 @@
     "test": "bun test",
     "mcp": "bun run scripts/mcp.ts",
     "rehearse": "bun run scripts/rehearse.ts",
-    "demo": "bun run scripts/rehearse.ts --auto"
+    "demo": "bun run scripts/rehearse.ts --auto",
+    "deploy:sepolia": "bun run scripts/deploy-sepolia.ts",
+    "prove:sepolia": "bun run scripts/prove-sepolia.ts",
+    "verify:local": "bun run scripts/verify-local.ts",
+    "verify:evidence": "bun run scripts/verify-evidence.ts",
+    "fixtures": "bun run scripts/generate-fixtures.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

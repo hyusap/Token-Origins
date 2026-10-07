@@ -13,7 +13,9 @@ const isolatedRpc = "http://127.0.0.1:8546";
 const vaultAbi = parseAbi([
   "function paused() view returns (bool)",
   "function processedRuns(bytes32) view returns (bool)",
+  // Report v1 receivers (historical evidence) and report v2 receivers emit different SpendingPaused layouts.
   "event SpendingPaused(bytes32 indexed runId,uint256 indexed revision,uint256 priceUsdCents,uint256 thresholdUsdCents,uint256 observedAt)",
+  "event SpendingPaused(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,uint256 decidedAt)",
 ]);
 type Candidate = {
   hash: string;
@@ -152,10 +154,12 @@ for (const candidate of requested) {
       data: log.data,
       topics: log.topics,
     });
+    const args = event.args as { revision: bigint; priceUsdCents?: bigint; thresholdUsdCents?: bigint; policyHash?: string };
     if (
       event.eventName !== "SpendingPaused" ||
-      event.args.revision <= 0n ||
-      event.args.priceUsdCents >= event.args.thresholdUsdCents
+      args.revision <= 0n ||
+      (args.priceUsdCents !== undefined && args.priceUsdCents >= args.thresholdUsdCents!) ||
+      (args.priceUsdCents === undefined && !args.policyHash)
     )
       continue;
     if (

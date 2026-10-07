@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NETWORK_IDS } from "../cre/graph";
 const op = z
   .string()
   .min(1)
@@ -30,19 +31,20 @@ export const toolDefinitions = {
   },
   read_price_feed: {
     description:
-      "Read a live Chainlink Data Feed price for an asset such as BTC, ETH, SOL or LINK. This is an on-chain oracle read from Ethereum mainnet, not a web search and not an exchange API. Accepts a ticker or a name (BTC, bitcoin, SOL). Feeds publish on a deviation threshold or heartbeat, so the answer can be minutes or hours old; the reported age is part of the answer and must not be described as the current spot price. Reference only: the vault's execution price stays on the live Coinbase ETH/USD trade source.",
+      "Read a live Chainlink Data Feed price for an asset such as BTC, ETH, SOL or LINK. This is an on-chain oracle read (Ethereum mainnet by default, or Sepolia), not a web search and not an exchange API. Accepts a ticker or a name (BTC, bitcoin, SOL). Feeds publish on a deviation threshold or heartbeat, so the answer can be minutes or hours old; the reported age is part of the answer and must not be described as the current spot price. A composed policy can use the same feed as a condition input.",
     schema: z.object({
       symbol: z
         .string()
         .min(1)
         .max(40)
         .describe("Ticker or asset name, e.g. BTC, bitcoin, SOL, LINK."),
+      network: z.enum(NETWORK_IDS).optional().describe("ethereum-mainnet (default) or ethereum-sepolia."),
       operationId: op,
     }),
   },
   list_price_feeds: {
     description:
-      "List every asset with a configured Chainlink mainnet feed. Call this before telling anyone an asset is unavailable.",
+      "List every asset with a configured Chainlink feed, on mainnet and on Sepolia. Call this before telling anyone an asset is unavailable.",
     schema: z.object({}),
   },
   focus_object: {
@@ -80,7 +82,7 @@ export const toolDefinitions = {
   },
   compose_graph: {
     description:
-      "Replace the policy with a composed condition graph, as a new revision. Nodes are an allowlisted vocabulary: price (an exchange trade or a Chainlink feed), compare, freshness, vault-paused, and and/or/not. Use this for any rule a single threshold cannot express, such as combining two assets. The reported on-chain observation is always the exchange trade, so a Chainlink feed branch may decide a policy even when that feed is older than the receiver's freshness cap. Execution still retains that cap and the already-paused no-op whether or not the graph expresses them, and the only action remains pausing the vault.",
+      "Replace the policy with a composed condition graph, as a new revision. Nodes are an allowlisted vocabulary: price (the Coinbase ETH-USD trade, or a Chainlink feed with an optional network, default ethereum-mainnet), compare, freshness, vault-paused, and and/or/not. Every node must be connected to the root, and a policy may read at most 5 distinct sources. Use this for any rule a single threshold cannot express, such as combining two assets or nesting AND/OR/NOT. Node ids and order do not matter: the revision gets a structural policy hash that the on-chain pause event repeats. Execution always enforces each source's own freshness limit (exchange trade ≤ 120s, feeds within their heartbeat) and, for a pause, the already-paused no-op, whether or not the graph expresses them. Actions: pause-vault (real, on-chain), or sell, which is a simulated order that never moves assets and runs only in local rehearsal.",
     schema: z.object({
       expectedRevision: revision,
       graph: z
@@ -108,7 +110,7 @@ export const toolDefinitions = {
   },
   run_workflow: {
     description:
-      "Freeze current revision and start execution asynchronously. Returns run ID promptly. Repeated execution of a revision returns original run; no duplicate action.",
+      "Freeze current revision and start execution asynchronously. Returns run ID promptly. Retrying with the same operationId returns the original result. While this revision is still executing, a new request joins that run. After it finishes, an explicit new request starts a fresh run with fresh inputs; the vault's already-paused guard still prevents a second pause. Refused while a run interrupted by a restart has an unknown outcome.",
     schema: z.object({ expectedRevision: revision, operationId: op }),
   },
   get_run: {

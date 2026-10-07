@@ -1,0 +1,883 @@
+{
+  "name": "true-branch-in-passing-or",
+  "description": "BTC branch false but NOT(paused) true, so the OR and the root pass and the fixture vault pauses. A false intermediate is not failure.",
+  "expected": {
+    "utterance": "Run this version.",
+    "policySentence": "Pause spending when (Coinbase ETH-USD trade < $3,000 and (Chainlink BTC/USD (mainnet) < $80,000 or not (vault is paused))).",
+    "policyHash": "0x705ee379334e3eeb04c003581487afbb49a8c911e9d1e9f85987c66e6bb4d05c",
+    "structure": {
+      "root": "root",
+      "action": {
+        "type": "pause-vault"
+      },
+      "nodes": [
+        {
+          "id": "eth",
+          "kind": "price",
+          "inputs": []
+        },
+        {
+          "id": "btc",
+          "kind": "price",
+          "inputs": []
+        },
+        {
+          "id": "ethUnder",
+          "kind": "compare",
+          "inputs": [
+            "eth"
+          ]
+        },
+        {
+          "id": "btcUnder",
+          "kind": "compare",
+          "inputs": [
+            "btc"
+          ]
+        },
+        {
+          "id": "vaultPaused",
+          "kind": "vault-paused",
+          "inputs": []
+        },
+        {
+          "id": "notPaused",
+          "kind": "not",
+          "inputs": [
+            "vaultPaused"
+          ]
+        },
+        {
+          "id": "btcOrActive",
+          "kind": "or",
+          "inputs": [
+            "btcUnder",
+            "notPaused"
+          ]
+        },
+        {
+          "id": "root",
+          "kind": "and",
+          "inputs": [
+            "ethUnder",
+            "btcOrActive"
+          ]
+        }
+      ]
+    },
+    "runStatus": "confirmed",
+    "runCaption": "Revision 1: fixture vault paused in memory; no transaction.",
+    "noopReason": null,
+    "blockedBy": null
+  },
+  "state": {
+    "stateVersion": 2,
+    "sessionId": "6b107533-7fbc-4a56-9ca8-d7e4c1048b05",
+    "seq": 20,
+    "mode": "run",
+    "focus": {
+      "objectId": "run:run-ec9b953f-e031-46a1-8a31-b4057d06f39f",
+      "label": "Execution v01"
+    },
+    "previousFocus": [
+      "workflow:treasury"
+    ],
+    "references": [
+      {
+        "name": "Treasury policy",
+        "objectId": "workflow:treasury",
+        "at": "2026-10-07T05:46:59.161Z"
+      },
+      {
+        "name": "Execution v01",
+        "objectId": "run:run-ec9b953f-e031-46a1-8a31-b4057d06f39f",
+        "at": "2026-10-07T05:46:59.162Z"
+      }
+    ],
+    "objects": [
+      {
+        "id": "source:coinbase",
+        "kind": "source",
+        "label": "Coinbase Exchange",
+        "data": {
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "token": "coinbase:ETH-USD",
+          "priceObjectId": "price:eth-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T05:46:55.175Z",
+          "fetchedAt": "2026-10-07T05:46:59.175Z"
+        },
+        "visible": false,
+        "pinned": false
+      },
+      {
+        "id": "price:eth-usd",
+        "kind": "price",
+        "label": "ETH / USD",
+        "data": {
+          "price": 2500,
+          "unit": "USD",
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "token": "coinbase:ETH-USD",
+          "history": [
+            {
+              "price": 2500,
+              "observedAt": "2026-10-07T05:46:55.175Z"
+            }
+          ],
+          "sourceObjectId": "source:coinbase",
+          "historyLabel": "Actual exchange observations · latest 100"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+          "kind": "live",
+          "label": "Live exchange observation · execution input",
+          "observedAt": "2026-10-07T05:46:55.175Z",
+          "fetchedAt": "2026-10-07T05:46:59.179Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "data": {
+          "paused": true,
+          "balance": "1.2049",
+          "balanceEth": 1.2049,
+          "fixture": true,
+          "network": "Local rehearsal fixture"
+        },
+        "provenance": {
+          "source": "Local rehearsal fixture",
+          "kind": "fixture",
+          "label": "Fixture vault · no deployed contract",
+          "observedAt": "2026-10-07T05:46:59.178Z",
+          "fetchedAt": "2026-10-07T05:46:59.178Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "condition:ethUnder",
+        "kind": "condition",
+        "label": "Coinbase ETH-USD trade < $3,000",
+        "data": {
+          "id": "ethUnder",
+          "kind": "compare",
+          "input": "eth",
+          "op": "<",
+          "value": 3000,
+          "source": "Coinbase ETH-USD trade"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.161Z",
+          "fetchedAt": "2026-10-07T05:46:59.161Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:btcUnder",
+        "kind": "condition",
+        "label": "Chainlink BTC/USD (mainnet) < $80,000",
+        "data": {
+          "id": "btcUnder",
+          "kind": "compare",
+          "input": "btc",
+          "op": "<",
+          "value": 80000,
+          "source": "Chainlink BTC/USD (mainnet)"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.161Z",
+          "fetchedAt": "2026-10-07T05:46:59.161Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:vaultPaused",
+        "kind": "condition",
+        "label": "Vault paused",
+        "data": {
+          "id": "vaultPaused",
+          "kind": "vault-paused",
+          "equals": true,
+          "source": "vault:grant"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.161Z",
+          "fetchedAt": "2026-10-07T05:46:59.161Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "action:pause",
+        "kind": "action",
+        "label": "Pause grant vault spending",
+        "data": {
+          "type": "pause-vault",
+          "target": "vault:grant"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T05:46:59.161Z",
+          "fetchedAt": "2026-10-07T05:46:59.161Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "feed:btc-usd",
+        "kind": "feed",
+        "label": "BTC / USD",
+        "data": {
+          "price": 85000,
+          "unit": "USD",
+          "symbol": "BTC",
+          "decimals": 8,
+          "answer": "8500000000000",
+          "roundId": "110680464442257320164",
+          "ageSeconds": 1500,
+          "ageLabel": "25 min ago",
+          "feedAddress": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
+          "description": "BTC / USD",
+          "network": "ethereum-mainnet"
+        },
+        "provenance": {
+          "source": "Chainlink Data Feed",
+          "url": "https://etherscan.io/address/0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c#readContract",
+          "kind": "chain",
+          "chainId": 1,
+          "address": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
+          "label": "Chainlink BTC / USD aggregator · Ethereum mainnet",
+          "observedAt": "2026-10-07T05:21:59.175Z",
+          "fetchedAt": "2026-10-07T05:46:59.175Z"
+        },
+        "visible": true,
+        "pinned": false
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "from": "source:coinbase",
+        "to": "price:eth-usd",
+        "label": "observes"
+      },
+      {
+        "id": "in-ethUnder",
+        "from": "price:eth-usd",
+        "to": "condition:ethUnder",
+        "label": "compares"
+      },
+      {
+        "id": "out-ethUnder",
+        "from": "condition:ethUnder",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "in-btcUnder",
+        "from": "feed:btc-usd",
+        "to": "condition:btcUnder",
+        "label": "compares"
+      },
+      {
+        "id": "out-btcUnder",
+        "from": "condition:btcUnder",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "out-vaultPaused",
+        "from": "condition:vaultPaused",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "e-act",
+        "from": "action:pause",
+        "to": "vault:grant",
+        "label": "pauses"
+      }
+    ],
+    "workflow": {
+      "id": "workflow:treasury",
+      "revision": 1,
+      "threshold": 3000,
+      "maxAgeSeconds": null,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T05:46:59.160Z",
+      "reason": "Composed condition graph",
+      "graph": {
+        "nodes": [
+          {
+            "id": "eth",
+            "kind": "price",
+            "source": {
+              "type": "exchange-trade",
+              "pair": "ETH-USD"
+            }
+          },
+          {
+            "id": "btc",
+            "kind": "price",
+            "source": {
+              "type": "chainlink-feed",
+              "symbol": "BTC",
+              "network": "ethereum-mainnet"
+            }
+          },
+          {
+            "id": "ethUnder",
+            "kind": "compare",
+            "input": "eth",
+            "op": "<",
+            "value": 3000
+          },
+          {
+            "id": "btcUnder",
+            "kind": "compare",
+            "input": "btc",
+            "op": "<",
+            "value": 80000
+          },
+          {
+            "id": "vaultPaused",
+            "kind": "vault-paused",
+            "equals": true
+          },
+          {
+            "id": "notPaused",
+            "kind": "not",
+            "input": "vaultPaused"
+          },
+          {
+            "id": "btcOrActive",
+            "kind": "or",
+            "inputs": [
+              "btcUnder",
+              "notPaused"
+            ]
+          },
+          {
+            "id": "root",
+            "kind": "and",
+            "inputs": [
+              "ethUnder",
+              "btcOrActive"
+            ]
+          }
+        ],
+        "root": "root",
+        "action": {
+          "type": "pause-vault"
+        }
+      },
+      "policyHash": "0x705ee379334e3eeb04c003581487afbb49a8c911e9d1e9f85987c66e6bb4d05c",
+      "summary": "Pause spending when (Coinbase ETH-USD trade < $3,000 and (Chainlink BTC/USD (mainnet) < $80,000 or not (vault is paused))).",
+      "revisions": [
+        {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T05:46:59.160Z",
+          "reason": "Composed condition graph",
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "ETH-USD"
+                }
+              },
+              {
+                "id": "btc",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "BTC",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "ethUnder",
+                "kind": "compare",
+                "input": "eth",
+                "op": "<",
+                "value": 3000
+              },
+              {
+                "id": "btcUnder",
+                "kind": "compare",
+                "input": "btc",
+                "op": "<",
+                "value": 80000
+              },
+              {
+                "id": "vaultPaused",
+                "kind": "vault-paused",
+                "equals": true
+              },
+              {
+                "id": "notPaused",
+                "kind": "not",
+                "input": "vaultPaused"
+              },
+              {
+                "id": "btcOrActive",
+                "kind": "or",
+                "inputs": [
+                  "btcUnder",
+                  "notPaused"
+                ]
+              },
+              {
+                "id": "root",
+                "kind": "and",
+                "inputs": [
+                  "ethUnder",
+                  "btcOrActive"
+                ]
+              }
+            ],
+            "root": "root",
+            "action": {
+              "type": "pause-vault"
+            }
+          },
+          "policyHash": "0x705ee379334e3eeb04c003581487afbb49a8c911e9d1e9f85987c66e6bb4d05c"
+        }
+      ],
+      "created": true
+    },
+    "runs": [
+      {
+        "id": "run-ec9b953f-e031-46a1-8a31-b4057d06f39f",
+        "revision": 1,
+        "snapshot": {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T05:46:59.160Z",
+          "reason": "Composed condition graph",
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "exchange-trade",
+                  "pair": "ETH-USD"
+                }
+              },
+              {
+                "id": "btc",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "BTC",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "ethUnder",
+                "kind": "compare",
+                "input": "eth",
+                "op": "<",
+                "value": 3000
+              },
+              {
+                "id": "btcUnder",
+                "kind": "compare",
+                "input": "btc",
+                "op": "<",
+                "value": 80000
+              },
+              {
+                "id": "vaultPaused",
+                "kind": "vault-paused",
+                "equals": true
+              },
+              {
+                "id": "notPaused",
+                "kind": "not",
+                "input": "vaultPaused"
+              },
+              {
+                "id": "btcOrActive",
+                "kind": "or",
+                "inputs": [
+                  "btcUnder",
+                  "notPaused"
+                ]
+              },
+              {
+                "id": "root",
+                "kind": "and",
+                "inputs": [
+                  "ethUnder",
+                  "btcOrActive"
+                ]
+              }
+            ],
+            "root": "root",
+            "action": {
+              "type": "pause-vault"
+            }
+          },
+          "policyHash": "0x705ee379334e3eeb04c003581487afbb49a8c911e9d1e9f85987c66e6bb4d05c"
+        },
+        "policyHash": "0x705ee379334e3eeb04c003581487afbb49a8c911e9d1e9f85987c66e6bb4d05c",
+        "action": "pause-vault",
+        "status": "confirmed",
+        "startedAt": "2026-10-07T05:46:59.162Z",
+        "executionMode": "Local policy rehearsal · fixture vault · no transaction",
+        "decisions": [
+          {
+            "id": "threshold",
+            "label": "threshold",
+            "passed": true,
+            "detail": "Coinbase ETH-USD trade $2,500.00 < $3,000.00",
+            "nodeId": "ethUnder",
+            "role": "node"
+          },
+          {
+            "id": "threshold",
+            "label": "threshold",
+            "passed": false,
+            "detail": "Chainlink BTC/USD (mainnet) $85,000.00 < $80,000.00",
+            "nodeId": "btcUnder",
+            "role": "node"
+          },
+          {
+            "id": "vault-state",
+            "label": "vault-state",
+            "passed": false,
+            "detail": "Vault is active; condition wants paused",
+            "nodeId": "vaultPaused",
+            "role": "node"
+          },
+          {
+            "id": "not",
+            "label": "not",
+            "passed": true,
+            "detail": "NOT vaultPaused → true",
+            "nodeId": "notPaused",
+            "role": "node"
+          },
+          {
+            "id": "or",
+            "label": "or",
+            "passed": true,
+            "detail": "btcUnder OR notPaused → true",
+            "nodeId": "btcOrActive",
+            "role": "node"
+          },
+          {
+            "id": "and",
+            "label": "and",
+            "passed": true,
+            "detail": "ethUnder AND btcOrActive → true",
+            "nodeId": "root",
+            "role": "node"
+          },
+          {
+            "id": "composed-policy",
+            "label": "composed-policy",
+            "passed": true,
+            "detail": "Policy root \"root\" evaluated true",
+            "nodeId": "guard:root",
+            "role": "root"
+          },
+          {
+            "id": "source-freshness",
+            "label": "source-freshness",
+            "passed": true,
+            "detail": "Coinbase ETH-USD trade observed 4.0s ago; limit 60s",
+            "nodeId": "guard:source:exchange-trade:ETH-USD",
+            "role": "guard"
+          },
+          {
+            "id": "source-freshness",
+            "label": "source-freshness",
+            "passed": true,
+            "detail": "Chainlink BTC/USD (mainnet) observed 1500.0s ago; limit 93600s",
+            "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:BTC",
+            "role": "guard"
+          },
+          {
+            "id": "vault-state",
+            "label": "vault-state",
+            "passed": true,
+            "detail": "Vault spending active",
+            "nodeId": "guard:vault-active",
+            "role": "guard"
+          }
+        ],
+        "logs": [
+          {
+            "at": "2026-10-07T05:46:59.162Z",
+            "stage": "queued",
+            "message": "Frozen draft revision 1"
+          },
+          {
+            "at": "2026-10-07T05:46:59.172Z",
+            "stage": "fetching",
+            "message": "Fetching fresh execution inputs"
+          },
+          {
+            "at": "2026-10-07T05:46:59.174Z",
+            "stage": "reporting",
+            "message": "Fixture rehearsal · live inputs, in-memory vault, no transaction"
+          },
+          {
+            "at": "2026-10-07T05:46:59.174Z",
+            "stage": "fetching",
+            "message": "Read vault active on chain 0"
+          },
+          {
+            "at": "2026-10-07T05:46:59.174Z",
+            "stage": "fetching",
+            "message": "Fetching Coinbase ETH-USD trade"
+          },
+          {
+            "at": "2026-10-07T05:46:59.175Z",
+            "stage": "fetching",
+            "message": "Fetching Chainlink BTC/USD (mainnet)"
+          },
+          {
+            "at": "2026-10-07T05:46:59.175Z",
+            "stage": "evaluating",
+            "message": "PASS ethUnder: Coinbase ETH-USD trade $2,500.00 < $3,000.00"
+          },
+          {
+            "at": "2026-10-07T05:46:59.176Z",
+            "stage": "evaluating",
+            "message": "STOP btcUnder: Chainlink BTC/USD (mainnet) $85,000.00 < $80,000.00"
+          },
+          {
+            "at": "2026-10-07T05:46:59.176Z",
+            "stage": "evaluating",
+            "message": "STOP vaultPaused: Vault is active; condition wants paused"
+          },
+          {
+            "at": "2026-10-07T05:46:59.176Z",
+            "stage": "evaluating",
+            "message": "PASS notPaused: NOT vaultPaused → true"
+          },
+          {
+            "at": "2026-10-07T05:46:59.176Z",
+            "stage": "evaluating",
+            "message": "PASS btcOrActive: btcUnder OR notPaused → true"
+          },
+          {
+            "at": "2026-10-07T05:46:59.177Z",
+            "stage": "evaluating",
+            "message": "PASS root: ethUnder AND btcOrActive → true"
+          },
+          {
+            "at": "2026-10-07T05:46:59.177Z",
+            "stage": "evaluating",
+            "message": "PASS root: Policy root \"root\" evaluated true"
+          },
+          {
+            "at": "2026-10-07T05:46:59.177Z",
+            "stage": "evaluating",
+            "message": "PASS source:exchange-trade:ETH-USD: Coinbase ETH-USD trade observed 4.0s ago; limit 60s"
+          },
+          {
+            "at": "2026-10-07T05:46:59.177Z",
+            "stage": "evaluating",
+            "message": "PASS source:chainlink-feed:ethereum-mainnet:BTC: Chainlink BTC/USD (mainnet) observed 1500.0s ago; limit 93600s"
+          },
+          {
+            "at": "2026-10-07T05:46:59.178Z",
+            "stage": "evaluating",
+            "message": "PASS vault-active: Vault spending active"
+          },
+          {
+            "at": "2026-10-07T05:46:59.178Z",
+            "stage": "reporting",
+            "message": "Fixture vault paused in memory. No blockchain execution was performed."
+          }
+        ],
+        "observations": [
+          {
+            "key": "exchange-trade:ETH-USD",
+            "provider": "coinbase",
+            "label": "Coinbase ETH-USD trade",
+            "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+            "usd": 2500,
+            "raw": "2500",
+            "observedAt": "2026-10-07T05:46:55.175Z",
+            "fetchedAt": "2026-10-07T05:46:59.175Z"
+          },
+          {
+            "key": "chainlink-feed:ethereum-mainnet:BTC",
+            "provider": "chainlink",
+            "label": "Chainlink BTC/USD (mainnet)",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
+            "decimals": 8,
+            "usd": 85000,
+            "raw": "8500000000000",
+            "roundId": "110680464442257320164",
+            "observedAt": "2026-10-07T05:21:59.175Z",
+            "fetchedAt": "2026-10-07T05:46:59.175Z"
+          }
+        ],
+        "inputs": {
+          "price": {
+            "id": "price:eth-usd",
+            "kind": "price",
+            "label": "ETH / USD",
+            "data": {
+              "price": 2500,
+              "unit": "USD",
+              "symbol": "ETH",
+              "history": [
+                {
+                  "price": 2500,
+                  "observedAt": "2026-10-07T05:46:55.175Z"
+                }
+              ],
+              "historyLabel": "Actual execution observation"
+            },
+            "provenance": {
+              "source": "Coinbase Exchange",
+              "url": "https://api.exchange.coinbase.com/products/ETH-USD/ticker",
+              "kind": "live",
+              "label": "Live exchange observation · execution input",
+              "observedAt": "2026-10-07T05:46:55.175Z",
+              "fetchedAt": "2026-10-07T05:46:59.179Z"
+            },
+            "visible": true,
+            "pinned": false
+          },
+          "vault": {
+            "id": "vault:grant",
+            "kind": "vault",
+            "label": "Grant vault",
+            "data": {
+              "paused": true,
+              "balance": "1.2049",
+              "balanceEth": 1.2049,
+              "fixture": true,
+              "network": "Local rehearsal fixture"
+            },
+            "provenance": {
+              "source": "Local rehearsal fixture",
+              "kind": "fixture",
+              "label": "Fixture vault · no deployed contract",
+              "observedAt": "2026-10-07T05:46:59.178Z",
+              "fetchedAt": "2026-10-07T05:46:59.178Z"
+            },
+            "visible": true,
+            "pinned": false
+          }
+        },
+        "evidence": {
+          "pausedAfter": true,
+          "fixture": true,
+          "verification": "Local fixture changed only · no deployed contract or transaction"
+        },
+        "completedAt": "2026-10-07T05:46:59.179Z"
+      }
+    ],
+    "conversation": [
+      {
+        "id": "7e260c8c-7502-464e-b6c7-1609e918c129",
+        "role": "assistant",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T05:46:55.160Z); Grant vault.",
+        "at": "2026-10-07T05:46:59.160Z",
+        "source": "mcp"
+      },
+      {
+        "id": "40de761d-ab4f-42aa-a343-bd9a3150eb84",
+        "role": "assistant",
+        "text": "Revision 1. Pause spending when (Coinbase ETH-USD trade < $3,000 and (Chainlink BTC/USD (mainnet) < $80,000 or not (vault is paused))). Execution fetches Coinbase ETH-USD trade and Chainlink BTC/USD (mainnet).",
+        "at": "2026-10-07T05:46:59.161Z",
+        "source": "mcp"
+      },
+      {
+        "id": "348ca7b8-e1b0-49bb-a4b1-227db648cd1e",
+        "role": "assistant",
+        "text": "Run run-ec9b953f-e031-46a1-8a31-b4057d06f39f started against immutable revision 1.",
+        "at": "2026-10-07T05:46:59.162Z",
+        "source": "mcp"
+      },
+      {
+        "id": "4042bcb6-b591-45d1-b26b-4e86536b8c4c",
+        "role": "assistant",
+        "text": "Revision 1: fixture vault paused in memory; no transaction.",
+        "at": "2026-10-07T05:46:59.179Z",
+        "source": "mcp"
+      }
+    ],
+    "activity": {
+      "status": "idle",
+      "prompt": "Run this version",
+      "summary": "Revision 1: fixture vault paused in memory; no transaction."
+    },
+    "latency": [
+      {
+        "operationId": "d",
+        "tool": "discover_objects",
+        "receivedAt": "2026-10-07T05:46:59.159Z",
+        "committedAt": "2026-10-07T05:46:59.160Z",
+        "commitMs": 0.14
+      },
+      {
+        "operationId": "c",
+        "tool": "compose_graph",
+        "receivedAt": "2026-10-07T05:46:59.160Z",
+        "committedAt": "2026-10-07T05:46:59.161Z",
+        "commitMs": 1.36
+      },
+      {
+        "operationId": "r",
+        "tool": "run_workflow",
+        "receivedAt": "2026-10-07T05:46:59.162Z",
+        "committedAt": "2026-10-07T05:46:59.162Z",
+        "commitMs": 0.09
+      }
+    ],
+    "capabilities": {
+      "price": "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
+      "vault": "Fixture vault · no deployed contract",
+      "execution": "Local policy rehearsal · fixture vault · no transaction",
+      "voice": "Planned utterances · actual desktop voice unverified",
+      "mcp": "Semantic tools · official MCP stdio transport"
+    },
+    "inspectedRunId": "run-ec9b953f-e031-46a1-8a31-b4057d06f39f",
+    "canUndoClear": false
+  }
+}
