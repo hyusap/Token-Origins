@@ -2,7 +2,7 @@
 
 Baseline: `b19a04b` · Plan created 2026-10-07.
 Read the [detailed implementation plan](docs/implementation-plan.md) for code
-locations, interfaces, dependencies, and acceptance scenarios J1–J11.
+locations, interfaces, dependencies, and acceptance scenarios J1–J15.
 
 Check items only after their acceptance evidence exists. The review's passing
 baseline tests do not mean these tasks are finished. No implementation changes
@@ -65,6 +65,36 @@ are included in this planning update.
 - [ ] **S4:** record actual CRE simulation + Sepolia broadcast: false, true, duplicate, and failure cases.
 - [ ] **S4:** publish portable receipt/event/post-state evidence that Ayush can inspect in the canvas.
 - [ ] **Separate deployed-DON milestone:** obtain deployment access, configure authenticated triggers and production receiver binding, deploy/activate, and record actual deployed execution.
+
+## Solana write target — hackathon track
+
+CRE writes to Solana directly, through the Keystone Forwarder into a receiver
+program's `on_report`. The installed `@chainlink/cre-sdk@1.23.0` already ships
+`SolanaClient`, the write capability, the Solana helpers and a contract mock, so
+**no SDK upgrade is needed** and steps S5a–S5b need no credentials. See Phase 1C
+in the detailed plan for the verified API surface and account layout.
+
+Sequence this with S1/S2: it changes the same action and config contracts, so
+doing it afterwards means editing those interfaces twice.
+
+- [ ] **S5a:** make the workflow config a discriminated target (`evm-sepolia` |
+      `solana-devnet`) instead of the hardcoded Sepolia chain selector.
+- [ ] **S5a:** bind each action to its target chain and program/contract so a
+      policy composed for one family cannot silently execute on the other (J12).
+- [ ] **S5a:** decide whether the Solana receiver adopts the EVM
+      `price < threshold` rule, or make `guard:receiver-threshold` target-specific.
+- [ ] **S5b:** add the Solana handler branch: Borsh payload, `ForwarderReport`
+      framing, `calculateAccountsHash`, `prepareSolanaReportRequest`.
+- [ ] **S5b:** test it with the SDK's Solana contract mock; assert account order
+      and account hash, and assert zero live submissions (J13, J14).
+- [ ] **S5c:** write the Anchor receiver mirroring GrantVault: `on_report`
+      deserializes the payload, enforces run/revision/price/staleness, idempotent
+      per run ID (J15). Rust and Anchor are new to this repo; this is the long pole.
+- [ ] **S5c:** unit-test the receiver against a local validator before deploying.
+- [ ] **S5d:** deploy to devnet with a funded keypair and record a real signed
+      report end to end, labelled separately from mocked evidence.
+- [ ] **Ayush:** show the target chain on the canvas and in spoken summaries so a
+      Solana policy is never described as a Sepolia one.
 
 ## Joint integration gate — before adding features
 

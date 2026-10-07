@@ -247,6 +247,89 @@ execution ID, all inputs, decisions, transaction hash, correlated event, and fre
 post-state. Another developer can independently verify it using the documented
 commands. Missing credentials/access remain explicit blockers, not passed items.
 
+## Phase 1C: Solana as a second write target
+
+Solana is a hackathon track, and CRE writes to Solana directly rather than through
+a bridge. This is scoped alongside Phase 1B rather than in Phase 2 because it
+changes the action and config contracts that S1 is already rewriting; doing it
+after would mean editing those interfaces twice.
+
+### Verified against the installed SDK, not assumed
+
+`@chainlink/cre-sdk@1.23.0` is already in `cre/package.json` and already ships
+Solana support. **No SDK upgrade is required.** Confirmed by reading the package:
+
+- `SolanaClient` (`ClientCapability`) is exported from the SDK root, with
+  `writeReport` plus reads: `getBalance`, `getAccountInfo`, `getSlotHeight`,
+  `getTransaction`, `getProgramAccounts`, `getMultipleAccounts`, `getBlock`,
+  `getFeeForMessage`, `getSignatureStatuses`, `simulateTX`.
+- Helpers in `sdk/utils/capabilities/blockchain/solana/solana-helpers`:
+  `solanaAddressToBytes`, `solanaAccountMeta`, `calculateAccountsHash`,
+  `encodeForwarderReport`, `encodeBorshVecU32`, `prepareSolanaReportRequest`,
+  `SOLANA_DEFAULT_REPORT_ENCODER`.
+- Chain selectors are generated: `solana-devnet` (`16423721717087811551`),
+  `solana-testnet`, `solana-mainnet`.
+- **A Solana contract mock ships in `@chainlink/cre-sdk/test`**, so the handler is
+  testable at the same confidence tier as the EVM path, with no credentials.
+
+### How the write actually lands
+
+The workflow Borsh-encodes a payload and wraps it in a `ForwarderReport`
+(`[32-byte accountHash][u32-LE payload length][payload]`). `runtime.report()`
+signs it with the `solana` encoder (ecdsa + keccak256). The DON submits to the
+Keystone Forwarder program, which verifies oracle signatures and CPIs into the
+receiver program's `on_report` instruction.
+
+The forwarder expects accounts in a fixed order: index 0 `forwarderState`,
+index 1 the `forwarderAuthority` PDA derived from
+`["forwarder", forwarderState, receiverProgram]` under the forwarder program ID,
+indices 2+ the receiver's own accounts. `calculateAccountsHash` must be computed
+over exactly those accounts in that order; the receiver verifies it, so a
+mismatch fails on chain rather than in the workflow.
+
+### What this forces open in our code
+
+- `cre/workflow/handler.ts` pins `chainSelector: z.literal('16015286601757825753')`.
+  Config becomes a discriminated target (`evm-sepolia` | `solana-devnet`) so one
+  workflow can address either family. This overlaps S2's source/network binding
+  and J7; do them together.
+- `action` in `cre/graph.ts` is chain-agnostic today (`pause-vault`). It must name
+  its target chain and program/contract, otherwise a policy composed for Sepolia
+  silently means something else on Solana. This overlaps S1's action contract.
+- Report encoding forks by family: `encodeAbiParameters` + `evm` encoder for EVM,
+  Borsh + `ForwarderReport` + `solana` encoder for Solana. The evaluator stays
+  shared; only encoding and submission differ.
+- The receiver mirrors `GrantVault` as an Anchor program: `on_report` deserializes
+  the Borsh payload, enforces the same run/revision/price/threshold/staleness
+  rules, and is idempotent per run ID. **Rust and Anchor are new to this repo.**
+- `evaluateGraph`'s `guard:receiver-threshold` encodes an EVM receiver rule
+  (`price < threshold`). Either the Solana receiver adopts the same rule or the
+  guard becomes target-specific. Decide before writing the program.
+
+### Order of work, cheapest proof first
+
+1. Target-aware config and action schema, with the existing Sepolia path unchanged.
+2. Solana branch in the handler using the SDK's Solana contract mock. Proves
+   encoding, account layout, and account-hash construction with no credentials
+   and no deployment.
+3. Anchor receiver with `on_report` plus unit tests against a local validator.
+4. Devnet deployment, then a real signed report end to end.
+
+Steps 1–2 are provable in this repo today. Steps 3–4 need a Solana toolchain,
+a funded devnet keypair, and CRE credentials, and carry the same honesty rule as
+the EVM path: mocked and live evidence are labelled separately, and an untested
+path is never described as working.
+
+### Risks worth naming now
+
+- Anchor/Rust is a new toolchain for this team; the receiver is the long pole.
+- Account ordering and the account hash are the most likely source of
+  hard-to-read on-chain failures. Assert the hash in a unit test before deploying.
+- Solana log triggers exist (Anchor `emit_cpi!` via `anchorCPILogTriggerConfig`)
+  but are out of scope here; this phase is write-only.
+- Doing this does not make the EVM CRE path proven. Both remain unverified for
+  live DON execution until credentials exist.
+
 ## Phase 2: smallest useful extensions after Phase 1 passes
 
 | Extension | Shivam | Ayush | Acceptance |
@@ -280,6 +363,10 @@ Mocked and live evidence must be labelled separately.
 | J9 | Valid composed pause through Sepolia CRE simulation | Successful receipt + matching event + fresh paused-state read |
 | J10 | Retry, restart, then independently verify a confirmed run | No duplicate action; original evidence remains inspectable |
 | J11 | Voice edit, ambiguity, undo, old-run inspection, stop speech | Correct revision/focus/captions; no implied transaction cancellation |
+| J12 | Compose a policy targeting Solana, then one targeting Sepolia | Each run encodes for its own family; neither silently retargets the other |
+| J13 | Solana write through the SDK contract mock | Correct `ForwarderReport` framing, account order, and account hash; zero live submissions |
+| J14 | Account list reordered before hashing | Receiver rejects; failure is explicit and attributed to the account hash |
+| J15 | Same run ID replayed to the Anchor receiver | Second delivery is an explicit no-op; original evidence unchanged |
 
 For Phase 2 add: treasury valuation; once-per-cooldown notification; two independent
 policies; activated revision unaffected by an unactivated draft edit.
@@ -330,3 +417,7 @@ details before deployment.
 - [Consumer contracts and receiver identity](https://docs.chain.link/cre/guides/workflow/using-evm-client/onchain-write/building-consumer-contracts)
 - [Deployment and access](https://docs.chain.link/cre/guides/operations/deploying-workflows)
 - [Service quotas](https://docs.chain.link/cre/service-quotas)
+- [The Solana Write capability](https://docs.chain.link/cre/capabilities/solana-write)
+- [Writing to Solana (TypeScript)](https://docs.chain.link/cre/guides/workflow/using-solana-client/onchain-write-ts)
+- [Generating Solana bindings (TypeScript)](https://docs.chain.link/cre/guides/workflow/using-solana-client/generating-bindings-ts)
+- [Solana chain interactions overview](https://docs.chain.link/cre/guides/workflow/using-solana-client/overview-ts)
