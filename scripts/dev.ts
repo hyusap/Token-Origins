@@ -6,6 +6,22 @@ import {
   snapshotLocalChain,
 } from "./snapshot-local";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/** How far behind real time the newest block in the saved snapshot sits. */
+async function savedStateDriftSeconds(): Promise<number> {
+  try {
+    const state = await Bun.file(localStatePath).json();
+    const blocks = state.blocks;
+    const newest = Array.isArray(blocks) ? blocks[blocks.length - 1] : null;
+    const raw = newest?.header?.timestamp;
+    const seconds =
+      typeof raw === "string" ? Number.parseInt(raw, 16) : Number(raw);
+    if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+    return Math.floor(Date.now() / 1000) - seconds;
+  } catch {
+    return 0;
+  }
+}
 const bun = Bun.which("bun") ?? "bun";
 const children: ReturnType<typeof Bun.spawn>[] = [];
 let ownsLocalAnvil = false;
@@ -31,7 +47,24 @@ if (process.env.ORIGINS_EXECUTION_MODE !== "cre") {
       throw new Error(
         "Local rehearsal needs Foundry Anvil. Install Foundry, then run bun run dev.",
       );
-    if (await Bun.file(localStatePath).exists()) await validateLocalStateFile();
+    if (await Bun.file(localStatePath).exists()) {
+      await validateLocalStateFile();
+      // Anvil restores the saved chain's clock along with its state, and keeps
+      // lagging afterwards even if the clock is pushed forward. Once the saved
+      // chain is further behind than the receiver's own report age, a freshly
+      // observed price reads as future-dated and every delivery reverts
+      // StaleObservation. Set that snapshot aside and start clean rather than
+      // rehearse against a chain whose clock cannot be trusted.
+      const drift = await savedStateDriftSeconds();
+      if (drift > 120) {
+        const aside = `${localStatePath}.stale-${Date.now()}`;
+        await Bun.$`mv ${localStatePath} ${aside}`.quiet();
+        await Bun.$`rm -f ${localStatePath}.metadata.json`.quiet();
+        console.log(
+          `Saved local chain was ${drift}s behind real time; started a clean chain and kept the old snapshot at ${aside}.`,
+        );
+      }
+    }
     children.push(
       Bun.spawn(
         [

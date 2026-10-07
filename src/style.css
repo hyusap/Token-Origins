@@ -1590,3 +1590,25 @@ button {
   .market-observations { position: static !important; width: auto !important; max-height: none !important; }
   .multiple-markets { display: grid; grid-template-columns: 1fr; overflow: visible; }
 }
+
+/* A simulated order must never be mistaken for a settled transaction. */
+.receipt.simulated-receipt {
+  border-color: var(--bab-gold-deep);
+  color: var(--bab-gold-deep);
+}
+.receipt.simulated-receipt .mono {
+  letter-spacing: 0.08em;
+}
+/* Chainlink reads are oracle observations, not exchange trades; the card has to
+   say which, and show when the aggregator last wrote. */
+.oracle-badge {
+  font-size: 8px;
+  color: var(--bab-gold-deep);
+  letter-spacing: 0.08em;
+}
+.oracle-age {
+  color: var(--bab-text-faint);
+}
+.oracle-age.is-stale {
+  color: var(--bab-gold-deep);
+}

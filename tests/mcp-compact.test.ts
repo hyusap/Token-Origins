@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { emptyState } from '../server/engine';
 import { compactMcpResult } from '../scripts/mcp-compact';
 import type { ExecutionRun, GraphObject, ToolResult } from '../shared/types';
+import { legacyGraph } from '../cre/graph';
 
 function fixture(): ToolResult {
   const state = emptyState();
@@ -10,7 +11,7 @@ function fixture(): ToolResult {
     provenance: { source: 'Test source', kind: 'fixture', label: 'Test', observedAt: '2026-10-06T01:00:00Z', fetchedAt: '2026-10-06T01:00:03Z' } };
   const vault: GraphObject = { ...price, id: 'vault:grant', kind: 'vault', label: 'Grant vault', data: { paused: true, chainId: 31337, address: '0x123', blockNumber: '5' },
     provenance: { ...price.provenance, observedAt: '2026-10-06T00:50:00Z', fetchedAt: '2026-10-06T01:00:05Z' } };
-  const run = (id: string, revision: number): ExecutionRun => ({ id, revision, snapshot: { revision, threshold: 3000, maxAgeSeconds: 60, skipPaused: true, reason: 'Test', createdAt: '2026-10-06T01:00:00Z' }, status: 'confirmed', executionMode: 'Test fixture', startedAt: '2026-10-06T01:00:00Z', completedAt: '2026-10-06T01:00:06Z', inputs: { price, vault }, decisions: [{ id: 'freshness', label: 'Fresh observation', passed: true, detail: 'Test observation age 3s' }], logs: Array.from({ length: 300 }, (_, i) => ({ at: '2026-10-06T01:00:00Z', stage: 'test', message: `Observed stage ${i}` })), evidence: { transactionHash: '0xtest', receiptStatus: 'success', pausedAfter: true, blockNumber: '5', verification: 'Test evidence' } });
+  const run = (id: string, revision: number): ExecutionRun => ({ id, revision, snapshot: { revision, threshold: 3000, maxAgeSeconds: 60, skipPaused: true, reason: 'Test', createdAt: '2026-10-06T01:00:00Z', graph: legacyGraph(3000) }, status: 'confirmed', executionMode: 'Test fixture', startedAt: '2026-10-06T01:00:00Z', completedAt: '2026-10-06T01:00:06Z', inputs: { price, vault }, decisions: [{ id: 'freshness', label: 'Fresh observation', passed: true, detail: 'Test observation age 3s' }], logs: Array.from({ length: 300 }, (_, i) => ({ at: '2026-10-06T01:00:00Z', stage: 'test', message: `Observed stage ${i}` })), evidence: { transactionHash: '0xtest', receiptStatus: 'success', pausedAfter: true, blockNumber: '5', verification: 'Test evidence' } });
   state.objects = [price, vault]; state.runs = [run('newest', 3), run('older', 2)]; state.inspectedRunId = 'newest';
   state.focus = { objectId: price.id, label: price.label };
   state.clarification = { question: 'Which condition?', candidates: ['threshold', 'freshness'] };

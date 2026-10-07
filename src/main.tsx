@@ -19,7 +19,12 @@ import {
   Minus,
   Maximize2,
 } from "lucide-react";
-import type { CanvasState, GraphObject, ExecutionRun } from "../shared/types";
+import type {
+  CanvasState,
+  GraphObject,
+  ExecutionRun,
+  PolicyGraph,
+} from "../shared/types";
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, Handle, Position, useReactFlow, useNodesInitialized, useNodesState, type NodeProps, type Viewport } from "@xyflow/react";
 import { canvasFlow, type InstrumentFlowNode } from "./flow-model";
 import "@xyflow/react/dist/style.css";
@@ -233,16 +238,28 @@ function NodeFooter({ object }: { object: GraphObject }) {
     <div className="node-foot">
       <span>
         <i className="tiny-dot" />
-        {object.provenance.kind === "chain"
-          ? `Chain ${object.provenance.chainId} / block ${object.data.blockNumber}`
-          : object.provenance.label}
+        {object.kind === "feed"
+          ? `Chainlink aggregator / chain ${object.provenance.chainId}`
+          : object.provenance.kind === "chain"
+            ? `Chain ${object.provenance.chainId} / block ${object.data.blockNumber}`
+            : object.provenance.label}
       </span>
-      <span>
-        {clock(
-          object.provenance.kind === "chain"
-            ? object.provenance.fetchedAt
-            : object.provenance.observedAt,
-        )}
+      <span
+        className={
+          object.kind === "feed"
+            ? Number(object.data.ageSeconds) > 3600
+              ? "oracle-age is-stale"
+              : "oracle-age"
+            : undefined
+        }
+      >
+        {object.kind === "feed"
+          ? object.data.ageLabel
+          : clock(
+              object.provenance.kind === "chain"
+                ? object.provenance.fetchedAt
+                : object.provenance.observedAt,
+            )}
       </span>
     </div>
   );
@@ -327,8 +344,14 @@ function PriceNode({
     >
       <NodeHeader
         index="01"
-        type="Market observation"
-        extra={<span className="live-label">Observed</span>}
+        type={object.kind === "feed" ? "Chainlink Data Feed" : "Market observation"}
+        extra={
+          object.kind === "feed" ? (
+            <span className="oracle-badge">ON-CHAIN ORACLE</span>
+          ) : (
+            <span className="live-label">Observed</span>
+          )
+        }
       />
       <div className="node-body">
         <div className="asset-row">
@@ -434,6 +457,95 @@ function VaultNode({
         </div>
       </div>
       <NodeFooter object={object} />
+    </article>
+  );
+}
+type GraphNodeLike = Record<string, any>;
+/** Mirrors isLegacyShape in cre/graph.ts, kept local to avoid bundling zod. */
+function isLegacyPolicy(graph: PolicyGraph | undefined): boolean {
+  if (!graph || graph.nodes.length !== 2) return true;
+  const nodes = graph.nodes as GraphNodeLike[];
+  const compare = nodes.find((n) => n.kind === "compare");
+  const price = nodes.find((n) => n.kind === "price");
+  return Boolean(
+    compare && price && compare.input === price.id && compare.op === "<" &&
+      graph.root === compare.id && price.source?.type === "exchange-trade",
+  );
+}
+/** Source naming duplicated from cre/graph.ts so the bundle stays zod-free. */
+function sourceLabel(node: GraphNodeLike | undefined): string {
+  const source = node?.source;
+  if (!source) return "input";
+  return source.type === "chainlink-feed"
+    ? `Chainlink ${source.symbol}/USD`
+    : `Coinbase ${source.pair}`;
+}
+function conditionRows(graph: PolicyGraph) {
+  const byId = new Map<string, GraphNodeLike>(
+    (graph.nodes as GraphNodeLike[]).map((n) => [n.id, n]),
+  );
+  const rows: { nodeId: string; symbol: string; label: string; value: string; oracle: boolean }[] = [];
+  for (const node of graph.nodes as GraphNodeLike[]) {
+    const input = byId.get(node.input);
+    const oracle = input?.source?.type === "chainlink-feed";
+    if (node.kind === "compare")
+      rows.push({ nodeId: node.id, symbol: node.op, label: sourceLabel(input), value: money(Number(node.value)), oracle });
+    else if (node.kind === "freshness")
+      rows.push({ nodeId: node.id, symbol: "~", label: `${sourceLabel(input)} freshness`, value: `Within ${node.maxAgeSeconds}s`, oracle });
+    else if (node.kind === "vault-paused")
+      rows.push({ nodeId: node.id, symbol: "=", label: "Vault state", value: node.equals ? "Paused" : "Active", oracle: false });
+  }
+  const root = byId.get(graph.root);
+  const connective = root?.kind === "or" ? "OR" : root?.kind === "not" ? "NOT" : "AND";
+  return { rows, connective };
+}
+/** Renders a composed graph: real operators, real sources, real connective. */
+function ComposedConditions({
+  state,
+  focused,
+}: {
+  state: CanvasState;
+  focused: string | null;
+}) {
+  const w = state.workflow;
+  const latest = state.runs[0];
+  const { rows, connective } = conditionRows(w.graph);
+  const current = latest?.revision === w.revision ? latest : undefined;
+  return (
+    <article
+      className={`graph-node condition-node ${focused?.startsWith("condition:") ? "focused" : ""}`}
+    >
+      <NodeHeader index="03" type="Composed policy" extra={<span className="mono">{connective}</span>} />
+      <div className="conditions">
+        {rows.map((row, index) => {
+          const result = current?.decisions.find((d) => d.nodeId === row.nodeId);
+          return (
+            <div
+              key={row.nodeId}
+              className={`condition-row ${focused === `condition:${row.nodeId}` ? "condition-focus" : ""}`}
+              data-object-id={`condition:${row.nodeId}`}
+            >
+              <span className="condition-symbol">{row.symbol}</span>
+              <div>
+                <span>
+                  {row.label}
+                  {row.oracle && <span className="oracle-badge"> · ORACLE</span>}
+                </span>
+                <strong>{row.value}</strong>
+              </div>
+              <span className="condition-state">
+                {result ? (result.passed ? <Check size={14} /> : <span>—</span>) : <span>{String(index + 1).padStart(2, "0")}</span>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="condition-bottom mono">
+        {rows.length} predicate{rows.length === 1 ? "" : "s"} · combined with {connective}
+        <span className="receiver-guards">
+          Fresh data and active spending still gate execution.
+        </span>
+      </div>
     </article>
   );
 }
@@ -667,7 +779,9 @@ function Instrument({ data }: NodeProps<InstrumentFlowNode>) {
     {kind === "price" && object && <PriceNode object={object} focused={focused} />}
     {kind === "vault" && object && <VaultNode object={object} focused={focused} />}
     {kind === "source" && object && <SourceNode object={object} />}
-    {kind === "conditions" && <Conditions state={state} focused={state.focus.objectId} />}
+    {kind === "conditions" && (isLegacyPolicy(state.workflow.graph)
+      ? <Conditions state={state} focused={state.focus.objectId} />
+      : <ComposedConditions state={state} focused={state.focus.objectId} />)}
     {kind === "action" && <ActionNode focused={focused} />}
     {kind === "run" && run && <RunEvidence run={run} previousPause={state.runs.find(r => r.status === "confirmed" && r.evidence?.transactionHash)} />}
     {kind === "conditions" ? <>

@@ -28,6 +28,23 @@ export const toolDefinitions = {
       operationId: op,
     }).strict(),
   },
+  read_price_feed: {
+    description:
+      "Read a live Chainlink Data Feed price for an asset such as BTC, ETH, SOL or LINK. This is an on-chain oracle read from Ethereum mainnet, not a web search and not an exchange API. Accepts a ticker or a name (BTC, bitcoin, SOL). Feeds publish on a deviation threshold or heartbeat, so the answer can be minutes or hours old; the reported age is part of the answer and must not be described as the current spot price. Reference only: the vault's execution price stays on the live Coinbase ETH/USD trade source.",
+    schema: z.object({
+      symbol: z
+        .string()
+        .min(1)
+        .max(40)
+        .describe("Ticker or asset name, e.g. BTC, bitcoin, SOL, LINK."),
+      operationId: op,
+    }),
+  },
+  list_price_feeds: {
+    description:
+      "List every asset with a configured Chainlink mainnet feed. Call this before telling anyone an asset is unavailable.",
+    schema: z.object({}),
+  },
   focus_object: {
     description:
       "Set semantic conversational focus. this/it resolves to current focused object. reference accepts price, vault, source, workflow, back, object IDs, condition, run:<runId>, or a raw run ID. Existing runs are focused without executing again. pin keeps object visible.",
@@ -60,6 +77,29 @@ export const toolDefinitions = {
       reason: z.string().optional(),
       operationId: op,
     }),
+  },
+  compose_graph: {
+    description:
+      "Replace the policy with a composed condition graph, as a new revision. Nodes are an allowlisted vocabulary: price (an exchange trade or a Chainlink feed), compare, freshness, vault-paused, and and/or/not. Use this for any rule a single threshold cannot express, such as combining two assets. The reported on-chain observation is always the exchange trade, so a Chainlink feed branch may decide a policy even when that feed is older than the receiver's freshness cap. Execution still retains that cap and the already-paused no-op whether or not the graph expresses them, and the only action remains pausing the vault.",
+    schema: z.object({
+      expectedRevision: revision,
+      graph: z
+        .object({
+          nodes: z.array(z.record(z.any())).min(1).max(40),
+          root: z.string().min(1),
+          action: z.record(z.any()),
+        })
+        .describe(
+          'Example: {"nodes":[{"id":"eth","kind":"price","source":{"type":"exchange-trade","pair":"ETH-USD"}},{"id":"btc","kind":"price","source":{"type":"chainlink-feed","symbol":"BTC"}},{"id":"a","kind":"compare","input":"eth","op":"<","value":3000},{"id":"b","kind":"compare","input":"btc","op":"<","value":90000},{"id":"both","kind":"and","inputs":["a","b"]}],"root":"both","action":{"type":"pause-vault"}}',
+        ),
+      reason: z.string().optional(),
+      operationId: op,
+    }),
+  },
+  describe_policy: {
+    description:
+      "Read the current policy as one readable sentence plus the sources its execution will fetch. Call before revising so an edit builds on what is actually composed.",
+    schema: z.object({}),
   },
   undo_revision: {
     description:

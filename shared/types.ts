@@ -1,3 +1,5 @@
+import type { PolicyGraph } from "../cre/graph";
+export type { PolicyGraph };
 export type Mode = "explore" | "compose" | "run";
 export interface Provenance {
   source: string;
@@ -15,7 +17,7 @@ export interface PricePoint {
 }
 export interface GraphObject {
   id: string;
-  kind: "price" | "vault" | "condition" | "action" | "source";
+  kind: "price" | "vault" | "condition" | "action" | "source" | "feed";
   label: string;
   data: Record<string, any>;
   provenance: Provenance;
@@ -29,6 +31,8 @@ export interface WorkflowRevision {
   skipPaused: boolean;
   createdAt: string;
   reason: string;
+  /** Composed policy. Scalar edits synthesise the equivalent single-compare graph. */
+  graph: PolicyGraph;
 }
 export interface Workflow {
   id: string;
@@ -39,12 +43,15 @@ export interface Workflow {
   summary: string;
   revisions: WorkflowRevision[];
   created: boolean;
+  graph: PolicyGraph;
 }
 export interface RunDecision {
   id: string;
   label: string;
   passed: boolean;
   detail: string;
+  /** Graph node this verdict came from; absent for legacy scalar runs. */
+  nodeId?: string;
 }
 export interface RunLog {
   at: string;
@@ -79,6 +86,19 @@ export interface ExecutionRun {
     explorerUrl?: string;
     reportId?: string;
     verification?: string;
+    /** Present only for a mock sell. Never a real order or asset movement. */
+    simulatedOrder?: {
+      simulated: true;
+      venue: string;
+      side: "sell";
+      symbol: string;
+      amount: number;
+      referencePriceUsd: number;
+      notionalUsd: number;
+      referenceSource: string;
+      observedAt: string;
+      placedAt: string;
+    };
   };
   error?: string;
 }

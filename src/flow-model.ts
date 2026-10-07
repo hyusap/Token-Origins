@@ -15,7 +15,8 @@ export function canvasFlow(state: CanvasState) {
     nodes.push({ id, type: "instrument", position: { x, y }, style: { width }, draggable: false, selectable: false,
       data: { kind, state, focused: focus === id, ...extra } });
   const visible = state.objects.filter(o => o.visible);
-  const prices = visible.filter(o => o.kind === "price").sort((a, b) => Number(b.id === "price:eth-usd") - Number(a.id === "price:eth-usd"));
+  // Chainlink reads are market cards too: same layout, oracle provenance.
+  const prices = visible.filter(o => o.kind === "price" || o.kind === "feed").sort((a, b) => Number(b.id === "price:eth-usd") - Number(a.id === "price:eth-usd"));
   const vault = visible.find(o => o.kind === "vault");
   const sources = visible.filter(o => o.kind === "source");
   prices.forEach((price, index) => add(price.id, "price", index === 0 ? 40 : -675 - (index - 1) % 3 * 365, index === 0 ? 35 : 35 + Math.floor((index - 1) / 3) * 345, 330, { object: price }));
