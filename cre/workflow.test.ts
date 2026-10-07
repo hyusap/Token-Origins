@@ -25,7 +25,8 @@ function setup(price:number,{paused=false,time='2026-10-06T04:39:50Z',reportVers
   const contract=addContractMock(evm,{address:vaultAddress,abi:parseAbi(['function paused() view returns (bool)','function reportVersion() view returns (uint256)'])});
   contract.paused=()=>paused;
   if(reportVersion!==null) contract.reportVersion=()=>BigInt(reportVersion);
-  evm.balanceAt=()=>({balance:bigintToProtoBigInt(1204900000000000000n)});
+  const multicall=addContractMock(evm,{address:'0xcA11bde05977b3631167028862bE2a173976CA11',abi:parseAbi(['function getEthBalance(address) view returns (uint256)'])});
+  multicall.getEthBalance=()=>1204900000000000000n;
   let writes=0; let lastReport:Uint8Array|undefined;
   evm.writeReport=(request)=>{writes++;lastReport=request.report?.rawReport;return {txStatus:'TX_STATUS_SUCCESS',receiverContractExecutionStatus:'RECEIVER_CONTRACT_EXECUTION_STATUS_SUCCESS',txHash:Buffer.alloc(32,1).toString('base64')};};
   return {runtime,evm,contract,writes:()=>writes,httpCalls:()=>httpCalls,lastReport:()=>lastReport};
