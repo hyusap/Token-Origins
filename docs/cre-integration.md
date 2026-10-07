@@ -75,6 +75,8 @@ echo 'ORIGINS_SOLANA_VAULT=…' >> .env
 bun run prove:multichain     # one decision pauses Sepolia + Solana; grant paid before, refused after
 ```
 
+Recorded proof: one decision paused Sepolia ([tx](https://sepolia.etherscan.io/tx/0xcea844416b0ae01a6f96c491cc63c905931454be92c4091bc373b2e544def6ca)) and Solana devnet ([tx](https://explorer.solana.com/tx/39R7rvrjVS4etn7wmMXsMge6jpc4JRwnekpVsUmK6kMjQTVovoXeAY2i4Df3NJnmbZ8iWxGxNNmK4VaqPF3PiUHM?cluster=devnet)), with a grant paid before and refused after; `demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json`.
+
 The built program and its devnet program keypair are committed, so no Rust or Anchor install is needed. To rebuild: `cargo-build-sbf --tools-version v1.43` in `contracts/solana`. `tests/solana-integration.test.ts` runs both programs on `solana-test-validator` with a forwarder stand-in (`mock_forwarder`, test-only).
 
 ## Deployed DON (separate milestone)

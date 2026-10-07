@@ -71,7 +71,7 @@ are included in this planning update.
 
 - [x] **SOL1:** `sotto_vault` Anchor program: holds SOL, `pay_grant` refused while paused, forwarder-only `on_report` bound to vault/version/action/age, policy-hash event. *(Local validator: `tests/solana-integration.test.ts`.)*
 - [x] **SOL2:** CRE workflow writes the same decision to Solana via `SolanaClient.writeReport`; runner verifies tx, event and vault state. *(`cre/workflow.test.ts`, `tests/execution-contract.test.ts`.)*
-- [ ] **SOL3:** deploy to devnet and record the multichain proof: `bun run deploy:solana`, then `bun run prove:multichain`.
+- [x] **SOL3:** deploy to devnet and record the multichain proof. *(Program `8g87…hqYD`, vault `7593…XWtE`; CRE pause [tx](https://explorer.solana.com/tx/39R7rvrjVS4etn7wmMXsMge6jpc4JRwnekpVsUmK6kMjQTVovoXeAY2i4Df3NJnmbZ8iWxGxNNmK4VaqPF3PiUHM?cluster=devnet); `demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json` verified 18/18.)*
 - [ ] **Ayush:** render `run.evidence.solana` (signature, explorer link, vault) and a Solana vault card.
 
 ## Joint integration gate — before adding features
