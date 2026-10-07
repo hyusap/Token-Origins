@@ -39,7 +39,8 @@ function setup({reportVersion=3,paused=false,balanceWei=2_000_000_000_000_000_00
     const payee=args[0]===payeeId('grantee')?granteeAddress:'0x0000000000000000000000000000000000000000';
     return [paused,payee,50_000_000_000_000_000n,0n,ccip,ccip?tokens:0n,10_000_000_000_000_000n,0n];
   };
-  evm.balanceAt=()=>({balance:bigintToProtoBigInt(balanceWei)});
+  const multicall=addContractMock(evm,{address:'0xcA11bde05977b3631167028862bE2a173976CA11',abi:parseAbi(['function getEthBalance(address) view returns (uint256)'])});
+  multicall.getEthBalance=(...args:readonly unknown[])=>{expect(String(args[0]).toLowerCase()).toBe(vaultAddress);return balanceWei;};
   const writes:Uint8Array[]=[];
   evm.writeReport=(request)=>{writes.push(request.report!.rawReport!);return {txStatus:'TX_STATUS_SUCCESS',receiverContractExecutionStatus:'RECEIVER_CONTRACT_EXECUTION_STATUS_SUCCESS',txHash:Buffer.alloc(32,2).toString('base64')};};
   return {runtime,writes,vaultReads:()=>vaultReads,httpCalls:()=>httpCalls};

@@ -1,4 +1,4 @@
-import { EVMClient, protoBigIntToBigint, HTTPClient, decodeJson, encodeCallMsg, bytesToHex, hexToBase64, LATEST_BLOCK_NUMBER, TxStatus, ConsensusAggregationByFields, median, SolanaClient, SolanaTxStatus, getNetwork, solanaAccountMeta, solanaAccountMetasToJson, calculateAccountsHash, encodeForwarderReport, prepareSolanaReportRequest, type HTTPSendRequester, type HTTPPayload, type CronPayload, type Runtime } from '@chainlink/cre-sdk';
+import { EVMClient, HTTPClient, decodeJson, encodeCallMsg, bytesToHex, hexToBase64, LATEST_BLOCK_NUMBER, TxStatus, ConsensusAggregationByFields, median, SolanaClient, SolanaTxStatus, getNetwork, solanaAccountMeta, solanaAccountMetasToJson, calculateAccountsHash, encodeForwarderReport, prepareSolanaReportRequest, type HTTPSendRequester, type HTTPPayload, type CronPayload, type Runtime } from '@chainlink/cre-sdk';
 import { PublicKey } from '@solana/web3.js';
 import { encodeSolanaPauseReport, encodeSolanaActionReport } from '../solana-report';
 import { EVM_PB } from '@chainlink/cre-sdk/pb';
@@ -36,6 +36,13 @@ export const configSchema = z.object({
 });
 export type Config = z.infer<typeof configSchema>;
 const vaultAbi = parseAbi(['function paused() view returns (bool)', 'function reportVersion() view returns (uint256)']);
+/**
+ * Multicall3 (same address on every EVM chain). Its getEthBalance is an
+ * ordinary contract read, which CRE simulation answers reliably; the native
+ * balanceAt capability returned 0 for a funded Sepolia vault.
+ */
+export const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as const;
+const multicallAbi = parseAbi(['function getEthBalance(address) view returns (uint256)']);
 /** CRE's per-execution EVM read quota. */
 const READ_LIMIT = 15;
 
@@ -100,9 +107,8 @@ function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | '
   const refusal = reportRefusal(reportVersion, action.type);
   if (refusal) throw new Error(`Vault ${vaultAddress}: ${refusal}`);
   const paused = decodeFunctionResult({ abi: vaultAbi, functionName: 'paused', data: vaultCall('paused') });
-  reads++;
-  const balance = clientFor(vaultSelector).balanceAt(runtime, { account: vaultAddress, blockNumber: LATEST_BLOCK_NUMBER }).result();
-  const balanceWei = balance.balance ? protoBigIntToBigint(balance.balance) : 0n;
+  const balanceWei = decodeFunctionResult({ abi: multicallAbi, functionName: 'getEthBalance',
+    data: call(vaultSelector, MULTICALL3, encodeFunctionData({ abi: multicallAbi, functionName: 'getEthBalance', args: [vaultAddress] })) });
   // One read of everything the vault will check before it pays or bridges.
   let terms: VaultTerms | undefined;
   if (action.type === 'pay' || action.type === 'evacuate') {
