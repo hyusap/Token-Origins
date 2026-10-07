@@ -35,7 +35,17 @@ const resume = async () => {
   return hash;
 };
 const solana = await solanaLeg();
-const check = (condition: unknown, message: string) => { if (!condition) throw new Error(`Proof failed: ${message}`); };
+let last: ExecutionEvidence | undefined;
+const check = (condition: unknown, message: string) => {
+  if (condition) return;
+  // Say what the run actually did, so a failure is diagnosable without rerunning.
+  const e = last;
+  const detail = e ? [`decision ${e.decision}`, e.noopReason && `reason: ${e.noopReason}`, e.dryRun && "dry run",
+    e.effectiveAction && `only ${e.effectiveAction.type} was sent (${e.degradedReason})`,
+    `transaction ${e.transaction ? JSON.stringify(e.transaction) : "none"}`,
+    ...e.conditions.filter((c) => !c.passed).map((c) => `failed ${c.nodeId}: ${c.detail}`)].filter(Boolean).join("\n  ") : "no evidence";
+  throw new Error(`Proof failed: ${message}\n  ${detail}\n  CLI transcript: .data/cre-last-run.log`);
+};
 // Always true while the Chainlink ETH/USD feed is live: these cases prove the actions, not the condition
 // (bun run prove:sepolia already recorded false, true, duplicate and refused cases).
 const whenEthLive = (action: unknown): PolicyGraph => policyGraphSchema.parse({
@@ -50,18 +60,18 @@ if (solana && (await solana.isPaused())) await solana.resume();
 
 console.log("1/3 Sweep 25% of the vault to the reserve (HTTP trigger)");
 const sweepSpec = specOf(whenEthLive({ type: "sweep", fraction: 0.25, pause: false }), `prove-sweep-${suffix}`, 1);
-const sweep = await executeCreRun(sweepSpec, log);
+const sweep = (last = await executeCreRun(sweepSpec, log));
 check(sweep.transaction?.effects?.sweptWei && BigInt(sweep.transaction.effects.sweptWei) > 0n, "the sweep must emit ReserveSwept for this run");
 
 console.log("2/3 Pay the grantee 0.001 ETH through the workflow's cron trigger");
 const paySpec = specOf(whenEthLive({ type: "pay", payee: "grantee", amountEth: 0.001 }), `prove-pay-${suffix}`, 2);
-const pay = await executeCreRun(paySpec, log, { trigger: "cron", schedule: cronEvery(60) });
+const pay = (last = await executeCreRun(paySpec, log, { trigger: "cron", schedule: cronEvery(60) }));
 check(pay.trigger === "cron", "the payment must run through the cron trigger");
 check(pay.transaction?.effects?.paidWei === "1000000000000000", "the payment must emit GrantStreamed for 0.001 ETH");
 
 console.log("3/3 Bridge the vault's CCIP-BnM to the reserve on Base Sepolia via CCIP, pausing spending");
 const evacuateSpec = specOf(whenEthLive({ type: "evacuate", destination: "base-sepolia", fraction: 1, pause: true }), `prove-evacuate-${suffix}`, 3);
-const evacuate = await executeCreRun(evacuateSpec, log);
+const evacuate = (last = await executeCreRun(evacuateSpec, log));
 check(evacuate.transaction?.effects?.ccipMessageId && evacuate.transaction.pausedAfter, "the evacuation must emit TreasuryEvacuated with a CCIP message ID and pause");
 console.log(`  CCIP message: ${evacuate.transaction!.effects!.ccipExplorerUrl} (delivery to Base Sepolia takes about 20 minutes)`);
 
