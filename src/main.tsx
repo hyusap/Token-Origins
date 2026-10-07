@@ -27,6 +27,7 @@ import type {
 } from "../shared/types";
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, Handle, Position, useReactFlow, useNodesInitialized, useNodesState, type NodeProps, type Viewport } from "@xyflow/react";
 import { canvasFlow, type InstrumentFlowNode } from "./flow-model";
+import { isLegacyPolicy } from "./policy-shape";
 import "@xyflow/react/dist/style.css";
 import "./brand.css";
 import "./style.css";
@@ -461,17 +462,6 @@ function VaultNode({
   );
 }
 type GraphNodeLike = Record<string, any>;
-/** Mirrors isLegacyShape in cre/graph.ts, kept local to avoid bundling zod. */
-function isLegacyPolicy(graph: PolicyGraph | undefined): boolean {
-  if (!graph || graph.nodes.length !== 2) return true;
-  const nodes = graph.nodes as GraphNodeLike[];
-  const compare = nodes.find((n) => n.kind === "compare");
-  const price = nodes.find((n) => n.kind === "price");
-  return Boolean(
-    compare && price && compare.input === price.id && compare.op === "<" &&
-      graph.root === compare.id && price.source?.type === "exchange-trade",
-  );
-}
 /** Source naming duplicated from cre/graph.ts so the bundle stays zod-free. */
 function sourceLabel(node: GraphNodeLike | undefined): string {
   const source = node?.source;

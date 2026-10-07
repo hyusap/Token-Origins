@@ -35,8 +35,8 @@ export function onHttp(runtime:Runtime<Config>,payload:HTTPPayload):string {
   const paused=decodeFunctionResult({abi:vaultAbi,functionName:'paused',data:bytesToHex(pausedReply.data)});
   const balance=client.balanceAt(runtime,{account:runtime.config.vaultAddress,blockNumber:LATEST_BLOCK_NUMBER}).result();
   let conditions:ConditionEvidence[]; let decision:'pause'|'noop';
+  const prices:Record<string,PriceReading>={'exchange-trade:ETH-USD':{usd:price.usd,observedAt:price.observedAt}};
   if(spec.graph) {
-    const prices:Record<string,PriceReading>={'exchange-trade:ETH-USD':{usd:price.usd,observedAt:price.observedAt}};
     for(const source of collectSources(spec.graph)) {
       if(source.type==='exchange-trade') continue;
       runtime.log(`ORIGINS_SOURCE Resolving ${describeSource(source)} on the vault's chain`);
@@ -50,6 +50,19 @@ export function onHttp(runtime:Runtime<Config>,payload:HTTPPayload):string {
   }
   const evidence:any={runId:spec.runId,revision:spec.revision,mode:'cre-local-simulation',price,vault:{address:runtime.config.vaultAddress,chainId:11155111,paused,balanceWei:(balance.balance ? protoBigIntToBigint(balance.balance) : 0n).toString()},conditions,decision,logs:[]};
   runtime.log(`ORIGINS_INPUT ${JSON.stringify(evidence)}`);
+  // A sell is a simulation and has no on-chain path on this receiver. It must
+  // never reach writeReport, and must never be reported as a pause.
+  if(spec.graph?.action.type==='sell') {
+    if(evidence.decision==='pause') {
+      const action=spec.graph.action;
+      const reading=prices[sourceKey({type:'chainlink-feed',symbol:action.symbol})];
+      if(!reading) throw new Error(`Simulated sell needs a ${action.symbol} reference price that this run did not resolve`);
+      evidence.simulatedOrder={simulated:true,venue:action.venue,side:'sell',symbol:action.symbol,amount:action.amount,referencePriceUsd:reading.usd,notionalUsd:Math.round(action.amount*reading.usd*100)/100,referenceSource:`Chainlink ${action.symbol}/USD`,observedAt:reading.observedAt,placedAt:new Date(runtime.now().getTime()).toISOString()};
+      runtime.log(`ORIGINS_SIMULATED sell ${action.amount} ${action.symbol}; no chain write`);
+    }
+    runtime.log(`ORIGINS_EVIDENCE ${JSON.stringify(evidence)}`);
+    return JSON.stringify(evidence);
+  }
   if(evidence.decision==='pause' && spec.broadcast!==false) {
     const report=runtime.report({encodedPayload:hexToBase64(encodeAbiParameters(parseAbiParameters('bytes32,uint256,uint256,uint256,uint256'),[keccak256(toBytes(spec.runId)),BigInt(spec.revision),BigInt(Math.round(price.usd*100)),BigInt(Math.round(spec.thresholdUsd*100)),BigInt(Math.floor(input.observedAt/1000))])),encoderName:'evm',signingAlgo:'ecdsa',hashingAlgo:'keccak256'}).result();
     const tx=client.writeReport(runtime,{receiver:runtime.config.vaultAddress,report,gasConfig:{gasLimit:runtime.config.gasLimit}}).result();

@@ -90,3 +90,36 @@ test('the legacy single-threshold spec still drives the handler unchanged',()=>{
   expect(result.decision).toBe('pause');
   expect(writes).toBe(1);
 });
+
+test('a simulated sell never reaches writeReport in the CRE handler',()=>{
+  const {runtime,evm}=setup(2700);
+  withFeed(evm,8_500_000_000_000n,Math.floor(now/1000)-2400);
+  let writes=0;
+  evm.writeReport=()=>{writes++;return {};};
+  const sellSpec={...graphSpec,graph:{
+    nodes:[{id:'btc',kind:'price',source:{type:'chainlink-feed',symbol:'BTC'}},
+           {id:'drop',kind:'compare',input:'btc',op:'<',value:90_000}],
+    root:'drop',action:{type:'sell',symbol:'BTC',amount:0.5,venue:'mock-venue'}}};
+  const result=JSON.parse(onHttp(runtime,payload(sellSpec as any)));
+  // J3: zero chain writes, a simulated result, and no pause claim.
+  expect(writes).toBe(0);
+  expect(result.transaction).toBeUndefined();
+  expect(result.simulatedOrder.simulated).toBe(true);
+  expect(result.simulatedOrder.symbol).toBe('BTC');
+  expect(result.simulatedOrder.notionalUsd).toBe(42500);
+});
+
+test('a sell whose conditions fail writes nothing and claims no order',()=>{
+  const {runtime,evm}=setup(2700);
+  withFeed(evm,9_500_000_000_000n,Math.floor(now/1000)-2400);
+  let writes=0;
+  evm.writeReport=()=>{writes++;return {};};
+  const sellSpec={...graphSpec,graph:{
+    nodes:[{id:'btc',kind:'price',source:{type:'chainlink-feed',symbol:'BTC'}},
+           {id:'drop',kind:'compare',input:'btc',op:'<',value:90_000}],
+    root:'drop',action:{type:'sell',symbol:'BTC',amount:0.5,venue:'mock-venue'}}};
+  const result=JSON.parse(onHttp(runtime,payload(sellSpec as any)));
+  expect(writes).toBe(0);
+  expect(result.decision).toBe('noop');
+  expect(result.simulatedOrder).toBeUndefined();
+});

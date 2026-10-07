@@ -22,6 +22,7 @@ import {
   collectSources,
   describeSource,
   isLegacyShape,
+  reportedThreshold,
   type PolicyGraph,
 } from "../cre/graph";
 const now = () => new Date().toISOString();
@@ -775,11 +776,9 @@ export class Engine {
           // validateGraph rejects unknown node kinds, dangling edges, cycles,
           // mistyped operands and any source outside the allowlist.
           const { graph } = validateGraph(args.graph);
-          const threshold =
-            graph.nodes.find(
-              (node): node is Extract<PolicyGraph["nodes"][number], { kind: "compare" }> =>
-                node.kind === "compare",
-            )?.value ?? w.threshold;
+          // Order-independent: the tightest upper bound the policy places on the
+          // observation the report carries, not whichever compare was declared first.
+          const threshold = reportedThreshold(graph, w.threshold);
           const revision: WorkflowRevision = {
             revision: w.revision + 1,
             threshold,

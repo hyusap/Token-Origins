@@ -318,3 +318,29 @@ export const SEPOLIA_FEEDS: Partial<Record<FeedSymbol, `0x${string}`>> = {
   DAI: '0x14866185B1962B63C3Ea9E03Bc1da838bab34C19',
   SNX: '0xc0F82A46033b8BdBA4Bb0B0e28Bc2006F64355bC',
 };
+
+/**
+ * The threshold a pause report carries. GrantVault accepts a report only when
+ * the reported price is below it, so this must come from the bounds the policy
+ * actually places on the reported observation, and must not depend on the order
+ * nodes were declared in.
+ *
+ * Candidates are upper bounds (`<`, `<=`) on the exchange trade that the report
+ * carries. The tightest one is used: under an AND that is the binding bound, and
+ * where it is not binding the receiver-compatibility guard reports the mismatch
+ * instead of letting a doomed report be submitted. With no such bound the
+ * caller's existing threshold is kept.
+ */
+export function reportedThreshold(graph: PolicyGraph, fallback: number): number {
+  const priceIds = new Set(
+    graph.nodes
+      .filter((node): node is Extract<GraphNode, { kind: 'price' }> =>
+        node.kind === 'price' && node.source.type === 'exchange-trade')
+      .map((node) => node.id),
+  );
+  const bounds = graph.nodes
+    .filter((node): node is Extract<GraphNode, { kind: 'compare' }> =>
+      node.kind === 'compare' && (node.op === '<' || node.op === '<=') && priceIds.has(node.input))
+    .map((node) => node.value);
+  return bounds.length ? Math.min(...bounds) : fallback;
+}
