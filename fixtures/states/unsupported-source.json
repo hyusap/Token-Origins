@@ -45,11 +45,11 @@
         }
       ]
     },
-    "error": "No Chainlink SOL/USD feed is configured on Ethereum Sepolia"
+    "error": "No Chainlink SOL/USD feed is configured on Ethereum Sepolia; available there: ETH, BTC, LINK, USDC, DAI, SNX"
   },
   "state": {
     "stateVersion": 2,
-    "sessionId": "77cf8670-4599-4823-9557-ebe53701ce55",
+    "sessionId": "29a3082f-0871-4fa4-bb77-e926f1eae560",
     "seq": 3,
     "mode": "compose",
     "focus": {
@@ -61,7 +61,7 @@
       {
         "name": "Treasury policy",
         "objectId": "workflow:treasury",
-        "at": "2026-10-07T09:26:27.116Z"
+        "at": "2026-10-07T11:03:27.470Z"
       }
     ],
     "objects": [
@@ -79,8 +79,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T09:26:23.115Z",
-          "fetchedAt": "2026-10-07T09:26:27.115Z"
+          "observedAt": "2026-10-07T11:03:23.468Z",
+          "fetchedAt": "2026-10-07T11:03:27.468Z"
         },
         "visible": false,
         "pinned": false
@@ -103,8 +103,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T09:26:23.115Z",
-          "fetchedAt": "2026-10-07T09:26:27.115Z"
+          "observedAt": "2026-10-07T11:03:23.468Z",
+          "fetchedAt": "2026-10-07T11:03:27.468Z"
         },
         "visible": true,
         "pinned": false
@@ -115,17 +115,19 @@
         "label": "Grant vault",
         "data": {
           "paused": false,
-          "balance": "1.2049",
-          "balanceEth": 1.2049,
+          "balance": "0.12",
+          "balanceEth": 0.12,
           "fixture": true,
-          "network": "Local rehearsal fixture"
+          "network": "Local rehearsal fixture",
+          "ccipTokens": 2,
+          "reserveEth": 0
         },
         "provenance": {
           "source": "Local rehearsal fixture",
           "kind": "fixture",
           "label": "Fixture vault · no deployed contract",
-          "observedAt": "2026-10-07T09:26:27.115Z",
-          "fetchedAt": "2026-10-07T09:26:27.115Z"
+          "observedAt": "2026-10-07T11:03:27.468Z",
+          "fetchedAt": "2026-10-07T11:03:27.468Z"
         },
         "visible": true,
         "pinned": false
@@ -147,8 +149,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.116Z",
-          "fetchedAt": "2026-10-07T09:26:27.116Z",
+          "observedAt": "2026-10-07T11:03:27.469Z",
+          "fetchedAt": "2026-10-07T11:03:27.469Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -170,8 +172,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.116Z",
-          "fetchedAt": "2026-10-07T09:26:27.116Z",
+          "observedAt": "2026-10-07T11:03:27.469Z",
+          "fetchedAt": "2026-10-07T11:03:27.469Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -194,8 +196,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.116Z",
-          "fetchedAt": "2026-10-07T09:26:27.116Z",
+          "observedAt": "2026-10-07T11:03:27.469Z",
+          "fetchedAt": "2026-10-07T11:03:27.469Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -212,8 +214,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.116Z",
-          "fetchedAt": "2026-10-07T09:26:27.116Z",
+          "observedAt": "2026-10-07T11:03:27.469Z",
+          "fetchedAt": "2026-10-07T11:03:27.469Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -263,7 +265,7 @@
       "threshold": 3000,
       "maxAgeSeconds": null,
       "skipPaused": false,
-      "createdAt": "2026-10-07T09:26:27.116Z",
+      "createdAt": "2026-10-07T11:03:27.469Z",
       "reason": "Composed condition graph",
       "graph": {
         "nodes": [
@@ -320,7 +322,7 @@
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T09:26:27.116Z",
+          "createdAt": "2026-10-07T11:03:27.469Z",
           "reason": "Composed condition graph",
           "graph": {
             "nodes": [
@@ -377,46 +379,46 @@
     "runs": [],
     "conversation": [
       {
-        "id": "b32e8de9-fbc2-47d7-82d2-bc00ed95fd1f",
+        "id": "d8b7a5d1-4f61-48bf-ab70-89c4e908f493",
         "role": "assistant",
-        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T09:26:23.115Z); Grant vault.",
-        "at": "2026-10-07T09:26:27.115Z",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T11:03:23.468Z); Grant vault.",
+        "at": "2026-10-07T11:03:27.468Z",
         "source": "mcp"
       },
       {
-        "id": "850e4b79-7162-467e-8a06-70b4a471c0c3",
+        "id": "62feed20-b152-416d-a6f4-bd6e95d76a1e",
         "role": "assistant",
         "text": "Revision 1. Pause spending when (Coinbase ETH-USD trade < $3,000 and Chainlink BTC/USD (mainnet) < $80,000). Execution fetches Coinbase ETH-USD trade and Chainlink BTC/USD (mainnet).",
-        "at": "2026-10-07T09:26:27.116Z",
+        "at": "2026-10-07T11:03:27.470Z",
         "source": "mcp"
       },
       {
-        "id": "32864bcc-6813-4e9e-adf4-9f91ee325d84",
+        "id": "d084b4e9-fba7-4a54-8112-6cb69ed58083",
         "role": "assistant",
-        "text": "No Chainlink SOL/USD feed is configured on Ethereum Sepolia",
-        "at": "2026-10-07T09:26:27.118Z",
+        "text": "No Chainlink SOL/USD feed is configured on Ethereum Sepolia; available there: ETH, BTC, LINK, USDC, DAI, SNX",
+        "at": "2026-10-07T11:03:27.472Z",
         "source": "mcp"
       }
     ],
     "activity": {
       "status": "error",
       "prompt": "",
-      "summary": "No Chainlink SOL/USD feed is configured on Ethereum Sepolia"
+      "summary": "No Chainlink SOL/USD feed is configured on Ethereum Sepolia; available there: ETH, BTC, LINK, USDC, DAI, SNX"
     },
     "latency": [
       {
         "operationId": "d",
         "tool": "discover_objects",
-        "receivedAt": "2026-10-07T09:26:27.115Z",
-        "committedAt": "2026-10-07T09:26:27.115Z",
-        "commitMs": 0.08
+        "receivedAt": "2026-10-07T11:03:27.468Z",
+        "committedAt": "2026-10-07T11:03:27.468Z",
+        "commitMs": 0.12
       },
       {
         "operationId": "c",
         "tool": "compose_graph",
-        "receivedAt": "2026-10-07T09:26:27.115Z",
-        "committedAt": "2026-10-07T09:26:27.116Z",
-        "commitMs": 0.83
+        "receivedAt": "2026-10-07T11:03:27.468Z",
+        "committedAt": "2026-10-07T11:03:27.470Z",
+        "commitMs": 1.3
       }
     ],
     "capabilities": {

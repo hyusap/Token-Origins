@@ -58,7 +58,7 @@ export async function proveSequence(options: ProofOptions) {
   const eth = falseResult.observations.find((o) => o.provider === "coinbase");
   check(eth, "false run must archive the exchange trade it read");
 
-  const threshold = Math.ceil(eth!.usd * 1.1);
+  const threshold = Math.ceil(eth!.value * 1.1);
   log(`2/4 True condition: ETH below $${threshold} (10% above the trade just read) and BTC feed live`);
   const trueSpec = specOf(composedPause(threshold, options.feedNetwork), `prove-true-${suffix}`, 2);
   const before = options.beforeTrue ? await options.beforeTrue() : undefined;

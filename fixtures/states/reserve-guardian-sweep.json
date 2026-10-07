@@ -1,0 +1,924 @@
+{
+  "name": "reserve-guardian-sweep",
+  "description": "Recipe inspired by SentinelCRE: Proof of Reserve ÷ supply (a math node) OR a USDC depeg. Reserves are short, so the fixture vault sweeps half its ETH to the reserve and pauses, in memory.",
+  "expected": {
+    "utterance": "If WBTC's reserves fall below its supply or USDC depegs, sweep half the treasury to the reserve and pause spending.",
+    "policySentence": "Sweep 50% of the vault to the reserve and pause spending when ((Chainlink WBTC Proof of Reserve ÷ WBTC total supply) < 1 or Chainlink USDC/USD (mainnet) < $0.98).",
+    "policyHash": "0xa19a08adca6fc68a5988e86efc33e06b57bde0286cb956cba90a708e754feada",
+    "structure": {
+      "root": "risk",
+      "action": {
+        "type": "sweep",
+        "fraction": 0.5,
+        "pause": true
+      },
+      "nodes": [
+        {
+          "id": "reserves",
+          "kind": "reading",
+          "inputs": []
+        },
+        {
+          "id": "supply",
+          "kind": "reading",
+          "inputs": []
+        },
+        {
+          "id": "coverage",
+          "kind": "math",
+          "inputs": [
+            "reserves",
+            "supply"
+          ]
+        },
+        {
+          "id": "undercollateralised",
+          "kind": "compare",
+          "inputs": [
+            "coverage"
+          ]
+        },
+        {
+          "id": "usdc",
+          "kind": "price",
+          "inputs": []
+        },
+        {
+          "id": "depegged",
+          "kind": "compare",
+          "inputs": [
+            "usdc"
+          ]
+        },
+        {
+          "id": "risk",
+          "kind": "or",
+          "inputs": [
+            "undercollateralised",
+            "depegged"
+          ]
+        }
+      ]
+    },
+    "runStatus": "confirmed",
+    "runCaption": "Revision 1: fixture vault swept 0.06 ETH to the reserve and paused in memory; no transaction.",
+    "noopReason": null,
+    "blockedBy": null
+  },
+  "state": {
+    "stateVersion": 2,
+    "sessionId": "5781ca5f-4624-417e-9a2c-8bc8e741171a",
+    "seq": 19,
+    "mode": "run",
+    "focus": {
+      "objectId": "run:run-dd76addf-2653-4548-aeda-fb7162b76bda",
+      "label": "Execution v01"
+    },
+    "previousFocus": [
+      "workflow:treasury"
+    ],
+    "references": [
+      {
+        "name": "Treasury policy",
+        "objectId": "workflow:treasury",
+        "at": "2026-10-07T11:03:27.528Z"
+      },
+      {
+        "name": "Execution v01",
+        "objectId": "run:run-dd76addf-2653-4548-aeda-fb7162b76bda",
+        "at": "2026-10-07T11:03:27.530Z"
+      }
+    ],
+    "objects": [
+      {
+        "id": "source:coinbase",
+        "kind": "source",
+        "label": "Coinbase Exchange",
+        "data": {
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "token": "coinbase:ETH-USD",
+          "priceObjectId": "price:eth-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T11:03:23.525Z",
+          "fetchedAt": "2026-10-07T11:03:27.525Z"
+        },
+        "visible": false,
+        "pinned": false
+      },
+      {
+        "id": "price:eth-usd",
+        "kind": "price",
+        "label": "ETH / USD",
+        "data": {
+          "price": 2500,
+          "unit": "USD",
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "token": "coinbase:ETH-USD",
+          "history": [],
+          "sourceObjectId": "source:coinbase"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T11:03:23.525Z",
+          "fetchedAt": "2026-10-07T11:03:27.525Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "data": {
+          "paused": true,
+          "balance": "0.06",
+          "balanceEth": 0.06,
+          "fixture": true,
+          "network": "Local rehearsal fixture",
+          "ccipTokens": 2,
+          "reserveEth": 0.06
+        },
+        "provenance": {
+          "source": "Local rehearsal fixture",
+          "kind": "fixture",
+          "label": "Fixture vault · no deployed contract",
+          "observedAt": "2026-10-07T11:03:27.548Z",
+          "fetchedAt": "2026-10-07T11:03:27.548Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "condition:coverage",
+        "kind": "condition",
+        "label": "(Chainlink WBTC Proof of Reserve ÷ WBTC total supply)",
+        "data": {
+          "id": "coverage",
+          "kind": "math",
+          "op": "/",
+          "left": "reserves",
+          "right": "supply",
+          "math": true,
+          "root": false
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.528Z",
+          "fetchedAt": "2026-10-07T11:03:27.528Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:undercollateralised",
+        "kind": "condition",
+        "label": "(Chainlink WBTC Proof of Reserve ÷ WBTC total supply) < 1",
+        "data": {
+          "id": "undercollateralised",
+          "kind": "compare",
+          "input": "coverage",
+          "op": "<",
+          "value": 1,
+          "source": "(Chainlink WBTC Proof of Reserve ÷ WBTC total supply)",
+          "root": false
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.528Z",
+          "fetchedAt": "2026-10-07T11:03:27.528Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:depegged",
+        "kind": "condition",
+        "label": "Chainlink USDC/USD (mainnet) < $0.98",
+        "data": {
+          "id": "depegged",
+          "kind": "compare",
+          "input": "usdc",
+          "op": "<",
+          "value": 0.98,
+          "source": "Chainlink USDC/USD (mainnet)",
+          "root": false
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.528Z",
+          "fetchedAt": "2026-10-07T11:03:27.528Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:risk",
+        "kind": "condition",
+        "label": "Any of 2 conditions",
+        "data": {
+          "id": "risk",
+          "kind": "or",
+          "inputs": [
+            "undercollateralised",
+            "depegged"
+          ],
+          "logic": true,
+          "root": true
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.528Z",
+          "fetchedAt": "2026-10-07T11:03:27.528Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "action:pause",
+        "kind": "action",
+        "label": "Sweep 50% of the vault to the reserve and pause spending",
+        "data": {
+          "type": "sweep",
+          "fraction": 0.5,
+          "pause": true,
+          "target": "vault:grant"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.528Z",
+          "fetchedAt": "2026-10-07T11:03:27.528Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "reading:proof-of-reserve:ethereum-mainnet:WBTC",
+        "kind": "reading",
+        "label": "Chainlink WBTC Proof of Reserve",
+        "data": {
+          "value": 120000,
+          "unit": "WBTC",
+          "display": "120,000 WBTC",
+          "raw": "120000",
+          "sourceKey": "proof-of-reserve:ethereum-mainnet:WBTC",
+          "source": {
+            "type": "proof-of-reserve",
+            "asset": "WBTC"
+          },
+          "network": "ethereum-mainnet",
+          "chainId": 1,
+          "address": "0xa81FE04086865e63E12dD3776978E49DEEa2ea4e",
+          "ageLabel": "30 min ago"
+        },
+        "provenance": {
+          "source": "Fixture contract reading",
+          "kind": "chain",
+          "chainId": 1,
+          "address": "0xa81FE04086865e63E12dD3776978E49DEEa2ea4e",
+          "label": "Chainlink WBTC Proof of Reserve · Ethereum mainnet",
+          "observedAt": "2026-10-07T10:33:27.544Z",
+          "fetchedAt": "2026-10-07T11:03:27.544Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "reading:token-supply:ethereum-mainnet:WBTC",
+        "kind": "reading",
+        "label": "WBTC total supply",
+        "data": {
+          "value": 128500,
+          "unit": "WBTC",
+          "display": "128,500 WBTC",
+          "raw": "128500",
+          "sourceKey": "token-supply:ethereum-mainnet:WBTC",
+          "source": {
+            "type": "token-supply",
+            "token": "WBTC"
+          },
+          "network": "ethereum-mainnet",
+          "chainId": 1,
+          "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+          "ageLabel": "read just now"
+        },
+        "provenance": {
+          "source": "Fixture contract reading",
+          "kind": "chain",
+          "chainId": 1,
+          "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+          "label": "WBTC total supply · Ethereum mainnet",
+          "observedAt": "2026-10-07T11:03:27.544Z",
+          "fetchedAt": "2026-10-07T11:03:27.544Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "feed:usdc-usd",
+        "kind": "feed",
+        "label": "USDC / USD",
+        "data": {
+          "price": 85000,
+          "unit": "USD",
+          "symbol": "USDC",
+          "decimals": 8,
+          "answer": "8500000000000",
+          "roundId": "110680464442257320164",
+          "ageSeconds": 1500,
+          "ageLabel": "25 min ago",
+          "feedAddress": "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6",
+          "description": "USDC / USD",
+          "network": "ethereum-mainnet"
+        },
+        "provenance": {
+          "source": "Chainlink Data Feed",
+          "url": "https://etherscan.io/address/0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6#readContract",
+          "kind": "chain",
+          "chainId": 1,
+          "address": "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6",
+          "label": "Chainlink USDC / USD aggregator · Ethereum mainnet",
+          "observedAt": "2026-10-07T10:38:27.544Z",
+          "fetchedAt": "2026-10-07T11:03:27.544Z"
+        },
+        "visible": true,
+        "pinned": false
+      }
+    ],
+    "edges": [
+      {
+        "id": "in-coverage-0",
+        "from": "reading:proof-of-reserve:ethereum-mainnet:WBTC",
+        "to": "condition:coverage",
+        "label": "/ left"
+      },
+      {
+        "id": "in-coverage-1",
+        "from": "reading:token-supply:ethereum-mainnet:WBTC",
+        "to": "condition:coverage",
+        "label": "/ right"
+      },
+      {
+        "id": "in-undercollateralised",
+        "from": "condition:coverage",
+        "to": "condition:undercollateralised",
+        "label": "compares"
+      },
+      {
+        "id": "in-depegged",
+        "from": "feed:usdc-usd",
+        "to": "condition:depegged",
+        "label": "compares"
+      },
+      {
+        "id": "in-risk-0",
+        "from": "condition:undercollateralised",
+        "to": "condition:risk",
+        "label": "or"
+      },
+      {
+        "id": "in-risk-1",
+        "from": "condition:depegged",
+        "to": "condition:risk",
+        "label": "or"
+      },
+      {
+        "id": "out-root",
+        "from": "condition:risk",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "e-act",
+        "from": "action:pause",
+        "to": "vault:grant",
+        "label": "sweeps to reserve"
+      }
+    ],
+    "workflow": {
+      "id": "workflow:treasury",
+      "revision": 1,
+      "threshold": 3000,
+      "maxAgeSeconds": null,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T11:03:27.527Z",
+      "reason": "Recipe: Reserve guardian",
+      "graph": {
+        "nodes": [
+          {
+            "id": "reserves",
+            "kind": "reading",
+            "source": {
+              "type": "proof-of-reserve",
+              "asset": "WBTC"
+            }
+          },
+          {
+            "id": "supply",
+            "kind": "reading",
+            "source": {
+              "type": "token-supply",
+              "token": "WBTC"
+            }
+          },
+          {
+            "id": "coverage",
+            "kind": "math",
+            "op": "/",
+            "left": "reserves",
+            "right": "supply"
+          },
+          {
+            "id": "undercollateralised",
+            "kind": "compare",
+            "input": "coverage",
+            "op": "<",
+            "value": 1
+          },
+          {
+            "id": "usdc",
+            "kind": "price",
+            "source": {
+              "type": "chainlink-feed",
+              "symbol": "USDC",
+              "network": "ethereum-mainnet"
+            }
+          },
+          {
+            "id": "depegged",
+            "kind": "compare",
+            "input": "usdc",
+            "op": "<",
+            "value": 0.98
+          },
+          {
+            "id": "risk",
+            "kind": "or",
+            "inputs": [
+              "undercollateralised",
+              "depegged"
+            ]
+          }
+        ],
+        "root": "risk",
+        "action": {
+          "type": "sweep",
+          "fraction": 0.5,
+          "pause": true
+        }
+      },
+      "policyHash": "0xa19a08adca6fc68a5988e86efc33e06b57bde0286cb956cba90a708e754feada",
+      "summary": "Sweep 50% of the vault to the reserve and pause spending when ((Chainlink WBTC Proof of Reserve ÷ WBTC total supply) < 1 or Chainlink USDC/USD (mainnet) < $0.98).",
+      "revisions": [
+        {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T11:03:27.527Z",
+          "reason": "Recipe: Reserve guardian",
+          "graph": {
+            "nodes": [
+              {
+                "id": "reserves",
+                "kind": "reading",
+                "source": {
+                  "type": "proof-of-reserve",
+                  "asset": "WBTC"
+                }
+              },
+              {
+                "id": "supply",
+                "kind": "reading",
+                "source": {
+                  "type": "token-supply",
+                  "token": "WBTC"
+                }
+              },
+              {
+                "id": "coverage",
+                "kind": "math",
+                "op": "/",
+                "left": "reserves",
+                "right": "supply"
+              },
+              {
+                "id": "undercollateralised",
+                "kind": "compare",
+                "input": "coverage",
+                "op": "<",
+                "value": 1
+              },
+              {
+                "id": "usdc",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "USDC",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "depegged",
+                "kind": "compare",
+                "input": "usdc",
+                "op": "<",
+                "value": 0.98
+              },
+              {
+                "id": "risk",
+                "kind": "or",
+                "inputs": [
+                  "undercollateralised",
+                  "depegged"
+                ]
+              }
+            ],
+            "root": "risk",
+            "action": {
+              "type": "sweep",
+              "fraction": 0.5,
+              "pause": true
+            }
+          },
+          "policyHash": "0xa19a08adca6fc68a5988e86efc33e06b57bde0286cb956cba90a708e754feada"
+        }
+      ],
+      "created": true
+    },
+    "runs": [
+      {
+        "id": "run-dd76addf-2653-4548-aeda-fb7162b76bda",
+        "revision": 1,
+        "snapshot": {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T11:03:27.527Z",
+          "reason": "Recipe: Reserve guardian",
+          "graph": {
+            "nodes": [
+              {
+                "id": "reserves",
+                "kind": "reading",
+                "source": {
+                  "type": "proof-of-reserve",
+                  "asset": "WBTC"
+                }
+              },
+              {
+                "id": "supply",
+                "kind": "reading",
+                "source": {
+                  "type": "token-supply",
+                  "token": "WBTC"
+                }
+              },
+              {
+                "id": "coverage",
+                "kind": "math",
+                "op": "/",
+                "left": "reserves",
+                "right": "supply"
+              },
+              {
+                "id": "undercollateralised",
+                "kind": "compare",
+                "input": "coverage",
+                "op": "<",
+                "value": 1
+              },
+              {
+                "id": "usdc",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "USDC",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "depegged",
+                "kind": "compare",
+                "input": "usdc",
+                "op": "<",
+                "value": 0.98
+              },
+              {
+                "id": "risk",
+                "kind": "or",
+                "inputs": [
+                  "undercollateralised",
+                  "depegged"
+                ]
+              }
+            ],
+            "root": "risk",
+            "action": {
+              "type": "sweep",
+              "fraction": 0.5,
+              "pause": true
+            }
+          },
+          "policyHash": "0xa19a08adca6fc68a5988e86efc33e06b57bde0286cb956cba90a708e754feada"
+        },
+        "policyHash": "0xa19a08adca6fc68a5988e86efc33e06b57bde0286cb956cba90a708e754feada",
+        "action": "sweep",
+        "trigger": "manual",
+        "status": "confirmed",
+        "startedAt": "2026-10-07T11:03:27.530Z",
+        "executionMode": "Local policy rehearsal · fixture vault · no transaction",
+        "decisions": [
+          {
+            "id": "threshold",
+            "label": "threshold",
+            "passed": true,
+            "detail": "(Chainlink WBTC Proof of Reserve ÷ WBTC total supply) 0.933852 < 1",
+            "nodeId": "undercollateralised",
+            "role": "node"
+          },
+          {
+            "id": "threshold",
+            "label": "threshold",
+            "passed": false,
+            "detail": "Chainlink USDC/USD (mainnet) $85,000.00 < $0.98",
+            "nodeId": "depegged",
+            "role": "node"
+          },
+          {
+            "id": "or",
+            "label": "or",
+            "passed": true,
+            "detail": "1 of 2 conditions held (any needed) → true",
+            "nodeId": "risk",
+            "role": "node"
+          },
+          {
+            "id": "composed-policy",
+            "label": "composed-policy",
+            "passed": true,
+            "detail": "Policy condition evaluated true",
+            "nodeId": "guard:root",
+            "role": "root"
+          },
+          {
+            "id": "source-freshness",
+            "label": "source-freshness",
+            "passed": true,
+            "detail": "Chainlink WBTC Proof of Reserve observed 1800.0s ago; limit 93600s",
+            "nodeId": "guard:source:proof-of-reserve:ethereum-mainnet:WBTC",
+            "role": "guard"
+          },
+          {
+            "id": "source-freshness",
+            "label": "source-freshness",
+            "passed": true,
+            "detail": "WBTC total supply observed 0.0s ago; limit 300s",
+            "nodeId": "guard:source:token-supply:ethereum-mainnet:WBTC",
+            "role": "guard"
+          },
+          {
+            "id": "source-freshness",
+            "label": "source-freshness",
+            "passed": true,
+            "detail": "Chainlink USDC/USD (mainnet) observed 1500.0s ago; limit 93600s",
+            "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:USDC",
+            "role": "guard"
+          },
+          {
+            "id": "vault-funds",
+            "label": "vault-funds",
+            "passed": true,
+            "detail": "Vault holds 0.12 ETH; sweeping 50% to the reserve",
+            "nodeId": "guard:vault-funds",
+            "role": "guard"
+          }
+        ],
+        "logs": [
+          {
+            "at": "2026-10-07T11:03:27.530Z",
+            "stage": "queued",
+            "message": "Frozen draft revision 1"
+          },
+          {
+            "at": "2026-10-07T11:03:27.541Z",
+            "stage": "fetching",
+            "message": "Fetching fresh execution inputs"
+          },
+          {
+            "at": "2026-10-07T11:03:27.543Z",
+            "stage": "reporting",
+            "message": "Fixture rehearsal · live inputs, in-memory vault, no transaction"
+          },
+          {
+            "at": "2026-10-07T11:03:27.543Z",
+            "stage": "fetching",
+            "message": "Read vault active on chain 0"
+          },
+          {
+            "at": "2026-10-07T11:03:27.543Z",
+            "stage": "fetching",
+            "message": "Fetching Chainlink WBTC Proof of Reserve"
+          },
+          {
+            "at": "2026-10-07T11:03:27.544Z",
+            "stage": "fetching",
+            "message": "Fetching WBTC total supply"
+          },
+          {
+            "at": "2026-10-07T11:03:27.544Z",
+            "stage": "fetching",
+            "message": "Fetching Chainlink USDC/USD (mainnet)"
+          },
+          {
+            "at": "2026-10-07T11:03:27.545Z",
+            "stage": "evaluating",
+            "message": "PASS undercollateralised: (Chainlink WBTC Proof of Reserve ÷ WBTC total supply) 0.933852 < 1"
+          },
+          {
+            "at": "2026-10-07T11:03:27.545Z",
+            "stage": "evaluating",
+            "message": "STOP depegged: Chainlink USDC/USD (mainnet) $85,000.00 < $0.98"
+          },
+          {
+            "at": "2026-10-07T11:03:27.546Z",
+            "stage": "evaluating",
+            "message": "PASS risk: 1 of 2 conditions held (any needed) → true"
+          },
+          {
+            "at": "2026-10-07T11:03:27.546Z",
+            "stage": "evaluating",
+            "message": "PASS root: Policy condition evaluated true"
+          },
+          {
+            "at": "2026-10-07T11:03:27.546Z",
+            "stage": "evaluating",
+            "message": "PASS source:proof-of-reserve:ethereum-mainnet:WBTC: Chainlink WBTC Proof of Reserve observed 1800.0s ago; limit 93600s"
+          },
+          {
+            "at": "2026-10-07T11:03:27.547Z",
+            "stage": "evaluating",
+            "message": "PASS source:token-supply:ethereum-mainnet:WBTC: WBTC total supply observed 0.0s ago; limit 300s"
+          },
+          {
+            "at": "2026-10-07T11:03:27.547Z",
+            "stage": "evaluating",
+            "message": "PASS source:chainlink-feed:ethereum-mainnet:USDC: Chainlink USDC/USD (mainnet) observed 1500.0s ago; limit 93600s"
+          },
+          {
+            "at": "2026-10-07T11:03:27.547Z",
+            "stage": "evaluating",
+            "message": "PASS vault-funds: Vault holds 0.12 ETH; sweeping 50% to the reserve"
+          },
+          {
+            "at": "2026-10-07T11:03:27.548Z",
+            "stage": "fetching",
+            "message": "Fixture vault changed in memory (paused, 0.06 ETH swept to the reserve). No blockchain execution was performed."
+          }
+        ],
+        "observations": [
+          {
+            "key": "proof-of-reserve:ethereum-mainnet:WBTC",
+            "label": "Chainlink WBTC Proof of Reserve",
+            "provider": "chainlink",
+            "unit": "WBTC",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0xa81FE04086865e63E12dD3776978E49DEEa2ea4e",
+            "decimals": 8,
+            "value": 120000,
+            "raw": "120000",
+            "observedAt": "2026-10-07T10:33:27.544Z",
+            "fetchedAt": "2026-10-07T11:03:27.544Z"
+          },
+          {
+            "key": "token-supply:ethereum-mainnet:WBTC",
+            "label": "WBTC total supply",
+            "provider": "erc20",
+            "unit": "WBTC",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            "decimals": 8,
+            "value": 128500,
+            "raw": "128500",
+            "observedAt": "2026-10-07T11:03:27.544Z",
+            "fetchedAt": "2026-10-07T11:03:27.544Z"
+          },
+          {
+            "key": "chainlink-feed:ethereum-mainnet:USDC",
+            "label": "Chainlink USDC/USD (mainnet)",
+            "provider": "chainlink",
+            "unit": "USD",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6",
+            "decimals": 8,
+            "value": 85000,
+            "usd": 85000,
+            "raw": "8500000000000",
+            "roundId": "110680464442257320164",
+            "observedAt": "2026-10-07T10:38:27.544Z",
+            "fetchedAt": "2026-10-07T11:03:27.544Z"
+          }
+        ],
+        "evidence": {
+          "pausedAfter": true,
+          "fixture": true,
+          "fixtureEffects": {
+            "paused": true,
+            "sweptEth": 0.06
+          },
+          "verification": "Local fixture changed only · no deployed contract or transaction"
+        },
+        "completedAt": "2026-10-07T11:03:27.548Z"
+      }
+    ],
+    "conversation": [
+      {
+        "id": "7fb29396-eafd-41af-98e8-93e2fa5884e4",
+        "role": "assistant",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T11:03:23.525Z); Grant vault.",
+        "at": "2026-10-07T11:03:27.525Z",
+        "source": "mcp"
+      },
+      {
+        "id": "89fffaea-9219-4681-9795-fa3a308dd023",
+        "role": "assistant",
+        "text": "Revision 1. Sweep 50% of the vault to the reserve and pause spending when ((Chainlink WBTC Proof of Reserve ÷ WBTC total supply) < 1 or Chainlink USDC/USD (mainnet) < $0.98). Execution fetches Chainlink WBTC Proof of Reserve and WBTC total supply and Chainlink USDC/USD (mainnet). Sweeps go only to the reserve fixed when the vault was deployed, and spending pauses in the same report. Reserve guardian, inspired by SentinelCRE (Convergence 2026, CRE & AI, 1st place). To keep it running, call watch_policy with everySeconds 60.",
+        "at": "2026-10-07T11:03:27.530Z",
+        "source": "mcp"
+      },
+      {
+        "id": "0465cfa6-3e60-4082-a037-25b0ab2ab0af",
+        "role": "assistant",
+        "text": "Run run-dd76addf-2653-4548-aeda-fb7162b76bda started against immutable revision 1.",
+        "at": "2026-10-07T11:03:27.531Z",
+        "source": "mcp"
+      },
+      {
+        "id": "2d290ff7-19ff-4018-900e-aac8d9a4f10e",
+        "role": "assistant",
+        "text": "Revision 1: fixture vault swept 0.06 ETH to the reserve and paused in memory; no transaction.",
+        "at": "2026-10-07T11:03:27.548Z",
+        "source": "mcp"
+      }
+    ],
+    "activity": {
+      "status": "idle",
+      "prompt": "Run this version",
+      "summary": "Revision 1: fixture vault swept 0.06 ETH to the reserve and paused in memory; no transaction."
+    },
+    "latency": [
+      {
+        "operationId": "d",
+        "tool": "discover_objects",
+        "receivedAt": "2026-10-07T11:03:27.525Z",
+        "committedAt": "2026-10-07T11:03:27.525Z",
+        "commitMs": 0.16
+      },
+      {
+        "operationId": "c",
+        "tool": "apply_recipe",
+        "receivedAt": "2026-10-07T11:03:27.525Z",
+        "committedAt": "2026-10-07T11:03:27.530Z",
+        "commitMs": 4.25
+      },
+      {
+        "operationId": "r",
+        "tool": "run_workflow",
+        "receivedAt": "2026-10-07T11:03:27.530Z",
+        "committedAt": "2026-10-07T11:03:27.531Z",
+        "commitMs": 0.19
+      }
+    ],
+    "capabilities": {
+      "price": "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
+      "vault": "Fixture vault · no deployed contract",
+      "execution": "Local policy rehearsal · fixture vault · no transaction",
+      "voice": "Planned utterances · actual desktop voice unverified",
+      "mcp": "Semantic tools · official MCP stdio transport"
+    },
+    "inspectedRunId": "run-dd76addf-2653-4548-aeda-fb7162b76bda",
+    "canUndoClear": false
+  }
+}

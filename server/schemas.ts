@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { NETWORK_IDS } from "../cre/graph";
+import { RECIPE_IDS } from "./recipes";
+/** CRE runs cron triggers at most every 30 seconds. */
+export const MIN_WATCH_SECONDS = 30;
 const op = z
   .string()
   .min(1)
@@ -47,6 +50,51 @@ export const toolDefinitions = {
       "List every asset with a configured Chainlink feed, on mainnet and on Sepolia. Call this before telling anyone an asset is unavailable.",
     schema: z.object({}),
   },
+  list_sources: {
+    description:
+      "List every source a policy can read: Chainlink price feeds (mainnet and Sepolia), Chainlink Proof of Reserve, ERC-20 total supply, Aave v3 and Compound v3 supply rates, and the vault's own ETH balance. Call this before telling anyone a reading is unavailable.",
+    schema: z.object({}),
+  },
+  read_source: {
+    description:
+      "Read one registry source now and show it on the canvas: a Proof of Reserve feed, a token's total supply, a lending protocol's supply APR, the vault balance, a Chainlink price feed, or the Coinbase ETH trade. Contract reads on Ethereum mainnet; the reported age is part of the answer. A composed policy can use the same source.",
+    schema: z.object({
+      source: z.record(z.any()).describe('e.g. {"type":"proof-of-reserve","asset":"WBTC"}, {"type":"token-supply","token":"WBTC"}, {"type":"lending-rate","protocol":"aave-v3","asset":"USDC"}, {"type":"vault-balance"}, {"type":"chainlink-feed","symbol":"BTC"}'),
+      operationId: op,
+    }),
+  },
+  list_recipes: {
+    description:
+      "List ready-made policies modelled on what past Chainlink hackathon winners built (reserve guardian, stablecoin spread shield, yield chaser, treasury runway guard, streaming grant, parametric cover, cross-chain evacuation), with the project each credits, the sentence a user would say, and its parameters.",
+    schema: z.object({}),
+  },
+  apply_recipe: {
+    description:
+      "Compose a recipe from list_recipes as the next revision. Pass only the parameters the user stated; the rest take their defaults. The result is an ordinary composed graph: same validation, policy hash, guards and execution as compose_graph. Credit the inspiring project when you narrate it.",
+    schema: z.object({
+      expectedRevision: revision,
+      recipe: z.enum(RECIPE_IDS),
+      params: z.record(z.any()).optional(),
+      maxAgeSeconds: z.number().int().min(1).max(120).nullable().optional().describe("Coinbase trade freshness cap; omit to keep the current one."),
+      reason: z.string().max(500).optional(),
+      operationId: op,
+    }),
+  },
+  watch_policy: {
+    description:
+      "Keep the current revision running as a standing policy: re-check it every everySeconds (CRE cron triggers allow 30s at the fastest) with fresh inputs, up to maxChecks times, stopping after the first time it acts unless stopOnAction is false. The watched revision is frozen; later edits do not change it. Quiet checks stay out of the conversation. In CRE mode each check runs through the workflow's cron trigger. One watch at a time; a new one replaces the old.",
+    schema: z.object({
+      expectedRevision: revision,
+      everySeconds: z.number().int().min(MIN_WATCH_SECONDS).max(3600).optional(),
+      maxChecks: z.number().int().min(1).max(200).optional(),
+      stopOnAction: z.boolean().optional(),
+      operationId: op,
+    }),
+  },
+  stop_watching: {
+    description: "Stop the standing policy. A check already running finishes normally.",
+    schema: z.object({ operationId: op }),
+  },
   focus_object: {
     description:
       "Set semantic conversational focus. this/it resolves to current focused object. reference accepts price, vault, source, workflow, back, object IDs, condition, run:<runId>, or a raw run ID. Existing runs are focused without executing again. pin keeps object visible.",
@@ -82,7 +130,7 @@ export const toolDefinitions = {
   },
   compose_graph: {
     description:
-      "Replace the policy with a composed condition graph, as a new revision. Nodes are an allowlisted vocabulary: price (the Coinbase ETH-USD trade, or a Chainlink feed with an optional network, default ethereum-mainnet), compare, freshness, vault-paused, and and/or/not. Every node must be connected to the root, and a policy may read at most 5 distinct sources. Use this for any rule a single threshold cannot express, such as combining two assets or nesting AND/OR/NOT. Node ids and order do not matter: the revision gets a structural policy hash that the on-chain pause event repeats. Execution always enforces each source's own freshness limit (exchange trade ≤ 120s, feeds within their heartbeat) and, for a pause, the already-paused no-op, whether or not the graph expresses them. Actions: pause-vault (real, on-chain), or sell, which is a simulated order that never moves assets and runs only in local rehearsal.",
+      "Replace the policy with a composed condition graph, as a new revision. Nodes are an allowlisted vocabulary: price (the Coinbase ETH-USD trade, or a Chainlink feed with an optional network, default ethereum-mainnet); reading (any source from list_sources: proof-of-reserve, token-supply, lending-rate, vault-balance, or a price source); math (op -, / or *, with left and right: a spread, a ratio such as reserves ÷ supply, or vault ETH × ETH/USD; units must agree); compare (input op value, in the input's unit: USD, %, ratio or token amount); freshness; vault-paused; time (op before/after an ISO time); and and/or/not. Every node must be connected to the root, and a policy may read at most 5 distinct sources. Node ids and order do not matter: the revision gets a structural policy hash that every on-chain event repeats. Execution always enforces each source's own freshness limit and each action's vault guard, whether or not the graph expresses them. Real actions, delivered as a signed report to the grant vault: pause-vault; sweep (fraction of the vault's ETH to the reserve fixed at deploy, pause default true); pay (payee registered by the vault owner, e.g. grantee or insured, amountEth, capped and rate-limited on chain, never while paused); evacuate (fraction of the vault's CCIP-BnM to the reserve on base-sepolia via Chainlink CCIP, pause default true). Simulated, local rehearsal only, never a transaction: sell and rebalance (from/to aave-v3 or compound-v3).",
     schema: z.object({
       expectedRevision: revision,
       graph: z
@@ -94,6 +142,7 @@ export const toolDefinitions = {
         .describe(
           'Example: {"nodes":[{"id":"eth","kind":"price","source":{"type":"exchange-trade","pair":"ETH-USD"}},{"id":"btc","kind":"price","source":{"type":"chainlink-feed","symbol":"BTC"}},{"id":"a","kind":"compare","input":"eth","op":"<","value":3000},{"id":"b","kind":"compare","input":"btc","op":"<","value":90000},{"id":"both","kind":"and","inputs":["a","b"]}],"root":"both","action":{"type":"pause-vault"}}',
         ),
+      maxAgeSeconds: z.number().int().min(1).max(120).nullable().optional().describe("Coinbase trade freshness cap; omit to keep the current one."),
       reason: z.string().max(500).optional(),
       operationId: op,
     }),
@@ -116,7 +165,7 @@ export const toolDefinitions = {
   get_run: {
     description:
       "Inspect execution inputs, decisions, logs and verified transaction evidence. Missing runId returns latest run.",
-    schema: z.object({ runId: z.string().optional() }),
+    schema: z.object({ runId: z.string().max(200).optional() }),
   },
   submit_utterance: {
     description:
@@ -151,10 +200,10 @@ export const toolDefinitions = {
   reset_session: {
     description:
       "Clear visible canvas and conversation, saving a restorable session. Does not change contract state. Running executions prevent reset.",
-    schema: z.object({ operationId: op, expectedSessionId: z.string().optional() }),
+    schema: z.object({ operationId: op, expectedSessionId: z.string().max(200).optional() }),
   },
   restore_session: {
     description: "Undo clearing the canvas by restoring the most recent saved session. Only available while the new canvas remains empty; does not execute any workflow or change contract state.",
-    schema: z.object({ operationId: op, expectedSessionId: z.string().optional() }),
+    schema: z.object({ operationId: op, expectedSessionId: z.string().max(200).optional() }),
   },
 } as const;

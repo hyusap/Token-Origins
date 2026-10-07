@@ -1,30 +1,21 @@
-import {createPublicClient,createWalletClient,http,parseEther,parseAbi,type Address} from 'viem';
+import {createPublicClient,createWalletClient,http,type PublicClient} from 'viem';
 import {privateKeyToAccount} from 'viem/accounts';
 import {foundry} from 'viem/chains';
-import {REPORT_VERSION} from './graph';
+import {deployLocalTreasury} from './local-deploy';
 // Anvil's PUBLIC development key. Never use this key on a public network.
 export const LOCAL_DEV_KEY='0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
 const rpcUrl=process.env.ORIGINS_LOCAL_RPC||'http://127.0.0.1:8545';
-const publicClient=createPublicClient({chain:foundry,transport:http(rpcUrl)});
+const publicClient=createPublicClient({chain:foundry,transport:http(rpcUrl)}) as PublicClient;
 if(await publicClient.getChainId()!==31337) throw new Error('Refusing local deployment on any other chain');
 const account=privateKeyToAccount(LOCAL_DEV_KEY);
 const wallet=createWalletClient({account,chain:foundry,transport:http(rpcUrl)});
 const proc=Bun.spawn(['forge','build','--root','contracts'],{stdout:'inherit',stderr:'inherit'});
 if(await proc.exited!==0) throw new Error('Contract compilation failed');
-const forwarderArtifact=await Bun.file('contracts/out/LocalRehearsalForwarder.sol/LocalRehearsalForwarder.json').json();
-const fHash=await wallet.deployContract({abi:forwarderArtifact.abi,bytecode:forwarderArtifact.bytecode.object,args:[]});
-const fReceipt=await publicClient.waitForTransactionReceipt({hash:fHash});
-if(fReceipt.status!=='success'||!fReceipt.contractAddress) throw new Error('Forwarder deployment failed');
-const artifact=await Bun.file('contracts/out/GrantVault.sol/GrantVault.json').json();
-const hash=await wallet.deployContract({abi:artifact.abi,bytecode:artifact.bytecode.object,args:[fReceipt.contractAddress,120n],value:parseEther('1.2049')});
-const receipt=await publicClient.waitForTransactionReceipt({hash});
-if(receipt.status!=='success'||!receipt.contractAddress) throw new Error('Vault deployment failed');
-const version=Number(await publicClient.readContract({address:receipt.contractAddress as Address,abi:parseAbi(['function reportVersion() view returns (uint256)']),functionName:'reportVersion'}));
-if(version!==REPORT_VERSION) throw new Error(`Deployed vault reports v${version}, expected v${REPORT_VERSION}`);
+const treasury=await deployLocalTreasury(publicClient,wallet);
 // Earlier vaults stay on chain with their receipts; keep their addresses so old evidence stays traceable.
 const previous=await Bun.file('contracts/deployment.local.json').json().catch(()=>null);
 const previousDeployments=previous?[...(previous.previousDeployments??[]),{address:previous.address,forwarder:previous.forwarder,reportVersion:previous.reportVersion??1,deploymentHash:previous.deploymentHash,blockNumber:previous.blockNumber,createdAt:previous.createdAt}]:[];
-const deployment={address:receipt.contractAddress,forwarder:fReceipt.contractAddress,owner:account.address,chainId:31337,rpcUrl,mode:'local-evm-rehearsal',reportVersion:version,deploymentHash:hash,blockNumber:Number(receipt.blockNumber),createdAt:new Date().toISOString(),previousDeployments};
+const deployment={...treasury,owner:account.address,chainId:31337,rpcUrl,mode:'local-evm-rehearsal',createdAt:new Date().toISOString(),previousDeployments};
 await Bun.write('contracts/deployment.local.json',JSON.stringify(deployment,null,2));
 await Bun.write('.data/deployment.json',JSON.stringify(deployment,null,2));
 console.log(JSON.stringify(deployment,null,2));

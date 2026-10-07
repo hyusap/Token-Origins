@@ -20,7 +20,10 @@
     "fixtures": "bun run scripts/generate-fixtures.ts",
     "deploy:solana": "bun run scripts/deploy-solana.ts",
     "prove:multichain": "bun run scripts/prove-sepolia.ts",
-    "solana:wallet": "bun run scripts/solana-wallet.ts"
+    "solana:wallet": "bun run scripts/solana-wallet.ts",
+    "prove:actions": "bun run scripts/prove-actions.ts",
+    "verify:registry": "bun run scripts/verify-registry.ts",
+    "solana:enable-sweep": "bun run scripts/solana-enable-sweep.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

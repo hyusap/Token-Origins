@@ -1,14 +1,15 @@
-import { EVMClient, protoBigIntToBigint, HTTPClient, decodeJson, encodeCallMsg, bytesToHex, hexToBase64, LATEST_BLOCK_NUMBER, TxStatus, ConsensusAggregationByFields, median, SolanaClient, SolanaTxStatus, getNetwork, solanaAccountMeta, solanaAccountMetasToJson, calculateAccountsHash, encodeForwarderReport, prepareSolanaReportRequest, type HTTPSendRequester, type HTTPPayload, type Runtime } from '@chainlink/cre-sdk';
+import { EVMClient, protoBigIntToBigint, HTTPClient, decodeJson, encodeCallMsg, bytesToHex, hexToBase64, LATEST_BLOCK_NUMBER, TxStatus, ConsensusAggregationByFields, median, SolanaClient, SolanaTxStatus, getNetwork, solanaAccountMeta, solanaAccountMetasToJson, calculateAccountsHash, encodeForwarderReport, prepareSolanaReportRequest, type HTTPSendRequester, type HTTPPayload, type CronPayload, type Runtime } from '@chainlink/cre-sdk';
 import { PublicKey } from '@solana/web3.js';
-import { encodeSolanaPauseReport } from '../solana-report';
+import { encodeSolanaPauseReport, encodeSolanaActionReport } from '../solana-report';
 import { EVM_PB } from '@chainlink/cre-sdk/pb';
 import { encodeFunctionData, decodeFunctionResult, parseAbi, zeroAddress, type Address, type Hex } from 'viem';
 import { z } from 'zod';
 import { specificationSchema, PRICE_URL, parsePrice } from '../spec';
 import { evidenceChunks } from '../evidence-log';
+import { readChainSourceSync, chainReadCost, erc20Abi } from '../onchain-reads';
 import {
-  evaluateGraph, collectSources, sourceKey, sourceIdentity, describeSource, explainNoop, encodePauseReport,
-  NETWORKS, REPORT_VERSION, FEED_DECIMALS, type Observation, type PriceReading,
+  evaluateGraph, collectSources, sourceIdentity, describeSource, explainNoop, encodeReportFor, reportRefusal, actionTerms, actionPauses, isSimulatedAction, toBps,
+  NETWORKS, ACTION_SWEEP, ACTION_PAUSE, FLAG_PAUSE, type Observation, type Reading, type VaultAction, type Source,
 } from '../graph';
 
 const VAULT_NETWORK = 'ethereum-sepolia' as const;
@@ -17,18 +18,26 @@ export const configSchema = z.object({
   vaultAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
   chainSelector: z.literal(NETWORKS[VAULT_NETWORK].chainSelector),
   gasLimit: z.string(),
-  /** Optional second treasury: the sotto_vault program on Solana, paused by the same decision. */
+  /** Optional second treasury: the sotto_vault program on Solana, steered by the same decision. */
   solana: z.object({
     chainSelectorName: z.literal('solana-devnet'),
     receiverProgramId: base58,
     forwarderProgramId: base58,
     forwarderState: base58,
     vault: base58,
+    /** Present when the vault has a configured reserve (program v3): its treasury PDA and reserve account. */
+    sweep: z.object({ treasury: base58, reserve: base58 }).strict().optional(),
   }).strict().optional(),
+  /**
+   * A standing policy: the cron trigger re-evaluates this frozen specification
+   * on its schedule. The runner writes one per check with a fresh run ID.
+   */
+  watch: z.object({ schedule: z.string().min(1).max(64), spec: z.unknown() }).strict().optional(),
 });
 export type Config = z.infer<typeof configSchema>;
-const vaultAbi = parseAbi(['function paused() view returns (bool)', 'function reportVersion() view returns (uint256)']);
-const feedAbi = parseAbi(['function latestRoundData() view returns (uint80 roundId,int256 answer,uint256 startedAt,uint256 updatedAt,uint80 answeredInRound)']);
+const vaultAbi = parseAbi(['function paused() view returns (bool)', 'function reportVersion() view returns (uint256)', 'function ccipToken() view returns (address)']);
+/** CRE's per-execution EVM read quota. */
+const READ_LIMIT = 15;
 
 function fetchPrice(sender: HTTPSendRequester): { usd: number; observedAt: number } {
   const reply = sender.sendRequest({ url: PRICE_URL, method: 'GET', headers: { Accept: 'application/json' } }).result();
@@ -37,19 +46,31 @@ function fetchPrice(sender: HTTPSendRequester): { usd: number; observedAt: numbe
   return { usd: price.usd, observedAt: Date.parse(price.observedAt) };
 }
 
+/** HTTP trigger: one execution of the frozen specification in the request. */
+export function onHttp(runtime: Runtime<Config>, payload: HTTPPayload): string {
+  return runPolicy(runtime, decodeJson(payload.input), 'http');
+}
+/** Cron trigger: one check of the standing policy in the workflow config. */
+export function onCron(runtime: Runtime<Config>, _payload: CronPayload): string {
+  const watch = runtime.config.watch;
+  if (!watch) throw new Error('No standing policy is configured for this cron trigger');
+  return runPolicy(runtime, watch.spec, 'cron');
+}
+
 /**
  * The CRE side of the shared decision path in cre/runner.ts. Inputs are read
  * through DON capabilities; evaluation, guards and the report layout come from
- * cre/graph.ts. Reads: 3 vault calls + 1 per feed (≤ MAX_SOURCES), within the
- * 10-read quota.
+ * cre/graph.ts. Reads: up to 5 vault calls plus at most 2 per source
+ * (≤ MAX_SOURCES), inside the 15-read quota.
  */
-export function onHttp(runtime: Runtime<Config>, payload: HTTPPayload): string {
-  // Full validation: shape, cycles, connectivity, feed registry, and policy hash.
-  const spec = specificationSchema.parse(decodeJson(payload.input));
+function runPolicy(runtime: Runtime<Config>, input: unknown, trigger: 'http' | 'cron'): string {
+  // Full validation: shape, cycles, connectivity, units, registries, and policy hash.
+  const spec = specificationSchema.parse(input);
   const graph = spec.graph;
-  // Unsupported actions stop here, before any read or write.
-  if (graph.action.type !== 'pause-vault')
-    throw new Error('Simulated sells run only in local rehearsal; CRE delivers only pause-vault reports. Nothing was submitted.');
+  // Simulated actions stop here, before any read or write.
+  if (isSimulatedAction(graph.action))
+    throw new Error('Simulated sells run only in local rehearsal (as do simulated rebalances); CRE delivers only real vault actions. Nothing was submitted.');
+  const action = graph.action as VaultAction;
 
   const clients = new Map<string, EVMClient>();
   const clientFor = (selector: string) => {
@@ -57,63 +78,104 @@ export function onHttp(runtime: Runtime<Config>, payload: HTTPPayload): string {
     if (!client) clients.set(selector, (client = new EVMClient(BigInt(selector))));
     return client;
   };
-  const call = (selector: string, to: Address, data: Hex) =>
-    clientFor(selector).callContract(runtime, { call: encodeCallMsg({ from: zeroAddress, to, data }), blockNumber: LATEST_BLOCK_NUMBER }).result();
+  let reads = 0;
+  const call = (selector: string, to: Address, data: Hex): Hex => {
+    if (++reads > READ_LIMIT) throw new Error(`This policy needs more than ${READ_LIMIT} contract reads`);
+    return bytesToHex(clientFor(selector).callContract(runtime, { call: encodeCallMsg({ from: zeroAddress, to, data }), blockNumber: LATEST_BLOCK_NUMBER }).result().data);
+  };
 
   const vaultAddress = runtime.config.vaultAddress as Address;
   const vaultSelector = runtime.config.chainSelector;
   const vaultChainId = NETWORKS[VAULT_NETWORK].chainId;
+  const vaultCall = (functionName: 'paused' | 'reportVersion' | 'ccipToken') =>
+    call(vaultSelector, vaultAddress, encodeFunctionData({ abi: vaultAbi, functionName }));
   let reportVersion: number | null = null;
   try {
-    reportVersion = Number(decodeFunctionResult({ abi: vaultAbi, functionName: 'reportVersion', data: bytesToHex(call(vaultSelector, vaultAddress, encodeFunctionData({ abi: vaultAbi, functionName: 'reportVersion' })).data) }));
+    reportVersion = Number(decodeFunctionResult({ abi: vaultAbi, functionName: 'reportVersion', data: vaultCall('reportVersion') }));
   } catch {
     reportVersion = null;
   }
-  if (reportVersion !== REPORT_VERSION)
-    throw new Error(`Vault ${vaultAddress} accepts report ${reportVersion ? `v${reportVersion}` : 'v1'}, not v${REPORT_VERSION}; redeploy with scripts/deploy-sepolia.ts. Nothing was submitted.`);
-  const paused = decodeFunctionResult({ abi: vaultAbi, functionName: 'paused', data: bytesToHex(call(vaultSelector, vaultAddress, encodeFunctionData({ abi: vaultAbi, functionName: 'paused' })).data) });
+  // A vault that cannot take this action is refused before any other read.
+  const refusal = reportRefusal(reportVersion, action.type);
+  if (refusal) throw new Error(`Vault ${vaultAddress}: ${refusal}`);
+  const paused = decodeFunctionResult({ abi: vaultAbi, functionName: 'paused', data: vaultCall('paused') });
+  reads++;
   const balance = clientFor(vaultSelector).balanceAt(runtime, { account: vaultAddress, blockNumber: LATEST_BLOCK_NUMBER }).result();
+  const balanceWei = balance.balance ? protoBigIntToBigint(balance.balance) : 0n;
+  let tokenBalance: bigint | undefined;
+  if (action.type === 'evacuate') {
+    const token = decodeFunctionResult({ abi: vaultAbi, functionName: 'ccipToken', data: vaultCall('ccipToken') });
+    tokenBalance = decodeFunctionResult({ abi: erc20Abi, functionName: 'balanceOf', data: call(vaultSelector, token, encodeFunctionData({ abi: erc20Abi, functionName: 'balanceOf', args: [vaultAddress] })) });
+  }
 
   const fetchedAt = runtime.now().toISOString();
   const observations: Observation[] = [];
-  for (const source of collectSources(graph)) {
+  for (const source of collectSources(graph) as Source[]) {
     const identity = sourceIdentity(source);
     runtime.log(`ORIGINS_SOURCE Reading ${describeSource(source)}${identity.address ? ` at ${identity.address}` : ''}`);
     if (source.type === 'exchange-trade') {
       const trade = new HTTPClient().sendRequest(runtime, fetchPrice, ConsensusAggregationByFields<{ usd: number; observedAt: number }>({ usd: median<number>, observedAt: median<number> }))().result();
-      observations.push({ ...identity, usd: trade.usd, raw: String(trade.usd), observedAt: new Date(trade.observedAt).toISOString(), fetchedAt });
+      observations.push({ ...identity, value: trade.usd, usd: trade.usd, raw: String(trade.usd), observedAt: new Date(trade.observedAt).toISOString(), fetchedAt });
+    } else if (source.type === 'vault-balance') {
+      const eth = Number(balanceWei) / 1e18;
+      observations.push({ ...identity, value: eth, raw: balanceWei.toString(), observedAt: fetchedAt, fetchedAt });
     } else {
-      const round = decodeFunctionResult({ abi: feedAbi, functionName: 'latestRoundData', data: bytesToHex(call(NETWORKS[source.network].chainSelector, identity.address!, encodeFunctionData({ abi: feedAbi, functionName: 'latestRoundData' })).data) });
-      const [roundId, answer, , updatedAt] = round;
-      if (answer <= 0n) throw new Error(`${describeSource(source)} returned a non-positive answer`);
-      if (updatedAt === 0n) throw new Error(`${describeSource(source)} has no completed round`);
-      observations.push({ ...identity, usd: Number(answer) / 10 ** FEED_DECIMALS, raw: answer.toString(), roundId: roundId.toString(), observedAt: new Date(Number(updatedAt) * 1000).toISOString(), fetchedAt });
+      if (reads + chainReadCost(source) > READ_LIMIT) throw new Error(`This policy needs more than ${READ_LIMIT} contract reads`);
+      const reading = readChainSourceSync(source, (c) => call(NETWORKS[c.network].chainSelector, c.to, c.data));
+      observations.push({
+        ...identity, value: reading.value, ...(identity.unit === 'USD' ? { usd: reading.value } : {}), raw: reading.raw,
+        ...(reading.roundId ? { roundId: reading.roundId } : {}),
+        observedAt: reading.updatedAt ? new Date(reading.updatedAt * 1000).toISOString() : fetchedAt, fetchedAt,
+      });
     }
   }
-  const readings: Record<string, PriceReading> = Object.fromEntries(observations.map((o) => [o.key, { usd: o.usd, observedAt: o.observedAt }]));
+  const readings: Record<string, Reading> = Object.fromEntries(observations.map((o) => [o.key, { value: o.value, observedAt: o.observedAt }]));
   const nowMs = runtime.now().getTime();
-  const result = evaluateGraph(graph, { readings, vaultPaused: paused, exchangeMaxAgeSeconds: spec.maxAgeSeconds }, nowMs);
+  const result = evaluateGraph(graph, {
+    readings, vaultPaused: paused, vaultBalanceEth: Number(balanceWei) / 1e18,
+    vaultTokenBalance: tokenBalance === undefined ? null : Number(tokenBalance) / 1e18,
+    exchangeMaxAgeSeconds: spec.maxAgeSeconds,
+  }, nowMs);
   const evidence: any = {
-    runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash, mode: 'cre-local-simulation', observations,
-    vault: { address: vaultAddress, chainId: vaultChainId, paused, balanceWei: (balance.balance ? protoBigIntToBigint(balance.balance) : 0n).toString(), reportVersion },
-    conditions: result.conditions, root: result.root, decision: result.decision, action: graph.action.type, decidedAt: new Date(nowMs).toISOString(), logs: [],
+    runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash, mode: 'cre-local-simulation', trigger, observations,
+    vault: { address: vaultAddress, chainId: vaultChainId, paused, balanceWei: balanceWei.toString(), reportVersion, ...(tokenBalance !== undefined ? { tokenBalance: tokenBalance.toString() } : {}) },
+    conditions: result.conditions, root: result.root, decision: result.decision, action: action.type, decidedAt: new Date(nowMs).toISOString(), logs: [],
   };
   if (result.decision === 'noop') evidence.noopReason = explainNoop(result);
   if (result.decision === 'act' && spec.broadcast === false) evidence.dryRun = true;
   if (result.decision === 'act' && spec.broadcast !== false) {
-    const encoded = encodePauseReport({ target: vaultAddress, chainId: vaultChainId, runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash as Hex, decidedAt: Math.floor(nowMs / 1000) });
+    const terms = actionTerms(action);
+    const encoded = encodeReportFor(reportVersion, action, { target: vaultAddress, chainId: vaultChainId, runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash as Hex, decidedAt: Math.floor(nowMs / 1000) });
+    evidence.report = { version: reportVersion, action: terms.action, flags: terms.flags, payeeId: terms.payeeId, amount: terms.amount.toString(), destinationChainSelector: terms.destinationChainSelector.toString() };
     const report = runtime.report({ encodedPayload: hexToBase64(encoded), encoderName: 'evm', signingAlgo: 'ecdsa', hashingAlgo: 'keccak256' }).result();
     const tx = clientFor(vaultSelector).writeReport(runtime, { receiver: vaultAddress, report, gasConfig: { gasLimit: runtime.config.gasLimit } }).result();
     const receiverConfirmed = tx.receiverContractExecutionStatus === EVM_PB.ReceiverContractExecutionStatus.SUCCESS;
     evidence.transaction = { hash: tx.txHash ? bytesToHex(tx.txHash) : null, status: tx.txStatus === TxStatus.SUCCESS ? 'success' : 'failed', receiverConfirmed };
     if (tx.txStatus !== TxStatus.SUCCESS || !receiverConfirmed) throw new Error(`Report did not execute successfully: ${tx.errorMessage || tx.receiverContractExecutionStatus}`);
+    // The same decision lands on Solana: one run, one policy hash, two treasuries.
+    const solana = runtime.config.solana;
+    if (solana) {
+      const plan = solanaPlan(action, solana);
+      if (plan.write) evidence.solana = writeSolanaReport(runtime, solana, plan, spec.runId, spec.revision, spec.policyHash as Hex, Math.floor(nowMs / 1000));
+      else evidence.solanaSkipped = plan.reason;
+    }
   }
-  // The same decision lands on Solana: one run, one policy hash, two treasuries.
-  if (result.decision === 'act' && spec.broadcast !== false && runtime.config.solana)
-    evidence.solana = writeSolanaPause(runtime, runtime.config.solana, spec.runId, spec.revision, spec.policyHash as Hex, Math.floor(nowMs / 1000));
   const json = JSON.stringify(evidence);
   for (const chunk of evidenceChunks(json)) runtime.log(chunk);
   return json;
+}
+
+type SolanaConfig = NonNullable<Config['solana']>;
+type SolanaPlan = { write: true; action: number; flags: number; bps: number; sweep: boolean } | { write: false; reason: string };
+/** What the Solana vault does for this action: pause, sweep its SOL to its reserve, or nothing. */
+export function solanaPlan(action: VaultAction, config: SolanaConfig): SolanaPlan {
+  if (action.type === 'sweep') {
+    if (config.sweep) return { write: true, action: ACTION_SWEEP, flags: action.pause ? FLAG_PAUSE : 0, bps: toBps(action.fraction), sweep: true };
+    if (action.pause) return { write: true, action: ACTION_PAUSE, flags: 0, bps: 0, sweep: false };
+    return { write: false, reason: 'The Solana vault has no reserve configured (program v3 configure_reserve), so it was not swept' };
+  }
+  if (actionPauses(action)) return { write: true, action: ACTION_PAUSE, flags: 0, bps: 0, sweep: false };
+  return { write: false, reason: `${action.type === 'pay' ? 'Payments' : 'Actions of this kind'} settle on Ethereum only; the Solana vault is unchanged` };
 }
 
 const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -128,21 +190,27 @@ function toBase58(bytes: Uint8Array): string {
 }
 
 /**
- * Writes the pause to the sotto_vault program through the keystone forwarder:
- * accounts are [forwarder state, forwarder authority PDA, vault], hashed into
- * the report so the forwarder delivers exactly these. Failures are recorded,
- * not thrown, so the EVM evidence above is never lost; the runner refuses to
- * confirm a run whose Solana write did not verify.
+ * Writes the decision to the sotto_vault program through the keystone
+ * forwarder: accounts are [forwarder state, forwarder authority PDA, vault]
+ * plus, for a sweep, [treasury config, reserve], hashed into the report so the
+ * forwarder delivers exactly these. A plain pause uses the v2 layout every
+ * program version accepts. Failures are recorded, not thrown, so the EVM
+ * evidence above is never lost; the runner refuses to confirm a run whose
+ * Solana write did not verify.
  */
-function writeSolanaPause(runtime: Runtime<Config>, config: NonNullable<Config['solana']>, runId: string, revision: number, policyHash: Hex, decidedAt: number) {
+function writeSolanaReport(runtime: Runtime<Config>, config: SolanaConfig, plan: Extract<SolanaPlan, { write: true }>, runId: string, revision: number, policyHash: Hex, decidedAt: number) {
   const network = getNetwork({ chainFamily: 'solana', chainSelectorName: config.chainSelectorName, isTestnet: true });
   if (!network) throw new Error(`Unknown Solana network ${config.chainSelectorName}`);
   const program = new PublicKey(config.receiverProgramId);
   const state = new PublicKey(config.forwarderState);
   const [authority] = PublicKey.findProgramAddressSync([new TextEncoder().encode('forwarder'), state.toBytes(), program.toBytes()], new PublicKey(config.forwarderProgramId));
   const accounts = [solanaAccountMeta(config.forwarderState, true), solanaAccountMeta(authority.toBase58()), solanaAccountMeta(config.vault, true)];
-  const payload = encodeSolanaPauseReport({ vault: new PublicKey(config.vault).toBytes(), runId, revision, policyHash, decidedAt });
-  runtime.log(`ORIGINS_SOLANA Writing pause for run ${runId} to vault ${config.vault} on ${config.chainSelectorName}`);
+  if (plan.sweep && config.sweep) accounts.push(solanaAccountMeta(config.sweep.treasury), solanaAccountMeta(config.sweep.reserve, true));
+  const vault = new PublicKey(config.vault).toBytes();
+  const payload = plan.sweep
+    ? encodeSolanaActionReport({ vault, runId, revision, policyHash, decidedAt, action: plan.action, flags: plan.flags, bps: plan.bps })
+    : encodeSolanaPauseReport({ vault, runId, revision, policyHash, decidedAt });
+  runtime.log(`ORIGINS_SOLANA Writing ${plan.sweep ? `a ${plan.bps / 100}% reserve sweep${plan.flags & FLAG_PAUSE ? ' and pause' : ''}` : 'pause'} for run ${runId} to vault ${config.vault} on ${config.chainSelectorName}`);
   const report = runtime.report(prepareSolanaReportRequest(encodeForwarderReport({ accountHash: calculateAccountsHash(accounts), payload }))).result();
   const reply = new SolanaClient(network.chainSelector.selector).writeReport(runtime, {
     remainingAccounts: solanaAccountMetasToJson(accounts),
@@ -153,6 +221,7 @@ function writeSolanaPause(runtime: Runtime<Config>, config: NonNullable<Config['
   const signature = reply.txSignature && reply.txSignature.length ? toBase58(reply.txSignature) : null;
   return {
     network: config.chainSelectorName, programId: config.receiverProgramId, vault: config.vault, forwarderProgram: config.forwarderProgramId,
+    action: plan.sweep ? 'sweep' : 'pause', pauses: plan.action === ACTION_PAUSE || Boolean(plan.flags & FLAG_PAUSE), ...(plan.sweep && config.sweep ? { reserve: config.sweep.reserve, bps: plan.bps } : {}),
     signature, status: reply.txStatus === SolanaTxStatus.SUCCESS ? 'success' : 'failed', ...(reply.errorMessage ? { error: reply.errorMessage } : {}),
   };
 }

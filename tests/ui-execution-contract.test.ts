@@ -5,7 +5,8 @@ import { describeGraph } from "../cre/graph";
 import type { CanvasState } from "../shared/types";
 
 const names = ["legacy-rule","nested-and-or-not","false-root-true-branch","true-branch-in-passing-or",
-  "guard-blocked-true-root","unsupported-source","mock-sell","failed-write","verified-pause"];
+  "guard-blocked-true-root","unsupported-source","mock-sell","failed-write","verified-pause",
+  "reserve-guardian-sweep","grant-stream-watching","ccip-evacuation-verified","yield-chase-simulated"];
 async function fixture(name:string) {
   return await Bun.file(new URL(`../fixtures/states/${name}.json`,import.meta.url)).json() as {state:CanvasState;expected:any};
 }

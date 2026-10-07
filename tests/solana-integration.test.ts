@@ -9,9 +9,9 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sha256, toBytes, hexToBytes } from "viem";
-import { encodeSolanaPauseReport, SOLANA_REPORT_BYTES } from "../cre/solana-report";
-import { SOTTO_VAULT_PROGRAM_ID, forwarderAuthority, initializeIx, payGrantIx, resumeIx, readSolanaVault, parseVaultEvents, verifySolanaPause } from "../cre/solana-vault";
-import { policyHash, legacyGraph, runIdHash } from "../cre/graph";
+import { encodeSolanaPauseReport, encodeSolanaActionReport, SOLANA_REPORT_BYTES, SOLANA_ACTION_REPORT_BYTES } from "../cre/solana-report";
+import { SOTTO_VAULT_PROGRAM_ID, forwarderAuthority, initializeIx, payGrantIx, resumeIx, readSolanaVault, parseVaultEvents, verifySolanaPause, configureReserveIx, treasuryPda, readTreasuryConfig } from "../cre/solana-vault";
+import { policyHash, legacyGraph, runIdHash, ACTION_SWEEP, ACTION_PAUSE, FLAG_PAUSE } from "../cre/graph";
 
 const validator = Bun.which("solana-test-validator");
 const vaultSo = "contracts/solana/build/sotto_vault.so";
@@ -32,7 +32,7 @@ const send = (ixs: TransactionInstruction[], signers: Keypair[]) => sendAndConfi
 
 /** Deliver a report through the forwarder stand-in, exactly as the keystone forwarder CPIs. */
 let salt = 0;
-function forwardIx(targetVault: PublicKey, report: Uint8Array, state = forwarderState.publicKey) {
+function forwardIx(targetVault: PublicKey, report: Uint8Array, state = forwarderState.publicKey, extra: { pubkey: PublicKey; isWritable: boolean }[] = []) {
   return new TransactionInstruction({
     programId: MOCK_FORWARDER,
     keys: [
@@ -40,6 +40,7 @@ function forwardIx(targetVault: PublicKey, report: Uint8Array, state = forwarder
       { pubkey: forwarderAuthority(MOCK_FORWARDER, state), isSigner: false, isWritable: false },
       { pubkey: SOTTO_VAULT_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: targetVault, isSigner: false, isWritable: true },
+      ...extra.map((account) => ({ ...account, isSigner: false })),
     ],
     // Metadata is ignored by the vault; varying it keeps identical reports from being identical transactions.
     data: Buffer.concat([disc("global:report"), vecU8(new Uint8Array(64).fill(++salt % 256)), vecU8(report)]),
@@ -121,3 +122,59 @@ test.skipIf(!enabled)("only the configured forwarder can deliver, and only the o
   expect((await readSolanaVault(connection, vault.publicKey)).paused).toBe(false);
   await send([payGrantIx(vault.publicKey, payer.publicKey, recipient, 1000n)], [payer]);
 }, 60_000);
+
+const sweepReport = (target: PublicKey, runId: string, bps: number, flags = FLAG_PAUSE, action = ACTION_SWEEP) =>
+  encodeSolanaActionReport({ vault: target.toBytes(), runId, revision: 3, policyHash: POLICY, decidedAt: Math.floor(Date.now() / 1000), action, flags, bps });
+
+test("the v3 Solana report appends flags and basis points to the v2 identity fields", () => {
+  const bytes = encodeSolanaActionReport({ vault: new Uint8Array(32).fill(7), runId: "run-x", revision: 3, policyHash: POLICY, decidedAt: 1_800_000_000, action: ACTION_SWEEP, flags: FLAG_PAUSE, bps: 5000 });
+  expect(bytes.length).toBe(SOLANA_ACTION_REPORT_BYTES);
+  expect(bytes[0]).toBe(3);
+  expect(Buffer.from(bytes.slice(33, 65)).toString("hex")).toBe(runIdHash("run-x").slice(2));
+  expect([bytes[105], bytes[114], Buffer.from(bytes).readUInt16LE(115)]).toEqual([ACTION_SWEEP, FLAG_PAUSE, 5000]);
+  expect(() => encodeSolanaActionReport({ vault: new Uint8Array(32), runId: "r", revision: 1, policyHash: POLICY, decidedAt: 1, action: 2, flags: 0, bps: 10001 })).toThrow();
+});
+
+test.skipIf(!enabled)("a configured vault sweeps a share of its SOL to the reserve and pauses in the same report", async () => {
+  const treasury = Keypair.generate();
+  const reserve = Keypair.generate().publicKey;
+  await send([initializeIx(treasury.publicKey, payer.publicKey, MOCK_FORWARDER, 300), SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: treasury.publicKey, lamports: 2 * LAMPORTS_PER_SOL })], [payer, treasury]);
+  // Before configure_reserve, a sweep is refused: there is nowhere it may go.
+  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "sweep-0", 5000), undefined, [{ pubkey: treasuryPda(treasury.publicKey), isWritable: false }, { pubkey: reserve, isWritable: true }])], [payer]))).toContain("ReserveNotConfigured");
+  await send([configureReserveIx(treasury.publicKey, payer.publicKey, reserve, 5000)], [payer]);
+  expect(await readTreasuryConfig(connection, treasury.publicKey)).toEqual({ vault: treasury.publicKey.toBase58(), reserve: reserve.toBase58(), maxSweepBps: 5000 });
+  const accounts = [{ pubkey: treasuryPda(treasury.publicKey), isWritable: false }, { pubkey: reserve, isWritable: true }];
+  const before = await connection.getBalance(treasury.publicKey);
+  const signature = await send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "sweep-1", 5000), undefined, accounts)], [payer]);
+  const verification = await verifySolanaPause(connection, signature, treasury.publicKey, "sweep-1", 3, POLICY, { pause: true, sweep: true });
+  expect(verification).toMatchObject({ succeeded: true, event: true, pausedAfter: true, lastRunMatches: true });
+  const moved = await connection.getBalance(reserve);
+  expect(verification.swept).toEqual({ reserve: reserve.toBase58(), lamports: moved });
+  // Half of what sits above the rent reserve.
+  const rent = await connection.getMinimumBalanceForRentExemption((await connection.getAccountInfo(treasury.publicKey))!.data.length);
+  expect(moved).toBe(Math.floor((before - rent) * 5000 / 10000));
+  expect(await connection.getBalance(treasury.publicKey)).toBe(before - moved);
+}, 90_000);
+
+test.skipIf(!enabled)("sweeps respect the cap, the configured reserve, and only pause or sweep are accepted", async () => {
+  const treasury = Keypair.generate();
+  const reserve = Keypair.generate().publicKey;
+  await send([initializeIx(treasury.publicKey, payer.publicKey, MOCK_FORWARDER, 300), SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: treasury.publicKey, lamports: LAMPORTS_PER_SOL })], [payer, treasury]);
+  await send([configureReserveIx(treasury.publicKey, payer.publicKey, reserve, 2500)], [payer]);
+  const accounts = (to = reserve) => [{ pubkey: treasuryPda(treasury.publicKey), isWritable: false }, { pubkey: to, isWritable: true }];
+  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "cap", 2501), undefined, accounts())], [payer]))).toContain("InvalidAmount");
+  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "thief", 1000), undefined, accounts(Keypair.generate().publicKey))], [payer]))).toContain("WrongReserve");
+  expect(await failure(send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "pay", 1000, 0, 3))], [payer]))).toContain("UnsupportedAction");
+  // The owner configures once; a stranger cannot configure at all.
+  expect(await failure(send([configureReserveIx(treasury.publicKey, payer.publicKey, Keypair.generate().publicKey, 10000)], [payer]))).not.toBe("succeeded");
+  const stranger = Keypair.generate();
+  await connection.confirmTransaction(await connection.requestAirdrop(stranger.publicKey, LAMPORTS_PER_SOL), "confirmed");
+  const other = Keypair.generate();
+  await send([initializeIx(other.publicKey, payer.publicKey, MOCK_FORWARDER, 300)], [payer, other]);
+  expect(await failure(send([configureReserveIx(other.publicKey, stranger.publicKey, stranger.publicKey, 10000)], [stranger]))).not.toBe("succeeded");
+  // A sweep without the pause flag leaves spending on; a v3 pause report pauses like v2 did.
+  await send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "quiet-sweep", 2500, 0), undefined, accounts())], [payer]);
+  expect((await readSolanaVault(connection, treasury.publicKey)).paused).toBe(false);
+  await send([forwardIx(treasury.publicKey, sweepReport(treasury.publicKey, "v3-pause", 0, 0, ACTION_PAUSE))], [payer]);
+  expect((await readSolanaVault(connection, treasury.publicKey)).paused).toBe(true);
+}, 90_000);

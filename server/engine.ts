@@ -3,6 +3,7 @@ import type {
   ExecutionRun,
   GraphObject,
   ToolResult,
+  WatchState,
   WorkflowRevision,
 } from "../shared/types";
 import { StateStore } from "./store";
@@ -22,21 +23,31 @@ import {
   readsVault,
   DEFAULT_EXCHANGE_MAX_AGE_SECONDS,
   MAX_FEED_AGE_SECONDS,
+  MAX_STATE_AGE_SECONDS,
   describeGraph,
   describeAction,
+  phraseCondition,
   validateGraph,
   collectSources,
   describeSource,
   isLegacyShape,
+  isSourceNode,
+  isSimulatedAction,
+  actionPauses,
   policyHash,
   sourceIdentity,
+  sourceSchema,
+  toBps,
   NETWORKS,
+  CCIP_DESTINATIONS,
   DEFAULT_FEED_NETWORK,
   REPORT_VERSION,
+  type ChainSource,
   type FeedSource,
   type Network,
   type Observation,
   type PolicyGraph,
+  type VaultAction,
 } from "../cre/graph";
 import type { ExecutionSpecification } from "../cre/spec";
 import { ZodError } from "zod";
@@ -44,9 +55,17 @@ import {
   executeCreRun,
   executePolicy,
   findSubmittedPause,
+  effectFailures,
+  describeEffects,
+  cronEvery,
   type ExecutionEvidence,
+  type FixtureEffects,
   type PolicyEnvironment,
 } from "../cre/runner";
+import { fetchReading, readingObservation, readingObjectId, readingCatalog, type ReadingSource } from "./onchain";
+import { RECIPES, recipeById, recipeCatalog } from "./recipes";
+import { MIN_WATCH_SECONDS } from "./schemas";
+export { MIN_WATCH_SECONDS };
 const now = () => new Date().toISOString();
 const clone = <T>(v: T): T => structuredClone(v);
 const baseRevision = (): WorkflowRevision => ({
@@ -60,10 +79,15 @@ const baseRevision = (): WorkflowRevision => ({
   policyHash: policyHash(legacyGraph(3000)),
 });
 const TERMINAL = ["confirmed", "no-op", "failed"];
+/** Inside a run, every watch check and the fixture treasury share these. */
+const round9 = (value: number) => Math.round(value * 1e9) / 1e9;
+const toWei = (eth: number) => (BigInt(Math.round(eth * 1e9)) * 1_000_000_000n).toString();
+const READ_ONLY_TOOLS = ["get_context", "get_run", "describe_policy", "list_price_feeds", "list_sources", "list_recipes", "navigate_canvas"];
 /** Archive form of an exchange trade object. */
 export function exchangeObservation(object: GraphObject): Observation {
   return {
     ...sourceIdentity({ type: "exchange-trade", pair: "ETH-USD" }),
+    value: Number(object.data.price),
     usd: Number(object.data.price),
     raw: String(object.data.price),
     observedAt: object.provenance.observedAt,
@@ -114,6 +138,10 @@ export interface EngineSources {
   executeRun: typeof executeCreRun;
   /** Reads the chain to learn whether an interrupted run's report landed. */
   findSubmittedPause: typeof findSubmittedPause;
+  /** Reads a contract-backed source (Proof of Reserve, supply, lending rate). */
+  fetchReading: typeof fetchReading;
+  /** Schedules a standing policy's next check; returns a cancel function. */
+  schedule: (callback: () => void, ms: number) => () => void;
 }
 export class Engine {
   state: CanvasState;
@@ -121,6 +149,11 @@ export class Engine {
   queue: Promise<unknown> = Promise.resolve();
   listeners = new Set<(state: CanvasState) => void>();
   fixturePaused = false;
+  /** Fixture treasury: in-memory balances that fixture sweeps, payments and evacuations change. */
+  fixtureBalanceEth = 0.12;
+  fixtureTokens = 2;
+  fixtureReserveEth = 0;
+  cancelWatch?: () => void;
   sources: EngineSources;
   constructor(store = new StateStore(), sources: Partial<EngineSources> = {}) {
     this.sources = {
@@ -130,6 +163,8 @@ export class Engine {
       fetchFeedPrice,
       executeRun: executeCreRun,
       findSubmittedPause,
+      fetchReading,
+      schedule: (callback, ms) => { const timer = setTimeout(callback, ms); return () => clearTimeout(timer); },
       ...sources,
     };
     this.store = store;
@@ -151,6 +186,9 @@ export class Engine {
         run.completedAt = now();
         run.logs.push({ at: now(), stage: "failed", message: run.error });
       }
+    // A standing policy never resumes on its own after a restart.
+    if (this.state.watch?.status === "watching")
+      Object.assign(this.state.watch, { status: "stopped", stopReason: "The backend restarted; call watch_policy again to resume.", nextCheckAt: undefined });
     this.state.activity = {
       ...this.state.activity,
       status: interruptedRun ? "error" : "idle",
@@ -313,7 +351,7 @@ export class Engine {
       if (object) return object;
     }
     const candidates = this.state.objects.filter(
-      (x) => ["price", "source", "vault", "condition", "action"].includes(ref) ? x.kind === ref && !(ref === "condition" && x.data.logic) : x.label.toLowerCase().includes(ref) || x.kind === ref ||
+      (x) => ["price", "source", "vault", "condition", "action"].includes(ref) ? x.kind === ref && !(ref === "condition" && (x.data.logic || x.data.math)) : x.label.toLowerCase().includes(ref) || x.kind === ref ||
         (x.kind === "price" && [x.data.symbol, x.data.name, x.data.token, `${x.data.symbol} price`].some(v => typeof v === "string" && v.toLowerCase() === ref)),
     );
     if (candidates.length === 1) return candidates[0]!;
@@ -380,48 +418,46 @@ export class Engine {
     // branches are focusable and inspectable by name. The fixed scalar trio
     // below only describes the single-compare shape.
     if (!isLegacyShape(w.graph)) {
-      // Every non-price node gets a focusable condition object, logic nodes
-      // included, and edges follow the graph's own input references:
-      // inputs → comparisons → AND/OR/NOT → root → action.
-      const byId = new Map(w.graph.nodes.map((node) => [node.id, node] as const));
+      // Every non-source node gets a focusable condition object, logic and
+      // math nodes included, and edges follow the graph's own input
+      // references: inputs → values → comparisons → AND/OR/NOT → root → action.
+      const graph = w.graph;
+      const byId = new Map(graph.nodes.map((node) => [node.id, node] as const));
       const inputObject = (nodeId: string) => {
         const node = byId.get(nodeId)!;
-        return node.kind === "price"
-          ? node.source.type === "exchange-trade" ? "price:eth-usd" : feedObjectId(node.source)
-          : `condition:${node.id}`;
+        return isSourceNode(node) ? readingObjectId(node.source) : `condition:${node.id}`;
       };
       const labels = new Map<string, string>();
       const labelOf = (nodeId: string): string => {
         const known = labels.get(nodeId);
         if (known) return known;
         const node = byId.get(nodeId)!;
-        const source = (input: string) => describeSource((byId.get(input) as Extract<PolicyGraph["nodes"][number], { kind: "price" }>).source);
         const label =
-          node.kind === "compare" ? `${source(node.input)} ${node.op} $${node.value.toLocaleString("en-US", { maximumFractionDigits: 8 })}`
-          : node.kind === "freshness" ? `${source(node.input)} within ${node.maxAgeSeconds}s`
+          node.kind === "freshness" ? `${phraseCondition(graph, node.input)} within ${node.maxAgeSeconds}s`
           : node.kind === "vault-paused" ? `Vault ${node.equals ? "paused" : "active"}`
           : node.kind === "not" ? `Not (${labelOf(node.input)})`
           : node.kind === "and" ? `All of ${node.inputs.length} conditions`
           : node.kind === "or" ? `Any of ${node.inputs.length} conditions`
-          : node.id;
+          : phraseCondition(graph, node.id);
         labels.set(nodeId, label);
         return label;
       };
       const live = new Set<string>();
-      for (const node of w.graph.nodes) {
-        if (node.kind === "price") continue;
+      for (const node of graph.nodes) {
+        if (isSourceNode(node)) continue;
         const id = `condition:${node.id}`;
         live.add(id);
         const logic = node.kind === "and" || node.kind === "or" || node.kind === "not";
+        const role = logic ? { logic: true }
+          : node.kind === "math" ? { math: true }
+          : node.kind === "vault-paused" ? { source: "vault:grant" }
+          : node.kind === "time" ? { source: "decision time" }
+          : { source: phraseCondition(graph, node.input) };
         this.object({
           id,
           kind: "condition",
           label: labelOf(node.id),
-          data: {
-            ...node,
-            ...(logic ? { logic: true } : { source: node.kind === "vault-paused" ? "vault:grant" : describeSource((byId.get(node.input) as Extract<PolicyGraph["nodes"][number], { kind: "price" }>).source) }),
-            root: node.id === w.graph.root,
-          },
+          data: { ...node, ...role, root: node.id === graph.root },
           visible: true,
           pinned: false,
           provenance,
@@ -431,43 +467,52 @@ export class Engine {
         (x) => !x.id.startsWith("condition:") || live.has(x.id),
       );
       // The id stays stable for the canvas; the label and data name the actual action.
+      const action = graph.action;
       this.object({
         id: "action:pause",
         kind: "action",
-        label: describeAction(w.graph.action),
-        data: w.graph.action.type === "sell"
-          ? { ...w.graph.action, simulated: true }
-          : { type: "pause-vault", target: "vault:grant" },
+        label: describeAction(action),
+        data: isSimulatedAction(action) ? { ...action, simulated: true } : { ...action, target: "vault:grant" },
         visible: true,
         pinned: false,
         provenance,
       });
-      w.summary = describeGraph(w.graph);
+      w.summary = describeGraph(graph);
       const edges: CanvasState["edges"] = [];
-      if (collectSources(w.graph).some((source) => source.type === "exchange-trade"))
+      if (collectSources(graph).some((source) => source.type === "exchange-trade"))
         edges.push({ id: "e1", from: "source:coinbase", to: "price:eth-usd", label: "observes" });
-      for (const node of w.graph.nodes) {
-        if (node.kind === "price") continue;
+      for (const node of graph.nodes) {
+        if (isSourceNode(node)) continue;
         const to = `condition:${node.id}`;
         if (node.kind === "vault-paused") edges.push({ id: `in-${node.id}`, from: "vault:grant", to, label: "state" });
         else if (node.kind === "compare" || node.kind === "freshness")
           edges.push({ id: `in-${node.id}`, from: inputObject(node.input), to, label: node.kind === "compare" ? "compares" : "timestamp" });
-        else
+        else if (node.kind === "math")
+          [node.left, node.right].forEach((input, i) => edges.push({ id: `in-${node.id}-${i}`, from: inputObject(input), to, label: i === 0 ? `${node.op} left` : `${node.op} right` }));
+        else if (node.kind === "and" || node.kind === "or" || node.kind === "not")
           (node.kind === "not" ? [node.input] : node.inputs).forEach((input, i) =>
             edges.push({ id: `in-${node.id}-${i}`, from: inputObject(input), to, label: node.kind === "not" ? "negates" : node.kind }));
       }
-      edges.push({ id: "out-root", from: `condition:${w.graph.root}`, to: "action:pause", label: "if true" });
+      edges.push({ id: "out-root", from: `condition:${graph.root}`, to: "action:pause", label: "if true" });
       edges.push({
         id: "e-act",
         from: "action:pause",
         to: "vault:grant",
-        label: w.graph.action.type === "sell" ? "simulated · vault unchanged" : "pauses",
+        label: isSimulatedAction(action) ? "simulated · vault unchanged"
+          : action.type === "sweep" ? "sweeps to reserve"
+          : action.type === "pay" ? `pays ${action.payee}`
+          : action.type === "evacuate" ? "bridges via CCIP"
+          : "pauses",
       });
       // Edges to inputs not read yet (an unfetched feed) are kept here and
       // hidden by context() until that object exists.
       this.state.edges = edges;
       return;
     }
+    // Returning to the scalar shape removes every condition a composed graph left behind.
+    this.state.objects = this.state.objects.filter(
+      (x) => !x.id.startsWith("condition:") || ["condition:threshold", "condition:freshness", "condition:unpaused"].includes(x.id),
+    );
     this.object({
       id: "condition:threshold",
       kind: "condition",
@@ -595,7 +640,7 @@ export class Engine {
       if (existing.signature !== signature)
         return {
           ok: false,
-          summary: "Operation ID was reused for a different instruction",
+          summary: "Operation ID was reused for a different instruction; send this one with a new operationId",
           code: "OPERATION_CONFLICT",
           state: this.context(),
         };
@@ -624,7 +669,7 @@ export class Engine {
           const tokens: string[] = args.tokens || ["ETH"];
           const settled = await Promise.allSettled([
             ...(requested.includes("price") ? tokens.map(token => this.sources.fetchPrice(token)) : []),
-            ...(requested.includes("vault") ? [this.sources.fetchVault(this.fixturePaused)] : []),
+            ...(requested.includes("vault") ? [this.sources.fetchVault(this.fixturePaused).then((vault) => this.fixtureVault(vault))] : []),
           ]);
           const errors: string[] = [];
           const discovered: GraphObject[] = [];
@@ -652,6 +697,33 @@ export class Engine {
           summary = `Chainlink mainnet feeds available: ${listFeedSymbols()
             .map((x) => `${x} (${mainnetFeeds[x]!.name})`)
             .join(", ")}. Sepolia feeds: ${Object.keys(feedsOn("ethereum-sepolia")).join(", ")}.`;
+          break;
+        }
+        case "list_sources": {
+          summary = `Chainlink price feeds on mainnet: ${listFeedSymbols().join(", ")}; on Sepolia: ${Object.keys(feedsOn("ethereum-sepolia")).join(", ")}. ` +
+            `Contract readings: ${readingCatalog().join("; ")}. The Coinbase ETH-USD trade is the one exchange source. ` +
+            `Combine readings with math nodes (-, /, *) and compare; a policy reads at most 5 sources.`;
+          break;
+        }
+        case "read_source": {
+          const source = sourceSchema.parse(args.source);
+          let object: GraphObject;
+          if (source.type === "exchange-trade") {
+            object = await this.sources.fetchPrice("ETH");
+            this.observePrice(object);
+          } else if (source.type === "chainlink-feed") {
+            object = await this.sources.fetchFeedPrice(source.symbol, source.network);
+            this.object(object);
+          } else if (source.type === "vault-balance") {
+            object = this.fixtureVault(await this.sources.fetchVault(this.fixturePaused));
+            this.object(object);
+          } else {
+            object = await this.sources.fetchReading(source);
+            this.object(object);
+          }
+          object = this.state.objects.find((x) => x.id === object.id) ?? object;
+          this.focus(object.id, object.label);
+          summary = this.describeObject(object);
           break;
         }
         case "read_price_feed": {
@@ -793,7 +865,7 @@ export class Engine {
               summary = this.state.clarification.question;
               break;
             }
-            throw new Error("No focused object to inspect");
+            throw new Error(`Nothing on the canvas matches "${ref}". Visible objects: ${this.state.objects.filter((x) => x.visible).map((x) => x.label).join(", ") || "none yet; discover objects first"}`);
           }
           if (
             args.refresh &&
@@ -806,16 +878,11 @@ export class Engine {
                 (object.id === "price:eth-usd" ? "ETH" : object.label.split(" / ")[0])));
             } else if (object.kind === "feed") {
               this.object(await this.sources.fetchFeedPrice(object.data.symbol, object.data.network ?? DEFAULT_FEED_NETWORK));
-            } else this.object(await this.sources.fetchVault(this.fixturePaused));
+            } else this.object(this.fixtureVault(await this.sources.fetchVault(this.fixturePaused)));
+          else if (args.refresh && object.kind === "reading" && object.data.source)
+            this.object(await this.sources.fetchReading(object.data.source as ReadingSource));
           const current = this.state.objects.find((x) => x.id === object.id)!;
-          summary =
-            current.kind === "feed"
-              ? `${current.label}: $${current.data.price} from the Chainlink aggregator at ${current.data.feedAddress} on ${NETWORKS[(current.data.network ?? DEFAULT_FEED_NETWORK) as Network].label}, round ${current.data.roundId} written ${current.data.ageLabel}. On-chain oracle read; not the vault's execution price.`
-              : current.kind === "price"
-                ? `${current.label}: $${current.data.price}. ${current.provenance.label}. Observed ${current.provenance.observedAt}.`
-                : current.kind === "vault"
-                  ? `${current.label}: ${current.data.paused ? "paused" : "spending enabled"}, ${current.data.balance} ETH. ${current.provenance.label}.`
-                  : `${current.label}: ${JSON.stringify(current.data)}`;
+          summary = this.describeObject(current);
           this.focus(current.id, current.label);
           break;
         }
@@ -857,13 +924,14 @@ export class Engine {
             throw new Error("Freshness must be 1–120 whole seconds");
           if (typeof skip !== "boolean")
             throw new Error("skipPaused must be boolean");
-          if (
-            !this.state.objects.some((x) => x.id === "price:eth-usd") ||
-            !this.state.objects.some((x) => x.kind === "vault")
-          )
-            throw new Error(
-              "Discover ETH/USD price and vault before composing the ETH policy",
-            );
+          // The scalar rule reads the Coinbase ETH trade and pauses the vault; a
+          // composed graph only needs what it reads (a cap or guard edit).
+          const scalar = isLegacyShape(current.graph);
+          const needs = [
+            scalar && !this.state.objects.some((x) => x.id === "price:eth-usd") && 'the Coinbase ETH/USD price (discover_objects with tokens ["ETH"])',
+            (scalar || readsVault(current.graph)) && !this.state.objects.some((x) => x.kind === "vault") && 'the grant vault (discover_objects with objects ["vault"])',
+          ].filter(Boolean);
+          if (needs.length) throw new Error(`Discover ${needs.join(" and ")} before editing this policy`);
           // A scalar edit can only express the single-compare shape. Against a
           // composed graph it refuses, so branches the speaker added are never
           // discarded by a stray threshold tweak.
@@ -898,12 +966,18 @@ export class Engine {
             summary = "No policy composed yet.";
             break;
           }
-          const sources = collectSources(w.graph).map(describeSource);
+          const all = collectSources(w.graph);
+          const sources = all.map(describeSource);
           const caps = [
-            collectSources(w.graph).some((source) => source.type === "exchange-trade") && `the Coinbase trade must be at most ${w.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS}s old`,
-            collectSources(w.graph).some((source) => source.type === "chainlink-feed") && `each Chainlink feed at most ${MAX_FEED_AGE_SECONDS / 3600}h old`,
+            all.some((source) => source.type === "exchange-trade") && `the Coinbase trade must be at most ${w.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS}s old`,
+            all.some((source) => source.type === "chainlink-feed" || source.type === "proof-of-reserve") && `each Chainlink feed at most ${MAX_FEED_AGE_SECONDS / 3600}h old`,
+            all.some((source) => ["token-supply", "lending-rate", "vault-balance"].includes(source.type)) && `contract state is read during the run (at most ${MAX_STATE_AGE_SECONDS}s old)`,
           ].filter(Boolean).join(" and ");
-          summary = `Revision ${w.revision}. ${describeGraph(w.graph)} Execution fetches ${sources.join(" and ")}; ${caps}${w.graph.action.type === "pause-vault" ? ", and an already-paused vault is never paused again" : ""}.`;
+          const guard = w.graph.action.type === "pause-vault" ? ", and an already-paused vault is never paused again"
+            : w.graph.action.type === "pay" ? ", and a paused or underfunded vault never pays"
+            : w.graph.action.type === "sweep" ? ", and an empty vault is never swept"
+            : w.graph.action.type === "evacuate" ? ", and a vault without CCIP-BnM never sends a message" : "";
+          summary = `Revision ${w.revision}. ${describeGraph(w.graph)} Execution fetches ${sources.join(" and ")}; ${caps}${guard}.${this.watchSentence()}`;
           break;
         }
         case "compose_graph": {
@@ -916,44 +990,34 @@ export class Engine {
               { code: "REVISION_CONFLICT" },
             );
           // validateGraph rejects unknown node kinds, dangling edges, cycles,
-          // mistyped operands, orphan nodes, unregistered feeds and oversized
-          // fetch plans. Nothing about execution depends on node order: the
-          // receiver gets the structural policy hash, not a picked threshold.
+          // mistyped operands and mismatched units, orphan nodes, unregistered
+          // sources and oversized fetch plans. Nothing about execution depends
+          // on node order: the receiver gets the structural policy hash.
           const { graph } = validateGraph(args.graph);
-          // Require only what this policy uses: the vault when it pauses or
-          // reads it, and the Coinbase trade when a branch uses it. Feeds are
-          // read at execution and shown as configured inputs until then.
-          const missing = [
-            readsVault(graph) && !this.state.objects.some((x) => x.kind === "vault") && 'the grant vault (discover_objects with objects ["vault"])',
-            collectSources(graph).some((source) => source.type === "exchange-trade") && !this.state.objects.some((x) => x.id === "price:eth-usd") && 'the Coinbase ETH price (discover_objects with tokens ["ETH"])',
-          ].filter(Boolean);
-          if (missing.length) throw new Error(`Discover ${missing.join(" and ")} before composing this policy`);
-          const compare = graph.nodes.find((node) => node.id === graph.root);
-          const revision: WorkflowRevision = {
-            revision: w.revision + 1,
-            // The scalar field only describes the legacy single-compare shape.
-            threshold: isLegacyShape(graph) && compare?.kind === "compare" ? compare.value : w.threshold,
-            maxAgeSeconds: w.maxAgeSeconds,
-            skipPaused: w.skipPaused,
-            createdAt: now(),
-            reason: args.reason || "Composed condition graph",
-            graph,
-            policyHash: policyHash(graph, w.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS),
-          };
-          w.revisions.push(revision);
-          Object.assign(w, revision, { created: true });
-          this.state.mode = "compose";
-          this.updateGraph();
-          this.focus(w.id, "Treasury policy");
-          const sources = collectSources(graph).map(describeSource);
-          summary = `Revision ${w.revision}. ${describeGraph(graph)} Execution fetches ${sources.join(" and ")}.${graph.action.type === "sell" ? " The sell is simulated and runs only in local rehearsal; no asset moves." : ""}`;
+          summary = this.composeRevision(graph, args.reason || "Composed condition graph", args.maxAgeSeconds);
+          break;
+        }
+        case "list_recipes": {
+          summary = `Policies modelled on past Chainlink hackathon winners (each becomes an ordinary revision with its own policy hash):\n${recipeCatalog()}`;
+          break;
+        }
+        case "apply_recipe": {
+          const w = this.state.workflow;
+          if (args.expectedRevision !== w.revision)
+            throw Object.assign(new Error(`Draft is now revision ${w.revision}; refresh context before applying a recipe.`), { code: "REVISION_CONFLICT" });
+          const recipe = recipeById(String(args.recipe));
+          if (!recipe) throw new Error(`Unknown recipe "${args.recipe}". Available: ${RECIPES.map((x) => x.id).join(", ")}`);
+          const params = recipe.params.parse(args.params ?? {});
+          const { graph } = validateGraph(recipe.build(params));
+          const credit = recipe.inspiredBy.map((x) => `${x.project} (${x.event}, ${x.award})`).join(" and ");
+          summary = `${this.composeRevision(graph, args.reason || `Recipe: ${recipe.title}`, args.maxAgeSeconds)} ${recipe.title}, inspired by ${credit}.${recipe.note ? ` ${recipe.note}` : ""}${recipe.watchSeconds ? ` To keep it running, call watch_policy with everySeconds ${recipe.watchSeconds}.` : ""}`;
           break;
         }
         case "undo_revision": {
           const w = this.state.workflow;
           if (args.expectedRevision !== w.revision)
             throw Object.assign(
-              new Error("Draft changed; refresh context before undoing"),
+              new Error(`Draft is now revision ${w.revision}; undo with expectedRevision ${w.revision} if that is the version to step back from`),
               { code: "REVISION_CONFLICT" },
             );
           // An undo records which revision it restored, so the next undo steps
@@ -1002,36 +1066,11 @@ export class Engine {
             summary = `Revision ${w.revision} is already executing as run ${inflight.id}; joined it without starting a duplicate.`;
             break;
           }
-          const snapshot = clone(w.revisions.at(-1)!);
-          snapshot.policyHash ??= policyHash(snapshot.graph, snapshot.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS);
-          runId = `run-${crypto.randomUUID()}`;
-          const run: ExecutionRun = {
-            id: runId,
-            revision: w.revision,
-            snapshot,
-            policyHash: snapshot.policyHash,
-            action: snapshot.graph.action.type,
-            status: "queued",
-            startedAt: now(),
-            executionMode: "Preparing execution",
-            decisions: [],
-            logs: [
-              {
-                at: now(),
-                stage: "queued",
-                message: `Frozen draft revision ${w.revision}`,
-              },
-            ],
-          };
-          this.state.runs.unshift(run);
+          const run = this.startRun(w.revisions.at(-1)!, { trigger: "manual", prompt: "Run this version" });
+          runId = run.id;
           this.selectRun(run);
-          this.state.activity = {
-            status: "executing",
-            prompt: "Run this version",
-            summary: `Running revision ${w.revision}`,
-          };
           const sessionId = this.state.sessionId;
-          setTimeout(() => void this.execute(runId!, sessionId), 10);
+          setTimeout(() => void this.execute(run.id, sessionId), 10);
           summary = `Run ${runId} started against immutable revision ${w.revision}.`;
           break;
         }
@@ -1039,12 +1078,49 @@ export class Engine {
           const run = args.runId
             ? this.state.runs.find((x) => x.id === args.runId)
             : this.state.runs[0];
-          if (!run) throw new Error("No run found");
+          if (!run) throw new Error(args.runId
+            ? `No run ${args.runId}. Recent runs: ${this.state.runs.slice(0, 5).map((x) => `${x.id} (revision ${x.revision}, ${x.status})`).join(", ") || "none yet"}`
+            : "No run yet; run_workflow starts one");
           if (run.uncertain) await this.reconcile(run);
           runId = run.id;
           this.selectRun(run);
           summary = `Run revision ${run.revision}: ${run.status}${run.uncertain ? " (outcome unknown)" : ""}. ${run.error || run.noopReason || run.logs.at(-1)?.message || ""}`;
           this.state.mode = "run";
+          break;
+        }
+        case "watch_policy": {
+          const w = this.state.workflow;
+          if (!w.created) throw new Error("Compose a policy first");
+          if (args.expectedRevision !== w.revision)
+            throw Object.assign(new Error(`Draft is now revision ${w.revision}; watch it with expectedRevision ${w.revision} if that is the version the user wants`), { code: "REVISION_CONFLICT" });
+          const unsettled = this.state.runs.find((x) => x.uncertain);
+          if (unsettled) throw new Error(`Run ${unsettled.id} was interrupted by a restart and its outcome is still unknown; inspect it with get_run before watching.`);
+          const everySeconds = args.everySeconds ?? 60;
+          const maxChecks = args.maxChecks ?? 20;
+          const stopOnAction = args.stopOnAction ?? true;
+          if (!Number.isInteger(everySeconds) || everySeconds < MIN_WATCH_SECONDS || everySeconds > 3600)
+            throw new Error(`everySeconds must be a whole number from ${MIN_WATCH_SECONDS} (the fastest CRE cron schedule) to 3600`);
+          if (!Number.isInteger(maxChecks) || maxChecks < 1 || maxChecks > 200) throw new Error("maxChecks must be a whole number from 1 to 200");
+          if (typeof stopOnAction !== "boolean") throw new Error("stopOnAction must be true or false");
+          const previous = this.state.watch?.status === "watching" ? this.state.watch : undefined;
+          this.stopWatch(`Replaced by a watch on revision ${w.revision}`);
+          const snapshot = clone(w.revisions.at(-1)!);
+          snapshot.policyHash ??= policyHash(snapshot.graph, snapshot.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS);
+          this.state.watch = {
+            id: `watch-${crypto.randomUUID()}`, revision: w.revision, snapshot, policyHash: snapshot.policyHash,
+            everySeconds, maxChecks, checks: 0, stopOnAction, status: "watching", startedAt: now(), consecutiveFailures: 0,
+          };
+          this.scheduleWatch(10);
+          const cre = process.env.ORIGINS_EXECUTION_MODE === "cre";
+          summary = `Watching revision ${w.revision} every ${everySeconds}s for up to ${maxChecks} check${maxChecks === 1 ? "" : "s"}${stopOnAction ? "; it stops after the first time it acts" : ""}. ${describeGraph(snapshot.graph)} ` +
+            `Each check is a fresh run with fresh inputs${cre ? " through the CRE workflow's cron trigger" : ""}; checks that find nothing to do stay quiet.${previous ? ` Replaced the watch on revision ${previous.revision}.` : ""}`;
+          break;
+        }
+        case "stop_watching": {
+          const watch = this.state.watch;
+          if (!watch || watch.status !== "watching") throw new Error("No policy is being watched");
+          this.stopWatch("Stopped on request");
+          summary = `Stopped watching revision ${watch.revision} after ${watch.checks} check${watch.checks === 1 ? "" : "s"}. A check already running finishes normally.`;
           break;
         }
         case "submit_utterance": {
@@ -1085,6 +1161,7 @@ export class Engine {
             throw new Error("The session changed. Refresh before clearing the canvas.");
           if (this.state.runs.some(x => !["confirmed", "no-op", "failed"].includes(x.status)))
             throw new Error("A run is still executing; wait for completion before clearing the canvas.");
+          this.stopWatch("Canvas cleared");
           if (!this.isBlank()) this.store.archiveSession(this.state);
           const capabilities = clone(this.state.capabilities);
           this.state = emptyState();
@@ -1112,16 +1189,20 @@ export class Engine {
         const frameRule = ["workflow", "whole rule", "whole workflow", "treasury policy"].includes(String(args.reference || "").toLowerCase());
         this.state.canvasView = { action: frameRule ? "fit" : "focus", sequence: (this.state.canvasView?.sequence || 0) + 1 };
       }
-      const readOnly = ["get_run", "describe_policy", "list_price_feeds", "navigate_canvas"].includes(tool);
+      const readOnly = READ_ONLY_TOOLS.includes(tool);
       const executing = this.state.runs.some((x) => !TERMINAL.includes(x.status));
       if (!["set_activity", "submit_utterance"].includes(tool) && !readOnly)
         this.say(summary);
-      if (!["run_workflow", "submit_utterance", "set_activity"].includes(tool) && !(readOnly && executing))
+      // While a run executes, only the run itself reports activity.
+      if (!["run_workflow", "submit_utterance", "set_activity"].includes(tool) && !executing)
         this.state.activity = {
           ...this.state.activity,
           status: "idle",
           summary,
         };
+      // A clarification answers the next focus or inspect; any other step moves on from it.
+      if (!["focus_object", "inspect_object", "get_context"].includes(tool))
+        delete this.state.clarification;
       this.state.latency.push({
         operationId,
         tool,
@@ -1162,6 +1243,184 @@ export class Engine {
       };
     }
   }
+  /** Validated graph → new draft revision. Shared by compose_graph and apply_recipe. */
+  composeRevision(graph: PolicyGraph, reason: string, maxAgeSeconds?: number | null): string {
+    const w = this.state.workflow;
+    // Require only what this policy uses: the vault when it acts on or reads
+    // it, and the Coinbase trade when a branch uses it. Feeds and contract
+    // readings are read at execution and shown as configured inputs until then.
+    const missing = [
+      readsVault(graph) && !this.state.objects.some((x) => x.kind === "vault") && 'the grant vault (discover_objects with objects ["vault"])',
+      collectSources(graph).some((source) => source.type === "exchange-trade") && !this.state.objects.some((x) => x.id === "price:eth-usd") && 'the Coinbase ETH/USD price (discover_objects with tokens ["ETH"])',
+    ].filter(Boolean);
+    if (missing.length) throw new Error(`Discover ${missing.join(" and ")} before composing this policy`);
+    const inherited = maxAgeSeconds === undefined;
+    const cap = inherited ? w.maxAgeSeconds : maxAgeSeconds;
+    const compare = graph.nodes.find((node) => node.id === graph.root);
+    const revision: WorkflowRevision = {
+      revision: w.revision + 1,
+      // The scalar field only describes the legacy single-compare shape.
+      threshold: isLegacyShape(graph) && compare?.kind === "compare" ? compare.value : w.threshold,
+      maxAgeSeconds: cap,
+      skipPaused: w.skipPaused,
+      createdAt: now(),
+      reason,
+      graph,
+      policyHash: policyHash(graph, cap ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS),
+    };
+    w.revisions.push(revision);
+    Object.assign(w, revision, { created: true });
+    this.state.mode = "compose";
+    this.updateGraph();
+    this.focus(w.id, "Treasury policy");
+    return `Revision ${w.revision}. ${describeGraph(graph)} ${this.executionNotes(graph, cap, inherited)}`;
+  }
+  /** What execution will fetch and what the action can and cannot do, in one or two sentences. */
+  executionNotes(graph: PolicyGraph, cap: number | null, inherited: boolean): string {
+    const notes = [`Execution fetches ${collectSources(graph).map(describeSource).join(" and ")}.`];
+    if (collectSources(graph).some((source) => source.type === "exchange-trade") && cap !== null && cap !== DEFAULT_EXCHANGE_MAX_AGE_SECONDS)
+      notes.push(`The Coinbase trade must be at most ${cap}s old${inherited ? " (kept from the previous revision; pass maxAgeSeconds to change it)" : ""}.`);
+    const action = graph.action;
+    if (action.type === "sell") notes.push("The sell is simulated and runs only in local rehearsal; no asset moves.");
+    if (action.type === "rebalance") notes.push("The rebalance is simulated and runs only in local rehearsal; no asset moves.");
+    if (action.type === "sweep") notes.push(`Sweeps go only to the reserve fixed when the vault was deployed${action.pause ? ", and spending pauses in the same report" : ""}.`);
+    if (action.type === "pay") notes.push(`The vault pays only payees its owner registered ("${action.payee}" must be one), within a per-payment cap and minimum interval enforced on chain; paused spending blocks it.`);
+    if (action.type === "evacuate") notes.push(`Bridges the vault's CCIP-BnM through Chainlink CCIP to the reserve on ${CCIP_DESTINATIONS[action.destination].label}${action.pause ? " and pauses spending" : ""}; delivery takes about 20 minutes.`);
+    return notes.join(" ");
+  }
+  /** A readable sentence for any canvas object, used by inspect and read_source. */
+  describeObject(object: GraphObject): string {
+    const w = this.state.workflow;
+    switch (object.kind) {
+      case "feed":
+        return `${object.label}: $${object.data.price} from the Chainlink aggregator at ${object.data.feedAddress} on ${NETWORKS[(object.data.network ?? DEFAULT_FEED_NETWORK) as Network].label}, round ${object.data.roundId} written ${object.data.ageLabel}. On-chain oracle read; not the vault's execution price.`;
+      case "price":
+        return `${object.label}: $${object.data.price}. ${object.provenance.label}. Observed ${object.provenance.observedAt}.`;
+      case "vault":
+        return `${object.label}: ${object.data.paused ? "paused" : "spending enabled"}, ${object.data.balance} ETH${object.data.ccipTokens !== undefined ? `, ${object.data.ccipTokens} CCIP-BnM` : ""}. ${object.provenance.label}.`;
+      case "reading":
+        return `${object.label}: ${object.data.display}, ${object.data.ageLabel}, from ${object.data.address} on ${NETWORKS[(object.data.network ?? DEFAULT_FEED_NETWORK) as Network].label}. On-chain read; execution reads it again.`;
+      case "condition":
+        return `${object.label}${object.data.root ? " is the policy's root condition" : object.data.logic ? " combines the conditions under it" : object.data.math ? " is a computed value" : ""}. Part of revision ${w.revision}: ${w.summary}`;
+      case "action":
+        return `${object.label}. ${w.created ? this.executionNotes(w.graph, w.maxAgeSeconds, false) : ""}`.trim();
+      default:
+        return `${object.label}: ${object.provenance.label}${object.provenance.url ? ` (${object.provenance.url})` : ""}.`;
+    }
+  }
+  /** Fixture vault cards carry the in-memory treasury balances that fixture actions change. */
+  fixtureVault(vault: GraphObject): GraphObject {
+    if (!vault.data.fixture) return vault;
+    return { ...vault, data: { ...vault.data, balance: String(round9(this.fixtureBalanceEth)), balanceEth: round9(this.fixtureBalanceEth), ccipTokens: round9(this.fixtureTokens), reserveEth: round9(this.fixtureReserveEth) } };
+  }
+  watchSentence(): string {
+    const watch = this.state.watch;
+    if (!watch) return "";
+    if (watch.status === "watching")
+      return ` Watching revision ${watch.revision} every ${watch.everySeconds}s: check ${watch.checks} of ${watch.maxChecks}${watch.lastOutcome ? `, last ${watch.lastOutcome}` : ""}.`;
+    return ` The last watch (revision ${watch.revision}) stopped: ${watch.stopReason ?? "stopped"}.`;
+  }
+  /** Freezes a revision into a new queued run. */
+  startRun(revision: WorkflowRevision, options: { trigger: "manual" | "watch"; watchCheck?: number; prompt: string }): ExecutionRun {
+    const snapshot = clone(revision);
+    snapshot.policyHash ??= policyHash(snapshot.graph, snapshot.maxAgeSeconds ?? DEFAULT_EXCHANGE_MAX_AGE_SECONDS);
+    const run: ExecutionRun = {
+      id: `run-${crypto.randomUUID()}`,
+      revision: snapshot.revision,
+      snapshot,
+      policyHash: snapshot.policyHash,
+      action: snapshot.graph.action.type,
+      trigger: options.trigger,
+      ...(options.watchCheck ? { watchCheck: options.watchCheck } : {}),
+      status: "queued",
+      startedAt: now(),
+      executionMode: "Preparing execution",
+      decisions: [],
+      logs: [{ at: now(), stage: "queued", message: options.trigger === "watch" ? `Watch check ${options.watchCheck}: frozen revision ${snapshot.revision}` : `Frozen draft revision ${snapshot.revision}` }],
+    };
+    this.state.runs.unshift(run);
+    this.state.activity = { status: "executing", prompt: options.prompt, summary: `Running revision ${snapshot.revision}` };
+    return run;
+  }
+  /** Runs work inside the operation queue, after anything already queued. */
+  enqueue<T>(work: () => Promise<T> | T): Promise<T> {
+    const result = this.queue.then(work, work);
+    this.queue = result.catch(() => {});
+    return result;
+  }
+  stopWatch(reason: string) {
+    this.cancelWatch?.();
+    this.cancelWatch = undefined;
+    const watch = this.state.watch;
+    if (watch?.status === "watching") Object.assign(watch, { status: "stopped", stopReason: reason, nextCheckAt: undefined });
+  }
+  scheduleWatch(ms: number) {
+    this.cancelWatch?.();
+    const watch = this.state.watch;
+    if (!watch || watch.status !== "watching") return;
+    watch.nextCheckAt = new Date(Date.now() + ms).toISOString();
+    const id = watch.id;
+    this.cancelWatch = this.sources.schedule(() => void this.tickWatch(id), ms);
+  }
+  /**
+   * One check of the standing policy: a fresh run of its frozen revision.
+   * Checks never overlap a running execution; the watch stops after it acts
+   * (unless told not to), after three failures in a row, or after its last check.
+   */
+  async tickWatch(watchId = this.state.watch?.id): Promise<ExecutionRun | undefined> {
+    const started = await this.enqueue(() => {
+      const watch = this.state.watch;
+      if (!watch || watch.id !== watchId || watch.status !== "watching") return undefined;
+      if (this.state.runs.some((x) => x.uncertain)) {
+        this.stopWatch("A restart left a run's outcome unknown; inspect it with get_run before watching again");
+        this.commit();
+        return undefined;
+      }
+      if (this.state.runs.some((x) => !TERMINAL.includes(x.status))) {
+        this.scheduleWatch(Math.min(5000, watch.everySeconds * 1000));
+        return undefined;
+      }
+      watch.checks++;
+      const run = this.startRun(watch.snapshot, { trigger: "watch", watchCheck: watch.checks, prompt: `Watch check ${watch.checks} of ${watch.maxChecks}` });
+      watch.lastRunId = run.id;
+      watch.nextCheckAt = undefined;
+      this.commit();
+      return { run, sessionId: this.state.sessionId, watch };
+    });
+    if (!started) return undefined;
+    await this.execute(started.run.id, started.sessionId, { quiet: true, cron: { schedule: cronEvery(started.watch.everySeconds) } });
+    return this.enqueue(() => {
+      const watch = this.state.watch;
+      const run = this.state.runs.find((x) => x.id === started.run.id);
+      if (!watch || watch.id !== started.watch.id || watch.status !== "watching" || !run || this.state.sessionId !== started.sessionId) return run;
+      const outcome = run.status === "confirmed" ? this.completionSummary(run) : run.status === "no-op" ? `no action: ${run.noopReason ?? "nothing to do"}` : `failed: ${run.error}`;
+      watch.lastOutcome = outcome;
+      watch.consecutiveFailures = run.status === "failed" ? watch.consecutiveFailures + 1 : 0;
+      const stop = run.status === "confirmed" && watch.stopOnAction ? `acted on check ${watch.checks}. ${outcome}`
+        : watch.consecutiveFailures >= 3 ? `stopped after 3 failed checks in a row; last ${outcome}`
+        : watch.checks >= watch.maxChecks ? `finished all ${watch.maxChecks} checks; last ${outcome}`
+        : undefined;
+      if (stop) {
+        this.stopWatch(stop);
+        this.say(`Watch on revision ${watch.revision} ${stop}`);
+        this.state.activity = { status: run.status === "failed" ? "error" : "idle", prompt: this.state.activity.prompt, summary: `Watch on revision ${watch.revision} ${stop}` };
+      } else {
+        this.scheduleWatch(watch.everySeconds * 1000);
+        // Quiet checks stay out of the conversation; actions and failures are said.
+        if (run.status !== "no-op") this.say(`Watch check ${watch.checks}: ${outcome}`);
+        this.state.activity = { status: "idle", prompt: this.state.activity.prompt, summary: `Watching revision ${watch.revision}: check ${watch.checks} of ${watch.maxChecks}, ${outcome}. Next check in ${watch.everySeconds}s.` };
+      }
+      this.commit();
+      return run;
+    });
+  }
+  /** Reads any contract-backed source for execution and refreshes its canvas card with the same read. */
+  async readChainSource(source: ChainSource): Promise<Observation> {
+    if (source.type === "chainlink-feed") return this.readFeed(source);
+    const object = await this.sources.fetchReading(source);
+    this.object(object);
+    return readingObservation(object, source);
+  }
   /** The frozen request every runner receives for this run. */
   specFor(run: ExecutionRun): ExecutionSpecification {
     const graph = run.snapshot.graph;
@@ -1185,28 +1444,52 @@ export class Engine {
   fixtureEnvironment(): PolicyEnvironment {
     return {
       mode: "fixture-rehearsal",
-      readVault: async () => {
-        const vault = await this.sources.fetchVault(this.fixturePaused);
+      readVault: async (options) => {
+        const vault = this.fixtureVault(await this.sources.fetchVault(this.fixturePaused));
         if (!vault.data.fixture)
           throw new Error("Real contract configured but no runner deployment is available; execution prevented");
         this.object(vault);
-        return { address: "fixture", chainId: 0, paused: Boolean(vault.data.paused), balanceWei: "0", reportVersion: REPORT_VERSION };
+        return {
+          address: "fixture", chainId: 0, paused: Boolean(vault.data.paused), balanceWei: toWei(this.fixtureBalanceEth), reportVersion: REPORT_VERSION,
+          ...(options?.tokenBalance ? { tokenBalance: toWei(this.fixtureTokens) } : {}),
+        };
       },
       readSource: async (source) => {
-        if (source.type === "chainlink-feed") return this.readFeed(source);
+        if (source.type !== "exchange-trade") return this.readChainSource(source);
         const price = await this.sources.fetchPrice("ETH");
         this.observePrice(price);
         return exchangeObservation(price);
       },
       referencePrice: (symbol) =>
         this.readFeed({ type: "chainlink-feed", symbol: symbol as FeedSource["symbol"], network: DEFAULT_FEED_NETWORK }),
-      fixturePause: async () => {
-        this.fixturePaused = true;
-        this.object(await this.sources.fetchVault(true));
+      fixtureAct: async (action: VaultAction) => {
+        const effects: FixtureEffects = {};
+        if (action.type === "pay") {
+          if (this.fixturePaused) throw new Error("Fixture vault spending is paused; no payment");
+          this.fixtureBalanceEth = round9(this.fixtureBalanceEth - action.amountEth);
+          Object.assign(effects, { paidEth: action.amountEth, payee: action.payee });
+        }
+        if (actionPauses(action)) {
+          this.fixturePaused = true;
+          effects.paused = true;
+        }
+        if (action.type === "sweep") {
+          const moved = round9(this.fixtureBalanceEth * toBps(action.fraction) / 10_000);
+          this.fixtureBalanceEth = round9(this.fixtureBalanceEth - moved);
+          this.fixtureReserveEth = round9(this.fixtureReserveEth + moved);
+          effects.sweptEth = moved;
+        }
+        if (action.type === "evacuate") {
+          const moved = round9(this.fixtureTokens * toBps(action.fraction) / 10_000);
+          this.fixtureTokens = round9(this.fixtureTokens - moved);
+          effects.evacuatedTokens = moved;
+        }
+        this.object(this.fixtureVault(await this.sources.fetchVault(this.fixturePaused)));
+        return effects;
       },
     };
   }
-  async execute(runId: string, sessionId: string) {
+  async execute(runId: string, sessionId: string, options: { quiet?: boolean; cron?: { schedule: string } } = {}) {
     const run = this.state.runs.find((x) => x.id === runId);
     if (!run || this.state.sessionId !== sessionId) return;
     const mark = (stage: ExecutionRun["status"], message: string) => {
@@ -1234,39 +1517,71 @@ export class Engine {
       const spec = this.specFor(run);
       const deployment = await this.sources.loadDeployment();
       const result = deployment
-        ? await this.sources.executeRun(spec, progress, { resolveFeed: (source) => this.readFeed(source) })
+        ? await this.sources.executeRun(spec, progress, {
+            resolveFeed: (source) => this.readFeed(source),
+            resolveSource: (source) => this.readChainSource(source),
+            ...(options.cron ? { trigger: "cron" as const, schedule: options.cron.schedule } : {}),
+          })
         : await executePolicy(spec, this.fixtureEnvironment(), progress);
       await this.applyResult(run, result, deployment);
       run.completedAt = now();
-      this.state.activity = {
-        status: "idle",
-        prompt: this.state.activity.prompt,
-        summary: this.completionSummary(run),
-      };
-      this.say(this.state.activity.summary);
+      if (!options.quiet) {
+        this.state.activity = {
+          status: "idle",
+          prompt: this.state.activity.prompt,
+          summary: this.completionSummary(run),
+        };
+        this.say(this.state.activity.summary);
+      }
       this.commit();
     } catch (error) {
       run.status = "failed";
       run.error = error instanceof Error ? error.message : String(error);
       run.completedAt = now();
+      if (run.executionMode === "Preparing execution") run.executionMode = "Not executed";
       run.logs.push({ at: now(), stage: "failed", message: run.error });
-      this.state.activity = {
-        status: "error",
-        prompt: this.state.activity.prompt,
-        summary: run.error,
-      };
-      this.say(`Execution failed: ${run.error}`);
+      if (!options.quiet) {
+        this.state.activity = {
+          status: "error",
+          prompt: this.state.activity.prompt,
+          summary: run.error,
+        };
+        this.say(`Execution failed: ${run.error}`);
+      }
       this.commit();
     }
   }
   completionSummary(run: ExecutionRun): string {
     const v = `Revision ${run.revision}`;
     if (run.status === "no-op") return `${v}: no action. ${run.noopReason ?? ""}`.trim();
-    if (run.evidence?.simulatedOrder)
-      return `${v}: simulated sell of ${run.evidence.simulatedOrder.amount} ${run.evidence.simulatedOrder.symbol}; no transaction, no asset moved.`;
-    if (run.evidence?.fixture) return `${v}: fixture vault paused in memory; no transaction.`;
-    if (run.evidence?.transactionHash)
-      return `${v}: vault paused at block ${run.evidence.blockNumber}, verified by receipt, receiver event and a fresh read.${run.evidence.solana?.verified ? " The Solana vault was paused by the same decision." : ""}`;
+    const evidence = run.evidence;
+    if (evidence?.simulatedOrder)
+      return `${v}: simulated sell of ${evidence.simulatedOrder.amount} ${evidence.simulatedOrder.symbol}; no transaction, no asset moved.`;
+    if (evidence?.simulatedRebalance)
+      return `${v}: simulated rebalance of ${toBps(evidence.simulatedRebalance.fraction) / 100}% ${evidence.simulatedRebalance.asset} from ${evidence.simulatedRebalance.from} to ${evidence.simulatedRebalance.to}; no transaction, no asset moved.`;
+    if (evidence?.fixture) {
+      const effects = evidence.fixtureEffects;
+      const parts = [
+        effects?.sweptEth !== undefined && `swept ${effects.sweptEth} ETH to the reserve`,
+        effects?.paidEth !== undefined && `paid ${effects.paidEth} ETH to the ${effects.payee}`,
+        effects?.evacuatedTokens !== undefined && `queued ${effects.evacuatedTokens} CCIP-BnM for CCIP`,
+        (effects?.paused ?? evidence.pausedAfter) && "paused",
+      ].filter(Boolean);
+      return parts.length === 1 && parts[0] === "paused" ? `${v}: fixture vault paused in memory; no transaction.` : `${v}: fixture vault ${parts.join(" and ")} in memory; no transaction.`;
+    }
+    if (evidence?.transactionHash) {
+      const effects = evidence.effects;
+      const block = `at block ${evidence.blockNumber}`;
+      const solana = evidence.solana?.verified ? evidence.solana.action === "sweep" ? " The Solana vault swept to its reserve in the same decision." : " The Solana vault was paused by the same decision." : "";
+      const paused = effects?.paused ? " and paused spending" : "";
+      if (run.action === "sweep" && effects?.sweptWei)
+        return `${v}: swept ${Number(effects.sweptWei) / 1e18} ETH to the reserve${paused} ${block}, verified by receipt, ReserveSwept event and a fresh read.${solana}`;
+      if (run.action === "pay" && effects?.paidWei)
+        return `${v}: paid ${Number(effects.paidWei) / 1e18} ETH to ${effects.payee} ${block}, verified by receipt and GrantStreamed event.`;
+      if (run.action === "evacuate" && effects?.ccipMessageId)
+        return `${v}: sent ${Number(effects.ccipAmount) / 1e18} CCIP-BnM to the reserve via CCIP${paused} ${block} (message ${effects.ccipMessageId}); delivery on the destination takes about 20 minutes.${solana}`;
+      return `${v}: vault paused ${block}, verified by receipt, receiver event and a fresh read.${solana}`;
+    }
     return `${v}: ${run.executionMode}`;
   }
   /** Maps runner evidence onto the run record and the canvas. Throws if a claimed action is not verified. */
@@ -1295,13 +1610,14 @@ export class Engine {
     if (result.noopReason) run.noopReason = result.noopReason;
     // Canvas compatibility: the exchange trade and vault as runner inputs.
     const exchange = result.observations.find((o) => o.provider === "coinbase");
+    if (result.trigger === "cron") run.logs.push({ at: now(), stage: "evaluating", message: "Evaluated by the CRE workflow's cron trigger" });
     const priorPrice = this.state.objects.find((x) => x.id === "price:eth-usd");
     const priorVault = this.state.objects.find((x) => x.id === "vault:grant");
     let executionPrice: GraphObject | undefined;
     if (exchange && priorPrice) {
       const { input, canvas } = buildExecutionPrice(
         priorPrice,
-        { usd: exchange.usd, observedAt: exchange.observedAt, source: exchange.url ?? exchange.label },
+        { usd: exchange.usd ?? exchange.value, observedAt: exchange.observedAt, source: exchange.url ?? exchange.label },
         now(),
       );
       executionPrice = input;
@@ -1340,9 +1656,13 @@ export class Engine {
         chainId: result.vault?.chainId,
         contractAddress: result.vault?.address,
         policyHash: result.policyHash,
-        verification: tx.receiverConfirmed
-          ? "Receipt, receiver event (run, revision, policy hash) and fresh paused() read confirmed"
-          : "Receiver confirmation unavailable",
+        ...(tx.effects ? { effects: tx.effects } : {}),
+        ...(tx.effects?.ccipExplorerUrl ? { ccipExplorerUrl: tx.effects.ccipExplorerUrl } : {}),
+        verification: tx.effects
+          ? `Receipt, receiver events (run, revision, policy hash) and fresh state confirmed: ${describeEffects(tx.effects)}`
+          : tx.receiverConfirmed
+            ? "Receipt, receiver event (run, revision, policy hash) and fresh paused() read confirmed"
+            : "Receiver confirmation unavailable",
         ...(result.vault?.chainId === 11155111
           ? { explorerUrl: `${NETWORKS["ethereum-sepolia"].explorer}/tx/${tx.hash}` }
           : {}),
@@ -1353,13 +1673,18 @@ export class Engine {
           signature: result.solana.signature, verified: Boolean(result.solana.verified),
           ...(result.solana.slot !== undefined ? { slot: result.solana.slot } : {}),
           ...(result.solana.explorerUrl ? { explorerUrl: result.solana.explorerUrl } : {}),
+          ...(result.solana.action ? { action: result.solana.action } : {}),
+          ...(result.solana.reserve ? { reserve: result.solana.reserve } : {}),
+          ...(result.solana.sweptLamports !== undefined ? { sweptLamports: result.solana.sweptLamports } : {}),
         };
-      if (!tx.receiverConfirmed || !tx.pausedAfter || !["success", "confirmed", 1, "0x1"].includes(tx.status as any))
-        throw new Error("Report transaction did not verify receiver execution and paused state");
+      if (result.solanaSkipped) run.evidence.solanaSkipped = result.solanaSkipped;
+      const failures = effectFailures(run.snapshot.graph.action as VaultAction, tx);
+      if (failures.length)
+        throw new Error(`Report transaction did not verify: ${failures.join("; ")}`);
       run.status = "confirmed";
       // Refresh display provenance independently of already verified execution.
       try {
-        this.object(await this.sources.fetchVault(this.fixturePaused));
+        this.object(this.fixtureVault(await this.sources.fetchVault(this.fixturePaused)));
       } catch (error) {
         run.logs.push({ at: now(), stage: "display", message: `Verified post-report state retained; display refresh unavailable: ${String(error)}` });
       }
@@ -1370,10 +1695,17 @@ export class Engine {
         verification: "Simulated order; no transaction and no asset moved",
       };
       run.status = "confirmed";
-    } else if (result.fixturePaused) {
+    } else if (result.simulatedRebalance) {
       run.evidence = {
-        pausedAfter: true,
+        simulatedRebalance: result.simulatedRebalance,
+        verification: "Simulated rebalance; no transaction and no asset moved",
+      };
+      run.status = "confirmed";
+    } else if (result.fixture || result.fixturePaused) {
+      run.evidence = {
+        pausedAfter: Boolean(result.fixture?.paused ?? result.fixturePaused) || this.fixturePaused,
         fixture: true,
+        ...(result.fixture ? { fixtureEffects: result.fixture } : {}),
         verification: "Local fixture changed only · no deployed contract or transaction",
       };
       run.status = "confirmed";

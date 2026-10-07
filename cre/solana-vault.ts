@@ -17,15 +17,42 @@ export const SOLANA_DEVNET_RPC = process.env.ORIGINS_SOLANA_RPC || 'https://api.
 export const solanaExplorer = (signature: string, cluster = 'devnet') => `https://explorer.solana.com/tx/${signature}?cluster=${cluster}`;
 
 const discriminator = (name: string) => hexToBytes(sha256(toBytes(name))).slice(0, 8);
-const IX = { initialize: discriminator('global:initialize'), payGrant: discriminator('global:pay_grant'), resume: discriminator('global:resume') };
-const EVENT = { paused: discriminator('event:SpendingPaused'), resumed: discriminator('event:SpendingResumed'), grant: discriminator('event:GrantPaid') };
+const IX = { initialize: discriminator('global:initialize'), payGrant: discriminator('global:pay_grant'), resume: discriminator('global:resume'), configureReserve: discriminator('global:configure_reserve') };
+const EVENT = { paused: discriminator('event:SpendingPaused'), resumed: discriminator('event:SpendingResumed'), grant: discriminator('event:GrantPaid'), swept: discriminator('event:ReserveSwept') };
 const VAULT_ACCOUNT = discriminator('account:Vault');
+const TREASURY_ACCOUNT = discriminator('account:TreasuryConfig');
 const equal = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
 const le64 = (value: bigint, signed = false) => { const b = new Uint8Array(8); const v = new DataView(b.buffer); signed ? v.setBigInt64(0, value, true) : v.setBigUint64(0, value, true); return b; };
 
 /** The PDA the forwarder signs with when it calls on_report. */
 export const forwarderAuthority = (forwarderProgram: PublicKey, state: PublicKey, receiver = SOTTO_VAULT_PROGRAM_ID) =>
   PublicKey.findProgramAddressSync([Buffer.from('forwarder'), state.toBuffer(), receiver.toBuffer()], forwarderProgram)[0];
+
+/** Per-vault sweep configuration: PDA ["treasury", vault] under the vault program. */
+export const treasuryPda = (vault: PublicKey, programId = SOTTO_VAULT_PROGRAM_ID) =>
+  PublicKey.findProgramAddressSync([Buffer.from('treasury'), vault.toBuffer()], programId)[0];
+
+/** Owner-only, once per vault: where sweeps may send SOL, and the largest share per report. */
+export function configureReserveIx(vault: PublicKey, owner: PublicKey, reserve: PublicKey, maxSweepBps: number, programId = SOTTO_VAULT_PROGRAM_ID) {
+  const bps = Buffer.alloc(2); bps.writeUInt16LE(maxSweepBps);
+  return new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: vault, isSigner: false, isWritable: false }, { pubkey: treasuryPda(vault, programId), isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: true, isWritable: true }, { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.concat([IX.configureReserve, reserve.toBuffer(), bps]),
+  });
+}
+export interface TreasuryConfig { vault: string; reserve: string; maxSweepBps: number }
+/** The vault's sweep configuration, or null when the program predates sweeps or it was never configured. */
+export async function readTreasuryConfig(connection: Connection, vault: PublicKey, commitment: Commitment = 'confirmed'): Promise<TreasuryConfig | null> {
+  const info = await connection.getAccountInfo(treasuryPda(vault), commitment);
+  if (!info || !info.owner.equals(SOTTO_VAULT_PROGRAM_ID)) return null;
+  const data = new Uint8Array(info.data);
+  if (data.length < 8 + 32 + 32 + 2 || !equal(data.slice(0, 8), TREASURY_ACCOUNT)) return null;
+  return { vault: new PublicKey(data.slice(8, 40)).toBase58(), reserve: new PublicKey(data.slice(40, 72)).toBase58(), maxSweepBps: new DataView(data.buffer, data.byteOffset).getUint16(72, true) };
+}
 
 export function initializeIx(vault: PublicKey, owner: PublicKey, forwarderProgram: PublicKey, maxReportAgeSeconds: number, programId = SOTTO_VAULT_PROGRAM_ID) {
   return new TransactionInstruction({
@@ -75,7 +102,8 @@ export async function readSolanaVault(connection: Connection, vault: PublicKey, 
 export type SolanaVaultEvent =
   | { name: 'SpendingPaused'; vault: string; runId: Hex; revision: number; policyHash: Hex; decidedAt: number }
   | { name: 'SpendingResumed'; vault: string }
-  | { name: 'GrantPaid'; vault: string; recipient: string; amount: number };
+  | { name: 'GrantPaid'; vault: string; recipient: string; amount: number }
+  | { name: 'ReserveSwept'; vault: string; runId: Hex; revision: number; policyHash: Hex; reserve: string; amount: number };
 /** Anchor events appear in transaction logs as "Program data: <base64>". */
 export function parseVaultEvents(logs: readonly string[]): SolanaVaultEvent[] {
   const events: SolanaVaultEvent[] = [];
@@ -90,17 +118,19 @@ export function parseVaultEvents(logs: readonly string[]): SolanaVaultEvent[] {
       events.push({ name: 'SpendingPaused', vault: key(8), runId: bytesToHex(data.slice(40, 72)), revision: Number(view.getBigUint64(72, true)), policyHash: bytesToHex(data.slice(80, 112)), decidedAt: Number(view.getBigInt64(112, true)) });
     else if (equal(head, EVENT.resumed)) events.push({ name: 'SpendingResumed', vault: key(8) });
     else if (equal(head, EVENT.grant)) events.push({ name: 'GrantPaid', vault: key(8), recipient: key(40), amount: Number(view.getBigUint64(72, true)) });
+    else if (equal(head, EVENT.swept) && data.length >= 8 + 32 + 32 + 8 + 32 + 32 + 8)
+      events.push({ name: 'ReserveSwept', vault: key(8), runId: bytesToHex(data.slice(40, 72)), revision: Number(view.getBigUint64(72, true)), policyHash: bytesToHex(data.slice(80, 112)), reserve: key(112), amount: Number(view.getBigUint64(144, true)) });
   }
   return events;
 }
 
-export interface SolanaPauseVerification { signature: string; succeeded: boolean; event: boolean; pausedAfter: boolean; lastRunMatches: boolean; slot?: number; error?: string; logs: string[] }
+export interface SolanaPauseVerification { signature: string; succeeded: boolean; event: boolean; pausedAfter: boolean; lastRunMatches: boolean; slot?: number; error?: string; logs: string[]; swept?: { reserve: string; lamports: number } }
 /**
  * Confirms a CRE Solana write: the transaction succeeded, the vault emitted
  * SpendingPaused for this run, revision and policy hash, and a fresh read of
  * the vault shows it paused with this run recorded.
  */
-export async function verifySolanaPause(connection: Connection, signature: string, vault: PublicKey, runId: string, revision: number, policyHash: string): Promise<SolanaPauseVerification> {
+export async function verifySolanaPause(connection: Connection, signature: string, vault: PublicKey, runId: string, revision: number, policyHash: string, expect: { pause: boolean; sweep: boolean } = { pause: true, sweep: false }): Promise<SolanaPauseVerification> {
   let tx = null;
   for (let attempt = 0; attempt < 20 && !tx; attempt++) {
     tx = await connection.getTransaction(signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 });
@@ -109,7 +139,11 @@ export async function verifySolanaPause(connection: Connection, signature: strin
   if (!tx) return { signature, succeeded: false, event: false, pausedAfter: false, lastRunMatches: false, error: 'transaction not found', logs: [] };
   const logs = tx.meta?.logMessages ?? [];
   const succeeded = !tx.meta?.err;
-  const event = parseVaultEvents(logs).some((e) => e.name === 'SpendingPaused' && e.vault === vault.toBase58() && e.runId === runIdHash(runId) && e.revision === revision && e.policyHash.toLowerCase() === policyHash.toLowerCase());
+  const events = parseVaultEvents(logs);
+  const ours = (e: SolanaVaultEvent) => 'runId' in e && e.vault === vault.toBase58() && e.runId === runIdHash(runId) && e.revision === revision && e.policyHash.toLowerCase() === policyHash.toLowerCase();
+  const sweep = events.find((e): e is Extract<SolanaVaultEvent, { name: 'ReserveSwept' }> => e.name === 'ReserveSwept' && ours(e));
+  // A pause event is only expected when the vault was active; a sweep always emits.
+  const event = (!expect.pause || events.some((e) => e.name === 'SpendingPaused' && ours(e))) && (!expect.sweep || Boolean(sweep));
   const state = await readSolanaVault(connection, vault);
-  return { signature, succeeded, event, pausedAfter: state.paused, lastRunMatches: state.lastRun === runIdHash(runId), slot: tx.slot, ...(tx.meta?.err ? { error: JSON.stringify(tx.meta.err) } : {}), logs };
+  return { signature, succeeded, event, pausedAfter: expect.pause ? state.paused : true, lastRunMatches: state.lastRun === runIdHash(runId), slot: tx.slot, ...(tx.meta?.err ? { error: JSON.stringify(tx.meta.err) } : {}), logs, ...(sweep ? { swept: { reserve: sweep.reserve, lamports: sweep.amount } } : {}) };
 }

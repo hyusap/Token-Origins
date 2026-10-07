@@ -14,16 +14,20 @@ The canvas composes a **bounded policy graph**, not a native CRE graph and not g
 
 - The graph is re-validated at the boundary (cycles, orphans, unknown feeds, more than 5 sources, hash mismatch) before any read.
 - A simulated `sell` never writes. CRE refuses it before any read; local paths return labelled simulated evidence.
-- A vault that does not report `reportVersion() == 2` is refused before submission.
-- A feed is read from the network and aggregator address the policy names. CRE refuses a network with no RPC in `cre/project.yaml` rather than substituting one.
-- Each source must be fresh (trade ≤ 120 s; feed within its heartbeat window). A pause also requires the vault to be active. A missing input fails the run rather than evaluating as false.
-- CRE reads: 3 vault calls + 1 per feed, capped by the 5-source limit (quota is 10).
+- The runner reads `reportVersion()` and sends what the vault accepts: v3 to a GrantVault v3 (pause, sweep, pay, evacuate), v2 to the pause-only vault already on Sepolia; anything else is refused before submission.
+- A feed is read from the network and aggregator address the policy names. CRE refuses a network with no RPC in `cre/project.yaml` rather than substituting one. Proof of Reserve, token supply and lending rates are read from their registry contracts on mainnet with the same call plan the backend uses (`cre/onchain-reads.ts`).
+- Each source must be fresh (trade ≤ 120 s; feeds within their heartbeat window; contract state read in the run). Each action has its vault guard (active for a pause or payment, funds for a sweep or payment, tokens for an evacuation). A missing input fails the run rather than evaluating as false.
+- CRE reads: up to 5 vault calls + at most 2 per source, capped by the 5-source limit (quota is 15).
 
-## Report v2 and receiver
+## Report v3 and receiver
 
-`abi.encode(version=2, target, chainId, keccak256(runId), revision, policyHash, action=1, decidedAt)`.
+`abi.encode(version=3, target, chainId, keccak256(runId), revision, policyHash, action, decidedAt, flags, payeeId, amount, destinationChainSelector)`: action 1 pause, 2 sweep (amount in bps, flag 1 also pauses), 3 pay (payee id and wei), 4 evacuate (bps and the CCIP chain selector, flag 1 also pauses). The v2 layout (first eight fields, pause only) is still produced for the v2 vault already on Sepolia.
 
-`GrantVault` accepts reports only from its immutable forwarder. It checks version, target, chain and action; a duplicate run id is a no-op; the report must be at most `maxReportAge` old and at most 60 s in the future. It emits `SpendingPaused(runId, revision, policyHash, decidedAt)` and blocks grant payments while paused. It does not re-evaluate the policy; the forwarder-authenticated workflow decides, and the event's hash identifies which graph did.
+`GrantVault` accepts reports only from its immutable forwarder. It checks version, target, chain, action and flags; a duplicate run id is a no-op; the report must be at most `maxReportAge` old and at most 60 s in the future. Every movement is bounded at deploy: sweeps go only to the immutable `reserve` (capped by `maxSweepBps`), payments only to payees the owner registered (≤ `maxPaymentWei`, at most once per `minPaymentInterval`, never while paused), evacuations only to `reserve` on the one CCIP destination fixed at deploy, with the CCIP fee paid in ETH. Events `SpendingPaused`, `ReserveSwept`, `GrantStreamed` and `TreasuryEvacuated` (with the CCIP message ID) each repeat run, revision and policy hash. It does not re-evaluate the policy; the forwarder-authenticated workflow decides, and the event's hash identifies which graph did.
+
+## Standing policies: the cron trigger
+
+The workflow registers two triggers: HTTP (index 0) and cron (index 1). `watch_policy` re-checks one frozen revision on a schedule; in CRE mode each check writes the frozen request into the workflow config and runs `cre workflow simulate --trigger-index 1`, so the decision is made by the cron handler (`onCron`). Evidence records `trigger: "cron"`. 30 seconds is the fastest CRE cron schedule. A deployed DON would run the same handler on its schedule.
 
 ## Sepolia: deploy and prove
 
@@ -33,10 +37,14 @@ You need a CRE account and a fresh, funded Sepolia test wallet. Nothing here rea
 bun run --cwd cre install:cli          # pinned v1.37.0, checksum-verified (macOS/Linux)
 cre/bin/cre login                      # browser login; or export CRE_API_KEY
 export CRE_ETH_PRIVATE_KEY=0x…         # funded Sepolia test wallet (≥ 0.05 SepoliaETH recommended)
-bun run scripts/deploy-sepolia.ts      # deploys GrantVault v2 trusting the CRE MockForwarder
+bun run deploy:sepolia                 # deploys GrantVault v3 trusting the CRE MockForwarder, funds it, registers payees, drips CCIP-BnM
 export ORIGINS_SEPOLIA_VAULT=0x…       # printed by the deploy script
-bun run scripts/prove-sepolia.ts       # false → pause → duplicate → sell refused, then verifies
+bun run prove:sepolia                  # false → pause → duplicate → sell refused, then verifies
+bun run prove:actions                  # sweep → pay through the cron trigger → CCIP evacuation, then verifies
+bun run verify:registry                # every feed, PoR, token, lending and CCIP address checked on chain
 ```
+
+`prove:actions` writes `demo/actions-evidence-<timestamp>.json`; `verify:evidence` re-checks it: each graph's hash, each receipt, the vault's own event for that run moving what the evidence says to the configured reserve or registered payee, and the CCIP message ID. The evacuation's tokens arrive on Base Sepolia about 20 minutes later; follow the printed `ccip.chain.link` link.
 
 `prove-sepolia.ts` writes `demo/sepolia-evidence-<timestamp>.json` and re-verifies it from chain data: receipt, event fields, policy hash recomputed from the stored graph, and paused state at the receipt block. Anyone can repeat the check:
 
@@ -76,6 +84,14 @@ bun run prove:multichain     # one decision pauses Sepolia + Solana; grant paid 
 ```
 
 Recorded proof: one decision paused Sepolia ([tx](https://sepolia.etherscan.io/tx/0xcea844416b0ae01a6f96c491cc63c905931454be92c4091bc373b2e544def6ca)) and Solana devnet ([tx](https://explorer.solana.com/tx/39R7rvrjVS4etn7wmMXsMge6jpc4JRwnekpVsUmK6kMjQTVovoXeAY2i4Df3NJnmbZ8iWxGxNNmK4VaqPF3PiUHM?cluster=devnet)), with a grant paid before and refused after; `demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json`.
+
+**Sweeps on Solana.** Program v3 also accepts a 117-byte `ActionReport` (v2's fields, then flags and bps) that sweeps a share of the vault's SOL to the reserve the owner set with `configure_reserve` (PDA `["treasury", vault]`). v2 pause reports keep working, so the existing vault is upgraded in place:
+
+```sh
+bun run solana:enable-sweep  # upgrades sotto_vault on devnet (≈2 SOL buffer, refunded) and configures the reserve
+```
+
+After that, a sweep decision moves ETH on Sepolia and SOL on Solana in the same run. `tests/solana-upgrade.test.ts` rehearses exactly this upgrade on a local validator, starting from the binary deployed on devnet today (`contracts/solana/build/legacy/sotto_vault_v2.so`).
 
 The built program and its devnet program keypair are committed, so no Rust or Anchor install is needed. To rebuild: `cargo-build-sbf --tools-version v1.43` in `contracts/solana`. `tests/solana-integration.test.ts` runs both programs on `solana-test-validator` with a forwarder stand-in (`mock_forwarder`, test-only).
 

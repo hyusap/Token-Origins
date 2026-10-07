@@ -215,7 +215,7 @@ test("J10: an unreachable chain keeps the run uncertain and refuses a blind retr
 
 const verifiedPause = (spec: any): ExecutionEvidence => ({
   runId: spec.runId, revision: spec.revision, policyHash: spec.policyHash, mode: "local-evm-rehearsal",
-  observations: [{ key: "exchange-trade:ETH-USD", provider: "coinbase", label: "Coinbase ETH-USD trade", usd: 2500, raw: "2500", observedAt: iso(5), fetchedAt: iso() }],
+  observations: [{ key: "exchange-trade:ETH-USD", provider: "coinbase", label: "Coinbase ETH-USD trade", unit: "USD", value: 2500, usd: 2500, raw: "2500", observedAt: iso(5), fetchedAt: iso() }],
   vault: { address: "0x0000000000000000000000000000000000001234", chainId: 31337, paused: false, balanceWei: "1", reportVersion: 2 },
   conditions: [{ nodeId: "guard:root", kind: "composed-policy", role: "root", passed: true, detail: "true" }],
   root: true, decision: "act", action: "pause-vault", decidedAt: iso(), logs: [],

@@ -49,7 +49,7 @@ test('get_run retains complete selected evidence and resolves an explicit older 
 
 test('get_run keeps every archived observation and the policy hash; summaries keep the hash', () => {
   const canonical = fixture();
-  const observation = { key: 'chainlink-feed:ethereum-mainnet:BTC', provider: 'chainlink' as const, label: 'Chainlink BTC/USD (mainnet)', network: 'ethereum-mainnet' as const, chainId: 1, address: '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c' as const, decimals: 8, usd: 85000, raw: '8500000000000', roundId: '7', observedAt: '2026-10-06T00:20:00Z', fetchedAt: '2026-10-06T01:00:00Z' };
+  const observation = { key: 'chainlink-feed:ethereum-mainnet:BTC', provider: 'chainlink' as const, label: 'Chainlink BTC/USD (mainnet)', network: 'ethereum-mainnet' as const, chainId: 1, address: '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c' as const, decimals: 8, unit: 'USD', value: 85000, usd: 85000, raw: '8500000000000', roundId: '7', observedAt: '2026-10-06T00:20:00Z', fetchedAt: '2026-10-06T01:00:00Z' };
   for (const run of canonical.state.runs) Object.assign(run, { policyHash: '0xhash', observations: [observation] });
   const view = compactMcpResult(canonical, 'get_run', { runId: 'older' });
   expect((view.state!.runs.find(r => r.id === 'older') as any).observations).toEqual([observation]);

@@ -1,0 +1,464 @@
+{
+  "name": "ccip-evacuation-verified",
+  "description": "Recipe inspired by YieldCoin and Chronomancer on a deployed v3 vault: TreasuryEvacuated with a CCIP message ID, the fee paid in ETH, and spending paused in the same report.",
+  "expected": {
+    "utterance": "If ETH crashes below two thousand, bridge the treasury's tokens to the reserve on Base and pause spending.",
+    "policySentence": "Bridge 100% of the vault's CCIP-BnM to the reserve on Base Sepolia via CCIP and pause spending when Chainlink ETH/USD (mainnet) < $2,000.",
+    "policyHash": "0x3798ec3ab105d46d6367a9cc88b00a4a50b8a5af9be5de7d82c047253dc6a829",
+    "structure": {
+      "root": "crashed",
+      "action": {
+        "type": "evacuate",
+        "destination": "base-sepolia",
+        "fraction": 1,
+        "pause": true
+      },
+      "nodes": [
+        {
+          "id": "eth",
+          "kind": "price",
+          "inputs": []
+        },
+        {
+          "id": "crashed",
+          "kind": "compare",
+          "inputs": [
+            "eth"
+          ]
+        }
+      ]
+    },
+    "runStatus": "confirmed",
+    "runCaption": "Revision 1: sent 2 CCIP-BnM to the reserve via CCIP and paused spending at block 14 (message 0x9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b); delivery on the destination takes about 20 minutes.",
+    "noopReason": null,
+    "blockedBy": null
+  },
+  "state": {
+    "stateVersion": 2,
+    "sessionId": "c1ac3fd7-b978-47be-9bcc-5f5c97fea480",
+    "seq": 5,
+    "mode": "run",
+    "focus": {
+      "objectId": "run:run-88be5ca3-e7ca-491b-92b8-32d62fe173e7",
+      "label": "Execution v01"
+    },
+    "previousFocus": [
+      "workflow:treasury"
+    ],
+    "references": [
+      {
+        "name": "Treasury policy",
+        "objectId": "workflow:treasury",
+        "at": "2026-10-07T11:03:27.564Z"
+      },
+      {
+        "name": "Execution v01",
+        "objectId": "run:run-88be5ca3-e7ca-491b-92b8-32d62fe173e7",
+        "at": "2026-10-07T11:03:27.565Z"
+      }
+    ],
+    "objects": [
+      {
+        "id": "source:coinbase",
+        "kind": "source",
+        "label": "Coinbase Exchange",
+        "data": {
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "token": "coinbase:ETH-USD",
+          "priceObjectId": "price:eth-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T11:03:23.563Z",
+          "fetchedAt": "2026-10-07T11:03:27.563Z"
+        },
+        "visible": false,
+        "pinned": false
+      },
+      {
+        "id": "price:eth-usd",
+        "kind": "price",
+        "label": "ETH / USD",
+        "data": {
+          "price": 1850,
+          "unit": "USD",
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "token": "coinbase:ETH-USD",
+          "history": [],
+          "sourceObjectId": "source:coinbase"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T11:03:23.563Z",
+          "fetchedAt": "2026-10-07T11:03:27.563Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "data": {
+          "paused": false,
+          "balance": "0.12",
+          "balanceEth": 0.12,
+          "fixture": true,
+          "network": "Local rehearsal fixture",
+          "ccipTokens": 2,
+          "reserveEth": 0
+        },
+        "provenance": {
+          "source": "Local rehearsal fixture",
+          "kind": "fixture",
+          "label": "Fixture vault · no deployed contract",
+          "observedAt": "2026-10-07T11:03:27.576Z",
+          "fetchedAt": "2026-10-07T11:03:27.576Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "condition:crashed",
+        "kind": "condition",
+        "label": "Chainlink ETH/USD (mainnet) < $2,000",
+        "data": {
+          "id": "crashed",
+          "kind": "compare",
+          "input": "eth",
+          "op": "<",
+          "value": 2000,
+          "source": "Chainlink ETH/USD (mainnet)",
+          "root": true
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.564Z",
+          "fetchedAt": "2026-10-07T11:03:27.564Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "action:pause",
+        "kind": "action",
+        "label": "Bridge 100% of the vault's CCIP-BnM to the reserve on Base Sepolia via CCIP and pause spending",
+        "data": {
+          "type": "evacuate",
+          "destination": "base-sepolia",
+          "fraction": 1,
+          "pause": true,
+          "target": "vault:grant"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.564Z",
+          "fetchedAt": "2026-10-07T11:03:27.564Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "out-root",
+        "from": "condition:crashed",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "e-act",
+        "from": "action:pause",
+        "to": "vault:grant",
+        "label": "bridges via CCIP"
+      }
+    ],
+    "workflow": {
+      "id": "workflow:treasury",
+      "revision": 1,
+      "threshold": 3000,
+      "maxAgeSeconds": null,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T11:03:27.564Z",
+      "reason": "Recipe: Cross-chain evacuation",
+      "graph": {
+        "nodes": [
+          {
+            "id": "eth",
+            "kind": "price",
+            "source": {
+              "type": "chainlink-feed",
+              "symbol": "ETH",
+              "network": "ethereum-mainnet"
+            }
+          },
+          {
+            "id": "crashed",
+            "kind": "compare",
+            "input": "eth",
+            "op": "<",
+            "value": 2000
+          }
+        ],
+        "root": "crashed",
+        "action": {
+          "type": "evacuate",
+          "destination": "base-sepolia",
+          "fraction": 1,
+          "pause": true
+        }
+      },
+      "policyHash": "0x3798ec3ab105d46d6367a9cc88b00a4a50b8a5af9be5de7d82c047253dc6a829",
+      "summary": "Bridge 100% of the vault's CCIP-BnM to the reserve on Base Sepolia via CCIP and pause spending when Chainlink ETH/USD (mainnet) < $2,000.",
+      "revisions": [
+        {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T11:03:27.564Z",
+          "reason": "Recipe: Cross-chain evacuation",
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "ETH",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "crashed",
+                "kind": "compare",
+                "input": "eth",
+                "op": "<",
+                "value": 2000
+              }
+            ],
+            "root": "crashed",
+            "action": {
+              "type": "evacuate",
+              "destination": "base-sepolia",
+              "fraction": 1,
+              "pause": true
+            }
+          },
+          "policyHash": "0x3798ec3ab105d46d6367a9cc88b00a4a50b8a5af9be5de7d82c047253dc6a829"
+        }
+      ],
+      "created": true
+    },
+    "runs": [
+      {
+        "id": "run-88be5ca3-e7ca-491b-92b8-32d62fe173e7",
+        "revision": 1,
+        "snapshot": {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T11:03:27.564Z",
+          "reason": "Recipe: Cross-chain evacuation",
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "ETH",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "crashed",
+                "kind": "compare",
+                "input": "eth",
+                "op": "<",
+                "value": 2000
+              }
+            ],
+            "root": "crashed",
+            "action": {
+              "type": "evacuate",
+              "destination": "base-sepolia",
+              "fraction": 1,
+              "pause": true
+            }
+          },
+          "policyHash": "0x3798ec3ab105d46d6367a9cc88b00a4a50b8a5af9be5de7d82c047253dc6a829"
+        },
+        "policyHash": "0x3798ec3ab105d46d6367a9cc88b00a4a50b8a5af9be5de7d82c047253dc6a829",
+        "action": "evacuate",
+        "trigger": "manual",
+        "status": "confirmed",
+        "startedAt": "2026-10-07T11:03:27.565Z",
+        "executionMode": "Local EVM rehearsal · no CRE consensus",
+        "decisions": [
+          {
+            "id": "threshold",
+            "label": "threshold",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) $1,850.00 < $2,000.00",
+            "nodeId": "crashed",
+            "role": "node"
+          },
+          {
+            "id": "composed-policy",
+            "label": "composed-policy",
+            "passed": true,
+            "detail": "Policy condition evaluated true",
+            "nodeId": "guard:root",
+            "role": "root"
+          },
+          {
+            "id": "source-freshness",
+            "label": "source-freshness",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) observed 900.0s ago; limit 93600s",
+            "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:ETH",
+            "role": "guard"
+          },
+          {
+            "id": "vault-funds",
+            "label": "vault-funds",
+            "passed": true,
+            "detail": "Vault holds 2 CCIP-BnM; bridging 100% via CCIP",
+            "nodeId": "guard:vault-tokens",
+            "role": "guard"
+          }
+        ],
+        "logs": [
+          {
+            "at": "2026-10-07T11:03:27.565Z",
+            "stage": "queued",
+            "message": "Frozen draft revision 1"
+          },
+          {
+            "at": "2026-10-07T11:03:27.575Z",
+            "stage": "fetching",
+            "message": "Fetching fresh execution inputs"
+          }
+        ],
+        "observations": [
+          {
+            "key": "chainlink-feed:ethereum-mainnet:ETH",
+            "provider": "chainlink",
+            "label": "Chainlink ETH/USD (mainnet)",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+            "decimals": 8,
+            "unit": "USD",
+            "value": 1850,
+            "usd": 1850,
+            "raw": "185000000000",
+            "roundId": "110680464442257320165",
+            "observedAt": "2026-10-07T10:48:27.576Z",
+            "fetchedAt": "2026-10-07T11:03:26.576Z"
+          }
+        ],
+        "evidence": {
+          "transactionHash": "0x4b9f2c1d7e6a5b3c8d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e",
+          "blockNumber": "14",
+          "receiptStatus": "success",
+          "pausedAfter": true,
+          "chainId": 31337,
+          "contractAddress": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+          "policyHash": "0x3798ec3ab105d46d6367a9cc88b00a4a50b8a5af9be5de7d82c047253dc6a829",
+          "effects": {
+            "paused": true,
+            "ccipMessageId": "0x9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b",
+            "ccipAmount": "2000000000000000000",
+            "ccipFee": "1000000000000000",
+            "destinationChainSelector": "10344971235874465080",
+            "ccipExplorerUrl": "https://ccip.chain.link/msg/0x9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b"
+          },
+          "ccipExplorerUrl": "https://ccip.chain.link/msg/0x9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b",
+          "verification": "Receipt, receiver events (run, revision, policy hash) and fresh state confirmed: spending paused, CCIP message 0x9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b"
+        },
+        "completedAt": "2026-10-07T11:03:27.576Z"
+      }
+    ],
+    "conversation": [
+      {
+        "id": "a42de606-4c14-410f-952d-c0808b091d08",
+        "role": "assistant",
+        "text": "Discovered ETH / USD: $1850 (Coinbase Exchange, observed 2026-10-07T11:03:23.563Z); Grant vault.",
+        "at": "2026-10-07T11:03:27.563Z",
+        "source": "mcp"
+      },
+      {
+        "id": "2b6e8f23-6ac8-40e5-ba98-9b12b8532ae8",
+        "role": "assistant",
+        "text": "Revision 1. Bridge 100% of the vault's CCIP-BnM to the reserve on Base Sepolia via CCIP and pause spending when Chainlink ETH/USD (mainnet) < $2,000. Execution fetches Chainlink ETH/USD (mainnet). Bridges the vault's CCIP-BnM through Chainlink CCIP to the reserve on Base Sepolia and pauses spending; delivery takes about 20 minutes. Cross-chain evacuation, inspired by YieldCoin (Chromion 2025, Grand Prize) and Chronomancer (Block Magic 2024, Cross-Chain Solutions, 1st place). Sends the vault's CCIP-BnM test token through Chainlink CCIP; delivery on Base Sepolia takes about 20 minutes. To keep it running, call watch_policy with everySeconds 60.",
+        "at": "2026-10-07T11:03:27.564Z",
+        "source": "mcp"
+      },
+      {
+        "id": "68e26229-7706-4b6f-ad7d-bfe46a4cda6d",
+        "role": "assistant",
+        "text": "Run run-88be5ca3-e7ca-491b-92b8-32d62fe173e7 started against immutable revision 1.",
+        "at": "2026-10-07T11:03:27.565Z",
+        "source": "mcp"
+      },
+      {
+        "id": "79c573e1-7220-4937-afc4-4cd36a0fc137",
+        "role": "assistant",
+        "text": "Revision 1: sent 2 CCIP-BnM to the reserve via CCIP and paused spending at block 14 (message 0x9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b); delivery on the destination takes about 20 minutes.",
+        "at": "2026-10-07T11:03:27.576Z",
+        "source": "mcp"
+      }
+    ],
+    "activity": {
+      "status": "idle",
+      "prompt": "Run this version",
+      "summary": "Revision 1: sent 2 CCIP-BnM to the reserve via CCIP and paused spending at block 14 (message 0x9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b); delivery on the destination takes about 20 minutes."
+    },
+    "latency": [
+      {
+        "operationId": "d",
+        "tool": "discover_objects",
+        "receivedAt": "2026-10-07T11:03:27.563Z",
+        "committedAt": "2026-10-07T11:03:27.563Z",
+        "commitMs": 0.12
+      },
+      {
+        "operationId": "c",
+        "tool": "apply_recipe",
+        "receivedAt": "2026-10-07T11:03:27.563Z",
+        "committedAt": "2026-10-07T11:03:27.564Z",
+        "commitMs": 1.06
+      },
+      {
+        "operationId": "r",
+        "tool": "run_workflow",
+        "receivedAt": "2026-10-07T11:03:27.565Z",
+        "committedAt": "2026-10-07T11:03:27.565Z",
+        "commitMs": 0.1
+      }
+    ],
+    "capabilities": {
+      "price": "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
+      "vault": "Fixture vault · no deployed contract",
+      "execution": "Local EVM rehearsal · no CRE consensus",
+      "voice": "Planned utterances · actual desktop voice unverified",
+      "mcp": "Semantic tools · official MCP stdio transport"
+    },
+    "inspectedRunId": "run-88be5ca3-e7ca-491b-92b8-32d62fe173e7",
+    "canUndoClear": false
+  }
+}

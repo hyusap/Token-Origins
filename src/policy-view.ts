@@ -1,14 +1,17 @@
 import type { CanvasState, ExecutionRun, GraphObject, RunDecision, PolicyGraph } from "../shared/types";
-import { describeAction, describeGraph, describeSource, sourceKey, isLegacyShape } from "./policy-language";
-import type { PriceSource } from "../cre/graph";
+import { describeAction, describeGraph, describeSource, sourceKey, isLegacyShape, nodeInputs } from "./policy-language";
+import type { Source } from "../cre/graph";
 
 export { isLegacyShape as isLegacyPolicy };
 export function selectedRun(state: CanvasState): ExecutionRun | undefined {
   return state.runs.find(run => run.id === state.inspectedRunId || `run:${run.id}` === state.focus.objectId || run.id === state.focus.objectId);
 }
-export function sourceObjectId(source: PriceSource): string {
-  return source.type === "exchange-trade" ? `price:${source.pair.toLowerCase()}` :
-    `feed:${source.symbol.toLowerCase()}-usd${!source.network || source.network === "ethereum-mainnet" ? "" : ":" + source.network.replace("ethereum-", "")}`;
+export function sourceObjectId(source: Source): string {
+  if (source.type === "exchange-trade") return `price:${source.pair.toLowerCase()}`;
+  if (source.type === "chainlink-feed")
+    return `feed:${source.symbol.toLowerCase()}-usd${!source.network || source.network === "ethereum-mainnet" ? "" : ":" + source.network.replace("ethereum-", "")}`;
+  if (source.type === "vault-balance") return "vault:grant";
+  return `reading:${sourceKey(source)}`;
 }
 /** Pre-graph historical runs can only be reconstructed from their own archived scalar threshold. */
 export function frozenGraph(run: ExecutionRun): PolicyGraph {
@@ -27,8 +30,25 @@ export function policyView(state: CanvasState) {
   const objects = [...state.objects];
   {
     for (const node of graph.nodes) {
-      if (node.kind !== "price") continue;
+      if (node.kind !== "price" && node.kind !== "reading") continue;
+      if (node.source.type === "vault-balance") continue;
       const id = sourceObjectId(node.source);
+      if (node.source.type !== "exchange-trade" && node.source.type !== "chainlink-feed") {
+        // Contract readings (Proof of Reserve, supply, lending rates): the archive wins for a run.
+        const archived = run?.observations?.find(o => o.key === sourceKey(node.source));
+        const prior = objects.find(o => o.id === id);
+        if (!run && prior) continue;
+        const reading: GraphObject = {
+          id, kind: "reading", label: archived?.label ?? describeSource(node.source), visible: true, pinned: false,
+          data: archived ? {value: archived.value, unit: archived.unit, display: `${archived.value.toLocaleString("en-US", {maximumFractionDigits: 8})}${archived.unit === "%" ? "%" : ` ${archived.unit}`}`, raw: archived.raw, network: archived.network, chainId: archived.chainId, address: archived.address}
+            : {network: "ethereum-mainnet", chainId: 1},
+          provenance: archived ? {source: archived.provider, kind: "chain", label: "Archived execution observation", observedAt: archived.observedAt, fetchedAt: archived.fetchedAt, address: archived.address, chainId: archived.chainId}
+            : {source: describeSource(node.source), kind: "derived", label: run ? "Execution observation unavailable" : "Source configured · not fetched", observedAt: "", fetchedAt: ""},
+        };
+        if (prior) objects[objects.indexOf(prior)] = reading;
+        else objects.push(reading);
+        continue;
+      }
       const archived = run?.observations?.find(o => o.key === sourceKey(node.source));
       const prior = objects.find(o => o.id === id);
       const legacy = run && !run.observations && run.inputs?.price.id === id ? run.inputs.price : undefined;
@@ -39,8 +59,8 @@ export function policyView(state: CanvasState) {
         id, kind: node.source.type === "chainlink-feed" ? "feed" : "price", label: archived.label,
         visible: true, pinned: false,
         data: {symbol: node.source.type === "chainlink-feed" ? node.source.symbol : node.source.pair.split("-")[0],
-          price: archived.usd, raw: archived.raw, network: archived.network, chainId: archived.chainId, address: archived.address,
-          history: [{price: archived.usd, observedAt: archived.observedAt}], historyLabel: "Archived execution observation"},
+          price: archived.usd ?? archived.value, raw: archived.raw, network: archived.network, chainId: archived.chainId, address: archived.address,
+          history: [{price: archived.usd ?? archived.value, observedAt: archived.observedAt}], historyLabel: "Archived execution observation"},
         provenance: {source: archived.provider, kind: node.source.type === "chainlink-feed" ? "chain" : "live",
           label: "Archived execution observation", observedAt: archived.observedAt, fetchedAt: archived.fetchedAt,
           address: archived.address, chainId: archived.chainId, url: archived.url},
@@ -71,10 +91,28 @@ export function runOutcome(run: ExecutionRun): string {
     const order = run.evidence.simulatedOrder;
     return `Simulated sell of ${order.amount} ${order.symbol}; no transaction, no asset moved.`;
   }
-  if (run.status === "confirmed" && run.evidence?.transactionHash)
-    return `Spending pause verified${run.evidence.blockNumber ? " at block " + run.evidence.blockNumber : ""}. Receipt, receiver event and fresh vault state confirmed.`;
-  if (run.status === "confirmed" && run.evidence?.fixture)
-    return "Fixture spending paused in memory. No transaction was submitted.";
+  if (run.evidence?.simulatedRebalance) {
+    const rebalance = run.evidence.simulatedRebalance;
+    return `Simulated rebalance of ${Math.round(rebalance.fraction * 10000) / 100}% ${rebalance.asset} from ${rebalance.from} to ${rebalance.to}; no transaction, no asset moved.`;
+  }
+  if (run.status === "confirmed" && run.evidence?.transactionHash) {
+    const effects = run.evidence.effects;
+    const block = run.evidence.blockNumber ? ` at block ${run.evidence.blockNumber}` : "";
+    if (effects?.sweptWei) return `Reserve sweep verified${block}: ${Number(effects.sweptWei) / 1e18} ETH to the reserve${effects.paused ? ", spending paused" : ""}. Receipt, receiver event and fresh vault state confirmed.`;
+    if (effects?.paidWei) return `Payment verified${block}: ${Number(effects.paidWei) / 1e18} ETH to ${effects.payee}. Receipt and receiver event confirmed.`;
+    if (effects?.ccipMessageId) return `CCIP evacuation sent${block}: ${Number(effects.ccipAmount) / 1e18} CCIP-BnM to the reserve, message ${effects.ccipMessageId}${effects.paused ? ", spending paused" : ""}. Delivery takes about 20 minutes.`;
+    return `Spending pause verified${block}. Receipt, receiver event and fresh vault state confirmed.`;
+  }
+  if (run.status === "confirmed" && run.evidence?.fixture) {
+    const effects = run.evidence.fixtureEffects;
+    const moved = [
+      effects?.sweptEth !== undefined && `swept ${effects.sweptEth} ETH to the reserve`,
+      effects?.paidEth !== undefined && `paid ${effects.paidEth} ETH to the ${effects.payee}`,
+      effects?.evacuatedTokens !== undefined && `queued ${effects.evacuatedTokens} CCIP-BnM for CCIP`,
+    ].filter(Boolean);
+    if (!moved.length) return "Fixture spending paused in memory. No transaction was submitted.";
+    return `Fixture vault ${moved.join(" and ")}${effects?.paused ? ", spending paused" : ""}, in memory. No transaction was submitted.`;
+  }
   if (run.status === "confirmed") return run.evidence?.verification || "Rehearsal completed.";
   return "Fetching and evaluating fresh execution inputs.";
 }
@@ -87,6 +125,4 @@ export function settledExecutionReply(state: CanvasState, summary: string): stri
       !["confirmed", "no-op", "failed"].includes(run.status)) return null;
   return runOutcome(run);
 }
-export const graphInputs = (node: PolicyGraph["nodes"][number]): string[] =>
-  node.kind === "and" || node.kind === "or" ? node.inputs :
-  node.kind === "compare" || node.kind === "freshness" || node.kind === "not" ? [node.input] : [];
+export const graphInputs = (node: PolicyGraph["nodes"][number]): string[] => nodeInputs(node);

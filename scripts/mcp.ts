@@ -30,6 +30,7 @@ for (const [name, definition] of Object.entries(toolDefinitions)) {
                 revision: result.state?.workflow.revision,
                 focus: result.state?.focus.objectId ? result.state.focus : undefined,
                 clarification: result.state?.clarification,
+                watch: result.state?.watch?.status === "watching" ? `revision ${result.state.watch.revision}, check ${result.state.watch.checks}/${result.state.watch.maxChecks}` : undefined,
               }),
             },
           ],

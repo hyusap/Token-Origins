@@ -34,7 +34,7 @@ import { microphoneLevels, type MicrophoneSnapshot } from "./microphone";
 import { useMicrophone } from "./use-microphone";
 import { displayReply } from "./display-reply";
 import { policyView, frozenGraph, runOutcome, decisionRole, settledExecutionReply } from "./policy-view";
-import { describeGraph, describeSource } from "./policy-language";
+import { describeGraph, describeSource, phraseCondition } from "./policy-language";
 
 const money = (n: number | undefined) =>
   typeof n === "number" && Number.isFinite(n)
@@ -334,9 +334,9 @@ function PriceNode({
     >
       <NodeHeader
         index="01"
-        type={object.kind === "feed" ? "Chainlink Data Feed" : "Market observation"}
+        type={object.kind === "feed" ? "Chainlink Data Feed" : object.kind === "reading" ? object.provenance.source : "Market observation"}
         extra={
-          object.kind === "feed" ? (
+          object.kind === "feed" || object.kind === "reading" ? (
             <span className="oracle-badge">ON-CHAIN ORACLE</span>
           ) : (
             <span className="live-label">Observed</span>
@@ -361,14 +361,14 @@ function PriceNode({
               stroke="currentColor"
               opacity=".4"
             />
-          </svg> : <span className="token-symbol mono">{object.data.symbol}</span>}
+          </svg> : <span className="token-symbol mono">{object.data.symbol ?? object.data.unit}</span>}
           <div>
             <h3>{object.data.name || (object.id === "price:eth-usd" ? "Ethereum" : object.data.symbol)}</h3>
             <span className="mono sublabel">{object.label}</span>
           </div>
         </div>
         <div className="price-value">
-          {money(Number(object.data.price ?? object.data.value))}
+          {object.kind === "reading" ? object.data.display ?? "Not fetched" : money(Number(object.data.price ?? object.data.value))}
         </div>
         <PriceChart object={object} />
         {object.data.network && <p className="mono policy-restriction">{object.data.network} · chain {object.data.chainId}</p>}
@@ -462,8 +462,8 @@ function PolicyCondition({ state, node, focused }: {state:CanvasState; node:Poli
   const view = policyView(state);
   const input = "input" in node ? view.graph.nodes.find(n => n.id === node.input) : undefined;
   const result = view.run?.decisions.find(d => d.nodeId === node.id);
-  const label = input?.kind === "price" ? describeSource(input.source) : "Condition";
-  const title = node.kind === "compare" ? `${label} ${node.op} ${money(node.value)}` :
+  const label = input?.kind === "price" || input?.kind === "reading" ? describeSource(input.source) : "Condition";
+  const title = node.kind === "compare" || node.kind === "math" || node.kind === "time" ? phraseCondition(view.graph, node.id) :
     node.kind === "freshness" ? `${label} within ${node.maxAgeSeconds}s` :
     node.kind === "vault-paused" ? `Vault is ${node.equals ? "paused" : "active"}` :
     node.kind.toUpperCase();
@@ -473,6 +473,8 @@ function PolicyCondition({ state, node, focused }: {state:CanvasState; node:Poli
     <div className="node-body"><h3>{title}</h3>
       {(node.kind === "and" || node.kind === "or") && <p>{node.kind === "and" ? "Every input must be true." : "Any input can be true."}</p>}
       {node.kind === "not" && <p>Invert the connected condition.</p>}
+      {node.kind === "math" && <p>Computed value from the connected inputs.</p>}
+      {node.kind === "time" && <p>Checked against the decision time.</p>}
       {result && <p className={root && !result.passed ? "execution-error" : "condition-value"}>
         {result.passed ? "TRUE" : "FALSE"} · {root ? "root expression" : "intermediate result"}
       </p>}
@@ -482,13 +484,19 @@ function PolicyCondition({ state, node, focused }: {state:CanvasState; node:Poli
 }
 function ActionNode({ state, focused }: { state:CanvasState; focused:boolean }) {
   const view = policyView(state);
-  const sell = view.graph.action.type === "sell";
+  const type = view.graph.action.type;
+  const sell = type === "sell" || type === "rebalance";
+  const detail = sell ? "Mock venue rehearsal. No transaction and no asset moved."
+    : type === "sweep" ? "Report moves a share of the vault to the reserve fixed at deploy."
+    : type === "pay" ? "Report pays a registered payee, capped and rate-limited by the vault."
+    : type === "evacuate" ? "Report bridges the vault's tokens to the reserve through Chainlink CCIP."
+    : "Send a verified policy report to the grant vault.";
   return <article className={`graph-node action-node ${focused ? "focused" : ""}`} data-object-id="action:pause">
     <NodeHeader index="04" type={sell ? "Simulated action" : "Report action"} />
     <div className="node-body">
       <div className="action-icon"><LockKeyhole size={26} strokeWidth={1} /></div>
       <h3>{view.action}</h3>
-      <p>{sell ? "Mock venue rehearsal. No transaction and no asset moved." : "Send a verified policy report to the grant vault."}</p>
+      <p>{detail}</p>
     </div>
     <div className="node-foot"><span>{sell ? "Simulation only" : "Receiver-authorized"}</span><ShieldCheck size={13} /></div>
   </article>;
@@ -516,7 +524,7 @@ function ObservationAge({ observedAt }: {observedAt:string}) {
 function RunObservations({run}: {run:ExecutionRun}) {
   return <div className="archived-observations">{run.observations?.map(o =>
     <div className="archived-observation" key={o.key} data-source-key={o.key}>
-      <strong>{o.label} · {money(o.usd)}</strong>
+      <strong>{o.label} · {o.usd !== undefined || o.unit === "USD" ? money(o.usd ?? o.value) : `${o.value?.toLocaleString("en-US", {maximumFractionDigits: 8})}${o.unit === "%" ? "%" : ` ${o.unit}`}`}</strong>
       <span>{o.provider}{o.network ? ` · ${o.network}` : ""}{o.chainId ? ` · chain ${o.chainId}` : ""}</span>
       {o.address && <span className="mono observation-address" title={o.address}>{o.address}</span>}
       <span className="mono">{o.observedAt}</span><ObservationAge observedAt={o.observedAt} />
@@ -527,10 +535,11 @@ function RunObservations({run}: {run:ExecutionRun}) {
 function RunEvidence({run}: {run:ExecutionRun}) {
   const done = ["confirmed","no-op","failed"].includes(run.status);
   const simulated = run.evidence?.simulatedOrder;
+  const rebalance = run.evidence?.simulatedRebalance;
   const onchain = !simulated && !!run.evidence?.transactionHash;
   return <section className={`run-evidence nowheel nopan ${done ? "settled" : ""}`} aria-label="Execution evidence" data-object-id={`run:${run.id}`}>
     <div className="evidence-title"><span className="mono">Frozen run / v{run.revision.toString().padStart(2,"0")}</span>
-      <span className={`status-${run.status}`}>{run.uncertain ? "Checking chain" : simulated ? "Simulated" : run.status}</span>
+      <span className={`status-${run.status}`}>{run.uncertain ? "Checking chain" : simulated || rebalance ? "Simulated" : run.status}</span>
     </div>
     <div className="frozen-rule"><span className="mono">Frozen policy</span><p>{policyViewForRun(run)}</p></div>
     <p className={run.status === "failed" ? "execution-error" : "run-outcome"}>{runOutcome(run)}</p>
@@ -545,10 +554,12 @@ function RunEvidence({run}: {run:ExecutionRun}) {
       </div>;
     })}</div>
     {simulated && <div className="simulation-receipt"><strong>Simulated sell of {simulated.amount} {simulated.symbol}</strong><p>{simulated.venue} · reference {money(simulated.referencePriceUsd)} · notional {money(simulated.notionalUsd)}</p><span>No transaction, no asset moved.</span></div>}
+    {rebalance && <div className="simulation-receipt"><strong>Simulated rebalance of {Math.round(rebalance.fraction*10000)/100}% {rebalance.asset}</strong><p>{rebalance.from}{rebalance.fromAprPercent !== undefined ? ` (${rebalance.fromAprPercent.toFixed(2)}%)` : ""} → {rebalance.to}{rebalance.toAprPercent !== undefined ? ` (${rebalance.toAprPercent.toFixed(2)}%)` : ""}</p><span>No transaction, no asset moved.</span></div>}
     {onchain && <div className="receipt">
       {run.evidence?.explorerUrl ? <a href={run.evidence.explorerUrl} target="_blank" rel="noreferrer" className="mono">{short(run.evidence.transactionHash,9)}</a> : <span className="mono">{short(run.evidence?.transactionHash,9)}</span>}
       {run.evidence?.blockNumber && <span>Block {run.evidence.blockNumber}</span>}
-      <span>{run.status === "confirmed" ? "Vault pause verified" : "Write awaiting verification"}</span>
+      <span>{run.status !== "confirmed" ? "Write awaiting verification" : run.evidence?.effects?.sweptWei ? "Reserve sweep verified" : run.evidence?.effects?.paidWei ? "Payment verified" : run.evidence?.effects?.ccipMessageId ? "CCIP message sent" : "Vault pause verified"}</span>
+      {run.evidence?.ccipExplorerUrl && <a href={run.evidence.ccipExplorerUrl} target="_blank" rel="noreferrer" className="mono">CCIP {short(run.evidence.effects?.ccipMessageId,6)}</a>}
     </div>}
     {run.policyHash && <div className="policy-hash mono" title={run.policyHash}>Policy {short(run.policyHash,8)}</div>}
     <div className="evidence-footer mono">{run.executionMode}<span>{clock(run.startedAt)}</span></div>

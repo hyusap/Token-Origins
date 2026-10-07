@@ -68,7 +68,7 @@
   },
   "state": {
     "stateVersion": 2,
-    "sessionId": "0d22096f-efef-48b7-858a-d2e4d2f09cb4",
+    "sessionId": "28fde336-96a2-4f80-b1a7-a71939585515",
     "seq": 2,
     "mode": "compose",
     "focus": {
@@ -80,7 +80,7 @@
       {
         "name": "Treasury policy",
         "objectId": "workflow:treasury",
-        "at": "2026-10-07T09:26:27.048Z"
+        "at": "2026-10-07T11:03:27.387Z"
       }
     ],
     "objects": [
@@ -98,8 +98,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T09:26:23.044Z",
-          "fetchedAt": "2026-10-07T09:26:27.044Z"
+          "observedAt": "2026-10-07T11:03:23.383Z",
+          "fetchedAt": "2026-10-07T11:03:27.383Z"
         },
         "visible": false,
         "pinned": false
@@ -122,8 +122,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T09:26:23.044Z",
-          "fetchedAt": "2026-10-07T09:26:27.044Z"
+          "observedAt": "2026-10-07T11:03:23.383Z",
+          "fetchedAt": "2026-10-07T11:03:27.383Z"
         },
         "visible": true,
         "pinned": false
@@ -134,17 +134,19 @@
         "label": "Grant vault",
         "data": {
           "paused": false,
-          "balance": "1.2049",
-          "balanceEth": 1.2049,
+          "balance": "0.12",
+          "balanceEth": 0.12,
           "fixture": true,
-          "network": "Local rehearsal fixture"
+          "network": "Local rehearsal fixture",
+          "ccipTokens": 2,
+          "reserveEth": 0
         },
         "provenance": {
           "source": "Local rehearsal fixture",
           "kind": "fixture",
           "label": "Fixture vault · no deployed contract",
-          "observedAt": "2026-10-07T09:26:27.044Z",
-          "fetchedAt": "2026-10-07T09:26:27.044Z"
+          "observedAt": "2026-10-07T11:03:27.383Z",
+          "fetchedAt": "2026-10-07T11:03:27.383Z"
         },
         "visible": true,
         "pinned": false
@@ -166,8 +168,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.047Z",
-          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "observedAt": "2026-10-07T11:03:27.386Z",
+          "fetchedAt": "2026-10-07T11:03:27.386Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -189,8 +191,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.047Z",
-          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "observedAt": "2026-10-07T11:03:27.386Z",
+          "fetchedAt": "2026-10-07T11:03:27.386Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -210,8 +212,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.047Z",
-          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "observedAt": "2026-10-07T11:03:27.386Z",
+          "fetchedAt": "2026-10-07T11:03:27.386Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -231,8 +233,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.047Z",
-          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "observedAt": "2026-10-07T11:03:27.386Z",
+          "fetchedAt": "2026-10-07T11:03:27.386Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -255,8 +257,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.047Z",
-          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "observedAt": "2026-10-07T11:03:27.386Z",
+          "fetchedAt": "2026-10-07T11:03:27.386Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -279,8 +281,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.047Z",
-          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "observedAt": "2026-10-07T11:03:27.386Z",
+          "fetchedAt": "2026-10-07T11:03:27.386Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -297,8 +299,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.047Z",
-          "fetchedAt": "2026-10-07T09:26:27.047Z",
+          "observedAt": "2026-10-07T11:03:27.386Z",
+          "fetchedAt": "2026-10-07T11:03:27.386Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -372,7 +374,7 @@
       "threshold": 3000,
       "maxAgeSeconds": null,
       "skipPaused": false,
-      "createdAt": "2026-10-07T09:26:27.046Z",
+      "createdAt": "2026-10-07T11:03:27.385Z",
       "reason": "Composed condition graph",
       "graph": {
         "nodes": [
@@ -447,7 +449,7 @@
           "threshold": 3000,
           "maxAgeSeconds": null,
           "skipPaused": false,
-          "createdAt": "2026-10-07T09:26:27.046Z",
+          "createdAt": "2026-10-07T11:03:27.385Z",
           "reason": "Composed condition graph",
           "graph": {
             "nodes": [
@@ -522,17 +524,17 @@
     "runs": [],
     "conversation": [
       {
-        "id": "58e256c7-119d-4cef-8afc-e7bc7bb338fb",
+        "id": "2d1dc5dd-9ba5-49ac-9f6d-b7438ff37509",
         "role": "assistant",
-        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T09:26:23.044Z); Grant vault.",
-        "at": "2026-10-07T09:26:27.044Z",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T11:03:23.383Z); Grant vault.",
+        "at": "2026-10-07T11:03:27.383Z",
         "source": "mcp"
       },
       {
-        "id": "619faa9b-3968-4b43-b091-b77a65bde30b",
+        "id": "2c82337d-b741-43a9-a0eb-bffa6ebc2942",
         "role": "assistant",
         "text": "Revision 1. Pause spending when (Coinbase ETH-USD trade < $3,000 and (Chainlink BTC/USD (mainnet) < $80,000 or not (vault is paused))). Execution fetches Coinbase ETH-USD trade and Chainlink BTC/USD (mainnet).",
-        "at": "2026-10-07T09:26:27.048Z",
+        "at": "2026-10-07T11:03:27.387Z",
         "source": "mcp"
       }
     ],
@@ -545,16 +547,16 @@
       {
         "operationId": "d",
         "tool": "discover_objects",
-        "receivedAt": "2026-10-07T09:26:27.044Z",
-        "committedAt": "2026-10-07T09:26:27.044Z",
+        "receivedAt": "2026-10-07T11:03:27.383Z",
+        "committedAt": "2026-10-07T11:03:27.383Z",
         "commitMs": 0.1
       },
       {
         "operationId": "c",
         "tool": "compose_graph",
-        "receivedAt": "2026-10-07T09:26:27.045Z",
-        "committedAt": "2026-10-07T09:26:27.048Z",
-        "commitMs": 3.57
+        "receivedAt": "2026-10-07T11:03:27.383Z",
+        "committedAt": "2026-10-07T11:03:27.387Z",
+        "commitMs": 4.54
       }
     ],
     "capabilities": {

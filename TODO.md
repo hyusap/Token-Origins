@@ -74,6 +74,17 @@ are included in this planning update.
 - [x] **SOL3:** deploy to devnet and record the multichain proof. *(Program `8g87…hqYD`, vault `7593…XWtE`; CRE pause [tx](https://explorer.solana.com/tx/39R7rvrjVS4etn7wmMXsMge6jpc4JRwnekpVsUmK6kMjQTVovoXeAY2i4Df3NJnmbZ8iWxGxNNmK4VaqPF3PiUHM?cluster=devnet); `demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json` verified 18/18.)*
 - [ ] **Ayush:** render `run.evidence.solana` (signature, explorer link, vault) and a Solana vault card.
 
+## Shivam — winner-inspired capabilities (judge request)
+
+- [x] **W1:** contract readings: Chainlink Proof of Reserve, ERC-20 supply, Aave v3 / Compound v3 supply rates, vault balance; shared call plan for backend and CRE. *(`cre/onchain-reads.ts`, `server/onchain.ts`)*
+- [x] **W2:** typed `math` (spread, ratio, product) and `time` nodes with unit checking. *(`cre/graph.ts`, `cre/graph-actions.test.ts`)*
+- [x] **W3:** GrantVault v3 real actions: reserve sweep, capped/rate-limited payee payments, CCIP evacuation to Base Sepolia; report v3, v2 kept for the deployed vault. *(`contracts/src/GrantVault.sol`, 17 forge tests, `tests/anvil-integration.test.ts`)*
+- [x] **W4:** Solana program v3: reserve sweep alongside pause; in-place upgrade path rehearsed locally. *(`tests/solana-integration.test.ts`, `tests/solana-upgrade.test.ts`)*
+- [x] **W5:** standing policies (`watch_policy`) through the CRE cron trigger. *(`cre/workflow/main.ts`, `tests/treasury-actions.test.ts`)*
+- [x] **W6:** recipe catalog crediting SentinelCRE, FlowVault, YieldCoin, Copil, TokenIQ, InControl, Azurance, TAPL, Chronomancer. *(`server/recipes.ts`)*
+- [ ] **Shivam (needs keys):** `bun run verify:registry`, `bun run deploy:sepolia`, `bun run prove:actions`, `bun run solana:enable-sweep`.
+- [ ] **Ayush:** render reading cards, math/time conditions, sweep/pay/CCIP receipts and the watch status (fixtures: `reserve-guardian-sweep`, `grant-stream-watching`, `ccip-evacuation-verified`, `yield-chase-simulated`).
+
 ## Joint integration gate — before adding features
 
 - [ ] **Both:** pass J1–J11 from the detailed plan; keep mocked and live evidence distinct.

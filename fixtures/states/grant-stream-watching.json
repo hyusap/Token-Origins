@@ -1,0 +1,735 @@
+{
+  "name": "grant-stream-watching",
+  "description": "Recipe inspired by InControl, kept running with watch_policy: one check has paid the grantee in memory and the watch is waiting for its next check.",
+  "expected": {
+    "utterance": "Pay the grantee a thousandth of an ether every minute while ETH stays above a thousand dollars.",
+    "policySentence": "Pay 0.001 ETH to the grantee when (Chainlink ETH/USD (mainnet) > $1,000 and vault is active).",
+    "policyHash": "0x7e556e8791b6e66ab4ff0a5c114bd9243d1fabcb23050720d50ca0786646cecf",
+    "structure": {
+      "root": "ok",
+      "action": {
+        "type": "pay",
+        "payee": "grantee",
+        "amountEth": 0.001
+      },
+      "nodes": [
+        {
+          "id": "eth",
+          "kind": "price",
+          "inputs": []
+        },
+        {
+          "id": "healthy",
+          "kind": "compare",
+          "inputs": [
+            "eth"
+          ]
+        },
+        {
+          "id": "active",
+          "kind": "vault-paused",
+          "inputs": []
+        },
+        {
+          "id": "ok",
+          "kind": "and",
+          "inputs": [
+            "healthy",
+            "active"
+          ]
+        }
+      ]
+    },
+    "runStatus": "confirmed",
+    "runCaption": "Watching revision 1: check 1 of 10, Revision 1: fixture vault paid 0.001 ETH to the grantee in memory; no transaction.. Next check in 60s.",
+    "noopReason": null,
+    "blockedBy": null
+  },
+  "state": {
+    "stateVersion": 2,
+    "sessionId": "b8926c74-58e7-4aac-ae7c-2b7e8bd101b1",
+    "seq": 18,
+    "mode": "compose",
+    "focus": {
+      "objectId": "workflow:treasury",
+      "label": "Treasury policy"
+    },
+    "previousFocus": [],
+    "references": [
+      {
+        "name": "Treasury policy",
+        "objectId": "workflow:treasury",
+        "at": "2026-10-07T11:03:27.553Z"
+      }
+    ],
+    "objects": [
+      {
+        "id": "source:coinbase",
+        "kind": "source",
+        "label": "Coinbase Exchange",
+        "data": {
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "token": "coinbase:ETH-USD",
+          "priceObjectId": "price:eth-usd"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T11:03:23.551Z",
+          "fetchedAt": "2026-10-07T11:03:27.551Z"
+        },
+        "visible": false,
+        "pinned": false
+      },
+      {
+        "id": "price:eth-usd",
+        "kind": "price",
+        "label": "ETH / USD",
+        "data": {
+          "price": 2500,
+          "unit": "USD",
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "token": "coinbase:ETH-USD",
+          "history": [],
+          "sourceObjectId": "source:coinbase"
+        },
+        "provenance": {
+          "source": "Coinbase Exchange",
+          "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
+          "kind": "live",
+          "label": "Fixture input shaped like a live Coinbase trade",
+          "observedAt": "2026-10-07T11:03:23.551Z",
+          "fetchedAt": "2026-10-07T11:03:27.551Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "vault:grant",
+        "kind": "vault",
+        "label": "Grant vault",
+        "data": {
+          "paused": false,
+          "balance": "0.119",
+          "balanceEth": 0.119,
+          "fixture": true,
+          "network": "Local rehearsal fixture",
+          "ccipTokens": 2,
+          "reserveEth": 0
+        },
+        "provenance": {
+          "source": "Local rehearsal fixture",
+          "kind": "fixture",
+          "label": "Fixture vault · no deployed contract",
+          "observedAt": "2026-10-07T11:03:27.560Z",
+          "fetchedAt": "2026-10-07T11:03:27.560Z"
+        },
+        "visible": true,
+        "pinned": false
+      },
+      {
+        "id": "condition:healthy",
+        "kind": "condition",
+        "label": "Chainlink ETH/USD (mainnet) > $1,000",
+        "data": {
+          "id": "healthy",
+          "kind": "compare",
+          "input": "eth",
+          "op": ">",
+          "value": 1000,
+          "source": "Chainlink ETH/USD (mainnet)",
+          "root": false
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.552Z",
+          "fetchedAt": "2026-10-07T11:03:27.552Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:active",
+        "kind": "condition",
+        "label": "Vault active",
+        "data": {
+          "id": "active",
+          "kind": "vault-paused",
+          "equals": false,
+          "source": "vault:grant",
+          "root": false
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.552Z",
+          "fetchedAt": "2026-10-07T11:03:27.552Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "condition:ok",
+        "kind": "condition",
+        "label": "All of 2 conditions",
+        "data": {
+          "id": "ok",
+          "kind": "and",
+          "inputs": [
+            "healthy",
+            "active"
+          ],
+          "logic": true,
+          "root": true
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.552Z",
+          "fetchedAt": "2026-10-07T11:03:27.552Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "action:pause",
+        "kind": "action",
+        "label": "Pay 0.001 ETH to the grantee",
+        "data": {
+          "type": "pay",
+          "payee": "grantee",
+          "amountEth": 0.001,
+          "target": "vault:grant"
+        },
+        "visible": true,
+        "pinned": false,
+        "provenance": {
+          "source": "Policy composition",
+          "observedAt": "2026-10-07T11:03:27.552Z",
+          "fetchedAt": "2026-10-07T11:03:27.552Z",
+          "kind": "derived",
+          "label": "Draft revision 1"
+        }
+      },
+      {
+        "id": "feed:eth-usd",
+        "kind": "feed",
+        "label": "ETH / USD",
+        "data": {
+          "price": 2500,
+          "unit": "USD",
+          "symbol": "ETH",
+          "decimals": 8,
+          "answer": "250000000000",
+          "roundId": "110680464442257320164",
+          "ageSeconds": 1500,
+          "ageLabel": "25 min ago",
+          "feedAddress": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+          "description": "ETH / USD",
+          "network": "ethereum-mainnet"
+        },
+        "provenance": {
+          "source": "Chainlink Data Feed",
+          "url": "https://etherscan.io/address/0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419#readContract",
+          "kind": "chain",
+          "chainId": 1,
+          "address": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+          "label": "Chainlink ETH / USD aggregator · Ethereum mainnet",
+          "observedAt": "2026-10-07T10:38:27.557Z",
+          "fetchedAt": "2026-10-07T11:03:27.557Z"
+        },
+        "visible": true,
+        "pinned": false
+      }
+    ],
+    "edges": [
+      {
+        "id": "in-healthy",
+        "from": "feed:eth-usd",
+        "to": "condition:healthy",
+        "label": "compares"
+      },
+      {
+        "id": "in-active",
+        "from": "vault:grant",
+        "to": "condition:active",
+        "label": "state"
+      },
+      {
+        "id": "in-ok-0",
+        "from": "condition:healthy",
+        "to": "condition:ok",
+        "label": "and"
+      },
+      {
+        "id": "in-ok-1",
+        "from": "condition:active",
+        "to": "condition:ok",
+        "label": "and"
+      },
+      {
+        "id": "out-root",
+        "from": "condition:ok",
+        "to": "action:pause",
+        "label": "if true"
+      },
+      {
+        "id": "e-act",
+        "from": "action:pause",
+        "to": "vault:grant",
+        "label": "pays grantee"
+      }
+    ],
+    "workflow": {
+      "id": "workflow:treasury",
+      "revision": 1,
+      "threshold": 3000,
+      "maxAgeSeconds": null,
+      "skipPaused": false,
+      "createdAt": "2026-10-07T11:03:27.552Z",
+      "reason": "Recipe: Streaming grant",
+      "graph": {
+        "nodes": [
+          {
+            "id": "eth",
+            "kind": "price",
+            "source": {
+              "type": "chainlink-feed",
+              "symbol": "ETH",
+              "network": "ethereum-mainnet"
+            }
+          },
+          {
+            "id": "healthy",
+            "kind": "compare",
+            "input": "eth",
+            "op": ">",
+            "value": 1000
+          },
+          {
+            "id": "active",
+            "kind": "vault-paused",
+            "equals": false
+          },
+          {
+            "id": "ok",
+            "kind": "and",
+            "inputs": [
+              "healthy",
+              "active"
+            ]
+          }
+        ],
+        "root": "ok",
+        "action": {
+          "type": "pay",
+          "payee": "grantee",
+          "amountEth": 0.001
+        }
+      },
+      "policyHash": "0x7e556e8791b6e66ab4ff0a5c114bd9243d1fabcb23050720d50ca0786646cecf",
+      "summary": "Pay 0.001 ETH to the grantee when (Chainlink ETH/USD (mainnet) > $1,000 and vault is active).",
+      "revisions": [
+        {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T11:03:27.552Z",
+          "reason": "Recipe: Streaming grant",
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "ETH",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "healthy",
+                "kind": "compare",
+                "input": "eth",
+                "op": ">",
+                "value": 1000
+              },
+              {
+                "id": "active",
+                "kind": "vault-paused",
+                "equals": false
+              },
+              {
+                "id": "ok",
+                "kind": "and",
+                "inputs": [
+                  "healthy",
+                  "active"
+                ]
+              }
+            ],
+            "root": "ok",
+            "action": {
+              "type": "pay",
+              "payee": "grantee",
+              "amountEth": 0.001
+            }
+          },
+          "policyHash": "0x7e556e8791b6e66ab4ff0a5c114bd9243d1fabcb23050720d50ca0786646cecf"
+        }
+      ],
+      "created": true
+    },
+    "runs": [
+      {
+        "id": "run-b5235cf2-a1f8-4886-bcbd-944eac9145ab",
+        "revision": 1,
+        "snapshot": {
+          "revision": 1,
+          "threshold": 3000,
+          "maxAgeSeconds": null,
+          "skipPaused": false,
+          "createdAt": "2026-10-07T11:03:27.552Z",
+          "reason": "Recipe: Streaming grant",
+          "graph": {
+            "nodes": [
+              {
+                "id": "eth",
+                "kind": "price",
+                "source": {
+                  "type": "chainlink-feed",
+                  "symbol": "ETH",
+                  "network": "ethereum-mainnet"
+                }
+              },
+              {
+                "id": "healthy",
+                "kind": "compare",
+                "input": "eth",
+                "op": ">",
+                "value": 1000
+              },
+              {
+                "id": "active",
+                "kind": "vault-paused",
+                "equals": false
+              },
+              {
+                "id": "ok",
+                "kind": "and",
+                "inputs": [
+                  "healthy",
+                  "active"
+                ]
+              }
+            ],
+            "root": "ok",
+            "action": {
+              "type": "pay",
+              "payee": "grantee",
+              "amountEth": 0.001
+            }
+          },
+          "policyHash": "0x7e556e8791b6e66ab4ff0a5c114bd9243d1fabcb23050720d50ca0786646cecf"
+        },
+        "policyHash": "0x7e556e8791b6e66ab4ff0a5c114bd9243d1fabcb23050720d50ca0786646cecf",
+        "action": "pay",
+        "trigger": "watch",
+        "watchCheck": 1,
+        "status": "confirmed",
+        "startedAt": "2026-10-07T11:03:27.555Z",
+        "executionMode": "Local policy rehearsal · fixture vault · no transaction",
+        "decisions": [
+          {
+            "id": "threshold",
+            "label": "threshold",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) $2,500.00 > $1,000.00",
+            "nodeId": "healthy",
+            "role": "node"
+          },
+          {
+            "id": "vault-state",
+            "label": "vault-state",
+            "passed": true,
+            "detail": "Vault is active; condition wants active",
+            "nodeId": "active",
+            "role": "node"
+          },
+          {
+            "id": "and",
+            "label": "and",
+            "passed": true,
+            "detail": "2 of 2 conditions held (all needed) → true",
+            "nodeId": "ok",
+            "role": "node"
+          },
+          {
+            "id": "composed-policy",
+            "label": "composed-policy",
+            "passed": true,
+            "detail": "Policy condition evaluated true",
+            "nodeId": "guard:root",
+            "role": "root"
+          },
+          {
+            "id": "source-freshness",
+            "label": "source-freshness",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) observed 1500.0s ago; limit 93600s",
+            "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:ETH",
+            "role": "guard"
+          },
+          {
+            "id": "vault-state",
+            "label": "vault-state",
+            "passed": true,
+            "detail": "Vault spending active",
+            "nodeId": "guard:vault-active",
+            "role": "guard"
+          },
+          {
+            "id": "vault-funds",
+            "label": "vault-funds",
+            "passed": true,
+            "detail": "Vault holds 0.12 ETH for a 0.001 ETH payment",
+            "nodeId": "guard:vault-funds",
+            "role": "guard"
+          }
+        ],
+        "logs": [
+          {
+            "at": "2026-10-07T11:03:27.555Z",
+            "stage": "queued",
+            "message": "Watch check 1: frozen revision 1"
+          },
+          {
+            "at": "2026-10-07T11:03:27.556Z",
+            "stage": "fetching",
+            "message": "Fetching fresh execution inputs"
+          },
+          {
+            "at": "2026-10-07T11:03:27.556Z",
+            "stage": "reporting",
+            "message": "Fixture rehearsal · live inputs, in-memory vault, no transaction"
+          },
+          {
+            "at": "2026-10-07T11:03:27.557Z",
+            "stage": "fetching",
+            "message": "Read vault active on chain 0"
+          },
+          {
+            "at": "2026-10-07T11:03:27.557Z",
+            "stage": "fetching",
+            "message": "Fetching Chainlink ETH/USD (mainnet)"
+          },
+          {
+            "at": "2026-10-07T11:03:27.558Z",
+            "stage": "evaluating",
+            "message": "PASS healthy: Chainlink ETH/USD (mainnet) $2,500.00 > $1,000.00"
+          },
+          {
+            "at": "2026-10-07T11:03:27.558Z",
+            "stage": "evaluating",
+            "message": "PASS active: Vault is active; condition wants active"
+          },
+          {
+            "at": "2026-10-07T11:03:27.559Z",
+            "stage": "evaluating",
+            "message": "PASS ok: 2 of 2 conditions held (all needed) → true"
+          },
+          {
+            "at": "2026-10-07T11:03:27.559Z",
+            "stage": "evaluating",
+            "message": "PASS root: Policy condition evaluated true"
+          },
+          {
+            "at": "2026-10-07T11:03:27.559Z",
+            "stage": "evaluating",
+            "message": "PASS source:chainlink-feed:ethereum-mainnet:ETH: Chainlink ETH/USD (mainnet) observed 1500.0s ago; limit 93600s"
+          },
+          {
+            "at": "2026-10-07T11:03:27.559Z",
+            "stage": "evaluating",
+            "message": "PASS vault-active: Vault spending active"
+          },
+          {
+            "at": "2026-10-07T11:03:27.560Z",
+            "stage": "evaluating",
+            "message": "PASS vault-funds: Vault holds 0.12 ETH for a 0.001 ETH payment"
+          },
+          {
+            "at": "2026-10-07T11:03:27.560Z",
+            "stage": "fetching",
+            "message": "Fixture vault changed in memory (0.001 ETH paid to the grantee). No blockchain execution was performed."
+          }
+        ],
+        "observations": [
+          {
+            "key": "chainlink-feed:ethereum-mainnet:ETH",
+            "label": "Chainlink ETH/USD (mainnet)",
+            "provider": "chainlink",
+            "unit": "USD",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+            "decimals": 8,
+            "value": 2500,
+            "usd": 2500,
+            "raw": "250000000000",
+            "roundId": "110680464442257320164",
+            "observedAt": "2026-10-07T10:38:27.557Z",
+            "fetchedAt": "2026-10-07T11:03:27.557Z"
+          }
+        ],
+        "evidence": {
+          "pausedAfter": false,
+          "fixture": true,
+          "fixtureEffects": {
+            "paidEth": 0.001,
+            "payee": "grantee"
+          },
+          "verification": "Local fixture changed only · no deployed contract or transaction"
+        },
+        "completedAt": "2026-10-07T11:03:27.560Z"
+      }
+    ],
+    "conversation": [
+      {
+        "id": "b5782bce-0b15-45b2-82bd-ec6b250f9db1",
+        "role": "assistant",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T11:03:23.551Z); Grant vault.",
+        "at": "2026-10-07T11:03:27.551Z",
+        "source": "mcp"
+      },
+      {
+        "id": "b6d29347-b84b-495e-abde-9d8d85fd3438",
+        "role": "assistant",
+        "text": "Revision 1. Pay 0.001 ETH to the grantee when (Chainlink ETH/USD (mainnet) > $1,000 and vault is active). Execution fetches Chainlink ETH/USD (mainnet). The vault pays only payees its owner registered (\"grantee\" must be one), within a per-payment cap and minimum interval enforced on chain; paused spending blocks it. Streaming grant, inspired by InControl (Convergence 2026, Autonomous Agents, 1st place). Each check pays at most once; the vault also caps each payment and enforces a minimum interval on chain. To keep it running, call watch_policy with everySeconds 60.",
+        "at": "2026-10-07T11:03:27.553Z",
+        "source": "mcp"
+      },
+      {
+        "id": "1d87e208-2251-4c4e-b139-f29b2e8ae40c",
+        "role": "assistant",
+        "text": "Watching revision 1 every 60s for up to 10 checks. Pay 0.001 ETH to the grantee when (Chainlink ETH/USD (mainnet) > $1,000 and vault is active). Each check is a fresh run with fresh inputs; checks that find nothing to do stay quiet.",
+        "at": "2026-10-07T11:03:27.554Z",
+        "source": "mcp"
+      },
+      {
+        "id": "a96f8fb1-26fa-4d4b-9cb0-26cc43c1e233",
+        "role": "assistant",
+        "text": "Watch check 1: Revision 1: fixture vault paid 0.001 ETH to the grantee in memory; no transaction.",
+        "at": "2026-10-07T11:03:27.561Z",
+        "source": "mcp"
+      }
+    ],
+    "activity": {
+      "status": "idle",
+      "prompt": "Run this version",
+      "summary": "Watching revision 1: check 1 of 10, Revision 1: fixture vault paid 0.001 ETH to the grantee in memory; no transaction.. Next check in 60s."
+    },
+    "latency": [
+      {
+        "operationId": "d",
+        "tool": "discover_objects",
+        "receivedAt": "2026-10-07T11:03:27.551Z",
+        "committedAt": "2026-10-07T11:03:27.551Z",
+        "commitMs": 0.16
+      },
+      {
+        "operationId": "c",
+        "tool": "apply_recipe",
+        "receivedAt": "2026-10-07T11:03:27.551Z",
+        "committedAt": "2026-10-07T11:03:27.553Z",
+        "commitMs": 1.99
+      },
+      {
+        "operationId": "w",
+        "tool": "watch_policy",
+        "receivedAt": "2026-10-07T11:03:27.554Z",
+        "committedAt": "2026-10-07T11:03:27.554Z",
+        "commitMs": 0.55
+      }
+    ],
+    "capabilities": {
+      "price": "Coinbase USD markets by exact token name/symbol; ETH also has Kraken fallback",
+      "vault": "Fixture vault · no deployed contract",
+      "execution": "Local policy rehearsal · fixture vault · no transaction",
+      "voice": "Planned utterances · actual desktop voice unverified",
+      "mcp": "Semantic tools · official MCP stdio transport"
+    },
+    "watch": {
+      "id": "watch-235e8835-fcf4-4f0a-a692-b3973606143d",
+      "revision": 1,
+      "snapshot": {
+        "revision": 1,
+        "threshold": 3000,
+        "maxAgeSeconds": null,
+        "skipPaused": false,
+        "createdAt": "2026-10-07T11:03:27.552Z",
+        "reason": "Recipe: Streaming grant",
+        "graph": {
+          "nodes": [
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "chainlink-feed",
+                "symbol": "ETH",
+                "network": "ethereum-mainnet"
+              }
+            },
+            {
+              "id": "healthy",
+              "kind": "compare",
+              "input": "eth",
+              "op": ">",
+              "value": 1000
+            },
+            {
+              "id": "active",
+              "kind": "vault-paused",
+              "equals": false
+            },
+            {
+              "id": "ok",
+              "kind": "and",
+              "inputs": [
+                "healthy",
+                "active"
+              ]
+            }
+          ],
+          "root": "ok",
+          "action": {
+            "type": "pay",
+            "payee": "grantee",
+            "amountEth": 0.001
+          }
+        },
+        "policyHash": "0x7e556e8791b6e66ab4ff0a5c114bd9243d1fabcb23050720d50ca0786646cecf"
+      },
+      "policyHash": "0x7e556e8791b6e66ab4ff0a5c114bd9243d1fabcb23050720d50ca0786646cecf",
+      "everySeconds": 60,
+      "maxChecks": 10,
+      "checks": 1,
+      "stopOnAction": false,
+      "status": "watching",
+      "startedAt": "2026-10-07T11:03:27.554Z",
+      "consecutiveFailures": 0,
+      "nextCheckAt": "2026-10-07T11:04:27.561Z",
+      "lastRunId": "run-b5235cf2-a1f8-4886-bcbd-944eac9145ab",
+      "lastOutcome": "Revision 1: fixture vault paid 0.001 ETH to the grantee in memory; no transaction."
+    },
+    "canUndoClear": false
+  }
+}

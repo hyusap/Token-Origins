@@ -32,13 +32,14 @@ export function canvasFlow(state: CanvasState) {
   const byId = new Map(view.graph.nodes.map(n => [n.id,n]));
   const canvasId = (id: string): string => {
     const node = byId.get(id)!;
-    return node.kind === "price" ? sourceObjectId(node.source) : "condition:" + id;
+    return node.kind === "price" || node.kind === "reading" ? sourceObjectId(node.source) : "condition:" + id;
   };
+  const isSource = (node: PolicyGraph["nodes"][number]) => node.kind === "price" || node.kind === "reading";
   const ranks = new Map<string,number>();
   const rank = (id: string): number => {
     if (ranks.has(id)) return ranks.get(id)!;
     const inputs = graphInputs(byId.get(id)!);
-    const value = inputs.length ? Math.max(...inputs.map(rank)) + 1 : byId.get(id)!.kind === "price" ? 0 : 1;
+    const value = inputs.length ? Math.max(...inputs.map(rank)) + 1 : isSource(byId.get(id)!) ? 0 : 1;
     ranks.set(id,value);
     return value;
   };
@@ -50,17 +51,18 @@ export function canvasFlow(state: CanvasState) {
     add("section:policy","section",40,0,{title:view.run ? `Frozen run · v${view.revision}` : "Draft policy",lane:"policy"});
     for (const node of view.graph.nodes) {
       const id = canvasId(node.id);
-      if (!emitted.has(id)) {
+      // The vault's own balance is drawn by the vault card below, not as a separate input.
+      if (!emitted.has(id) && id !== "vault:grant") {
         const column = rank(node.id);
         const row = occupied.get(column) || 0;
         occupied.set(column,row+1);
-        add(id,node.kind==="price" ? "price" : "conditions",40+column*360,46+row*360,{
-          object:node.kind==="price" ? view.objects.find(o => o.id===id) : undefined,
+        add(id,isSource(node) ? "price" : "conditions",40+column*360,46+row*360,{
+          object:isSource(node) ? view.objects.find(o => o.id===id) : undefined,
           graphNode:node,lane:"policy"});
         emitted.add(id);
         policyHeight = Math.max(policyHeight,(row+1)*360);
       }
-      for (const input of graphInputs(node)) edge(`graph:${input}:${node.id}`,canvasId(input),id,node.kind==="and"||node.kind==="or"||node.kind==="not" ? node.kind.toUpperCase() : node.kind);
+      for (const input of graphInputs(node)) edge(`graph:${input}:${node.id}`,canvasId(input),id,node.kind==="and"||node.kind==="or"||node.kind==="not" ? node.kind.toUpperCase() : node.kind==="math" ? node.op : node.kind);
     }
     add("action:pause","action",40+actionRank*360,46,{lane:"policy"});
     edge("graph:root-action",canvasId(view.graph.root),"action:pause","root true");
@@ -68,7 +70,9 @@ export function canvasFlow(state: CanvasState) {
   const vault = visible.find(o => o.kind==="vault");
   if (vault) {
     add(vault.id,"vault",40+(active ? actionRank+1 : 1)*360,46,{object:vault,lane:"policy"});
-    if (active && view.graph.action.type==="pause-vault") edge("graph:action-vault","action:pause",vault.id,"pause",{sourceHandle:"report",targetHandle:"report-in"});
+    const action = view.graph.action;
+    const verb = action.type==="pause-vault" ? "pause" : action.type==="sweep" ? "sweep" : action.type==="pay" ? "pay" : action.type==="evacuate" ? "CCIP" : null;
+    if (active && verb) edge("graph:action-vault","action:pause",vault.id,verb,{sourceHandle:"report",targetHandle:"report-in"});
     // State readers are roots in the drawing to avoid implying a cycle back into their own action.
   }
   const markets = view.run ? [] : visible.filter(o => (o.kind==="price"||o.kind==="feed") && !emitted.has(o.id));
@@ -85,7 +89,8 @@ export function canvasFlow(state: CanvasState) {
     add(`run:${run.id}`,"run",40+actionRank*360,extraY+Math.ceil(sources.length/4)*360,{run,lane:"evidence"});
     if (active) edge(`evidence:${run.id}`,"action:pause",`run:${run.id}`,"result",{sourceHandle:"evidence",style:{strokeDasharray:"4 5"}});
   }
-  return {nodes,edges:edges.map(e=>({type:"smoothstep",markerEnd:{type:MarkerType.ArrowClosed,color:"var(--bab-line-lit)"},
+  const drawn = new Set(nodes.map(node => node.id));
+  return {nodes,edges:edges.filter(e => drawn.has(e.source) && drawn.has(e.target)).map(e=>({type:"smoothstep",markerEnd:{type:MarkerType.ArrowClosed,color:"var(--bab-line-lit)"},
     labelStyle:{fill:"var(--bab-text-dim)",fontFamily:"var(--bab-mono)",fontSize:13},labelBgStyle:{fill:"var(--bab-black)"},
     ...e,style:{stroke:"var(--bab-line-lit)",strokeWidth:1,...e.style}}))};
 }

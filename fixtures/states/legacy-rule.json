@@ -28,7 +28,7 @@
   },
   "state": {
     "stateVersion": 2,
-    "sessionId": "5af1baf4-299d-4df2-997b-4c6a9470b225",
+    "sessionId": "ecc15e87-bec7-415c-9f69-dab181bee181",
     "seq": 2,
     "mode": "compose",
     "focus": {
@@ -40,7 +40,7 @@
       {
         "name": "Treasury policy",
         "objectId": "workflow:treasury",
-        "at": "2026-10-07T09:26:27.042Z"
+        "at": "2026-10-07T11:03:27.379Z"
       }
     ],
     "objects": [
@@ -58,8 +58,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T09:26:23.038Z",
-          "fetchedAt": "2026-10-07T09:26:27.038Z"
+          "observedAt": "2026-10-07T11:03:23.375Z",
+          "fetchedAt": "2026-10-07T11:03:27.375Z"
         },
         "visible": false,
         "pinned": false
@@ -82,8 +82,8 @@
           "url": "https://api.exchange.coinbase.com/products/ETH-USD/trades?limit=100",
           "kind": "live",
           "label": "Fixture input shaped like a live Coinbase trade",
-          "observedAt": "2026-10-07T09:26:23.038Z",
-          "fetchedAt": "2026-10-07T09:26:27.038Z"
+          "observedAt": "2026-10-07T11:03:23.375Z",
+          "fetchedAt": "2026-10-07T11:03:27.375Z"
         },
         "visible": true,
         "pinned": false
@@ -94,17 +94,19 @@
         "label": "Grant vault",
         "data": {
           "paused": false,
-          "balance": "1.2049",
-          "balanceEth": 1.2049,
+          "balance": "0.12",
+          "balanceEth": 0.12,
           "fixture": true,
-          "network": "Local rehearsal fixture"
+          "network": "Local rehearsal fixture",
+          "ccipTokens": 2,
+          "reserveEth": 0
         },
         "provenance": {
           "source": "Local rehearsal fixture",
           "kind": "fixture",
           "label": "Fixture vault · no deployed contract",
-          "observedAt": "2026-10-07T09:26:27.038Z",
-          "fetchedAt": "2026-10-07T09:26:27.038Z"
+          "observedAt": "2026-10-07T11:03:27.375Z",
+          "fetchedAt": "2026-10-07T11:03:27.375Z"
         },
         "visible": true,
         "pinned": false
@@ -122,8 +124,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.040Z",
-          "fetchedAt": "2026-10-07T09:26:27.040Z",
+          "observedAt": "2026-10-07T11:03:27.377Z",
+          "fetchedAt": "2026-10-07T11:03:27.377Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -139,8 +141,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.040Z",
-          "fetchedAt": "2026-10-07T09:26:27.040Z",
+          "observedAt": "2026-10-07T11:03:27.377Z",
+          "fetchedAt": "2026-10-07T11:03:27.377Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -156,8 +158,8 @@
         "pinned": false,
         "provenance": {
           "source": "Policy composition",
-          "observedAt": "2026-10-07T09:26:27.040Z",
-          "fetchedAt": "2026-10-07T09:26:27.040Z",
+          "observedAt": "2026-10-07T11:03:27.377Z",
+          "fetchedAt": "2026-10-07T11:03:27.377Z",
           "kind": "derived",
           "label": "Draft revision 1"
         }
@@ -207,7 +209,7 @@
       "threshold": 3000,
       "maxAgeSeconds": 60,
       "skipPaused": false,
-      "createdAt": "2026-10-07T09:26:27.040Z",
+      "createdAt": "2026-10-07T11:03:27.376Z",
       "reason": "Voice policy revision",
       "graph": {
         "nodes": [
@@ -240,7 +242,7 @@
           "threshold": 3000,
           "maxAgeSeconds": 60,
           "skipPaused": false,
-          "createdAt": "2026-10-07T09:26:27.040Z",
+          "createdAt": "2026-10-07T11:03:27.376Z",
           "reason": "Voice policy revision",
           "graph": {
             "nodes": [
@@ -273,17 +275,17 @@
     "runs": [],
     "conversation": [
       {
-        "id": "46ad893a-1089-4cc0-89a6-9bcbaec16375",
+        "id": "f67adc6c-3b49-491f-826e-5d5b5927424f",
         "role": "assistant",
-        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T09:26:23.038Z); Grant vault.",
-        "at": "2026-10-07T09:26:27.039Z",
+        "text": "Discovered ETH / USD: $2500 (Coinbase Exchange, observed 2026-10-07T11:03:23.375Z); Grant vault.",
+        "at": "2026-10-07T11:03:27.376Z",
         "source": "mcp"
       },
       {
-        "id": "89c37eb5-8243-44d3-93b8-1a8a9a4b0031",
+        "id": "d795f37d-237c-44a4-93b3-98b38a739547",
         "role": "assistant",
         "text": "Revision 1. When ETH / USD is below $3,000, the observation is no more than 60 seconds old, pause grant vault spending.",
-        "at": "2026-10-07T09:26:27.042Z",
+        "at": "2026-10-07T11:03:27.380Z",
         "source": "mcp"
       }
     ],
@@ -296,16 +298,16 @@
       {
         "operationId": "d",
         "tool": "discover_objects",
-        "receivedAt": "2026-10-07T09:26:27.038Z",
-        "committedAt": "2026-10-07T09:26:27.039Z",
-        "commitMs": 0.63
+        "receivedAt": "2026-10-07T11:03:27.375Z",
+        "committedAt": "2026-10-07T11:03:27.376Z",
+        "commitMs": 0.77
       },
       {
         "operationId": "p",
         "tool": "patch_workflow",
-        "receivedAt": "2026-10-07T09:26:27.039Z",
-        "committedAt": "2026-10-07T09:26:27.042Z",
-        "commitMs": 2.89
+        "receivedAt": "2026-10-07T11:03:27.376Z",
+        "committedAt": "2026-10-07T11:03:27.380Z",
+        "commitMs": 3.48
       }
     ],
     "capabilities": {

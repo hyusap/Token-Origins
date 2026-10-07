@@ -32,6 +32,22 @@ The app opens directly on the full-screen graph. A compact microphone meter sits
 
 Price discovery accepts exact Coinbase USD asset names, symbols, and qualified market IDs, and keeps each asset as a separate observation. Omitted tokens defaults to ETH; the grant-vault spending policy always uses ETH/USD. Restart `bun run server` after backend changes: a newly started MCP bridge checks semantic API compatibility before discovery and rejects older backends that would discard token arguments. `/api/health` reports the running process ID, start time, semantic API version, and a startup fingerprint of the semantic sources.
 
+## What the agent can build: past Chainlink winners, by voice
+
+Each past Chainlink hackathon winner below hand-built one automation. Sotto composes the same core loop from one sentence, as an ordinary policy graph run by the same CRE workflow, with the policy hash repeated in every on-chain event. `list_recipes` / `apply_recipe` offer these ready-made; `compose_graph` builds any variation.
+
+| Say | Inspired by | What runs |
+| --- | --- | --- |
+| "If WBTC's reserves fall below its supply or USDC depegs, sweep half the treasury to the reserve and pause." | SentinelCRE (Convergence 2026, CRE & AI, 1st) | Chainlink Proof of Reserve ÷ WBTC supply, USDC feed → real sweep + pause |
+| "If USDC and USDT drift more than a cent apart, pause spending." | FlowVault (Convergence 2026, DeFi & Tokenization, 1st) | USDC − USDT spread from two Chainlink feeds → real pause |
+| "If Compound pays half a point more than Aave on USDC, move it." | YieldCoin (Chromion 2025 Grand Prize), Copil | Aave v3 and Compound v3 supply rates read from their contracts → **simulated** rebalance |
+| "If the treasury is worth under $1,000, pause grants." | TokenIQ (Chromion 2025, Onchain Finance, 1st) | vault ETH × Chainlink ETH/USD → real pause |
+| "Pay the grantee 0.001 ETH every minute while ETH is above $1,000." | InControl (Convergence 2026, Autonomous Agents, 1st) | `watch_policy` through the CRE cron trigger → real capped, rate-limited payments |
+| "If ETH falls below $2,000 before Friday, pay the insured." | Azurance (Constellation 2023), TAPL (Convergence 2026, Prediction Markets, 1st) | ETH feed AND a time window → real payout |
+| "If ETH crashes, bridge the treasury's tokens to the reserve on Base and pause." | YieldCoin, Chronomancer (Block Magic 2024, Cross-Chain, 1st) | ETH feed → real Chainlink CCIP transfer to Base Sepolia + pause |
+
+Chainlink services used: CRE (HTTP and cron triggers, HTTP consensus, EVM reads on mainnet and Sepolia, EVM and Solana writes), Data Feeds, Proof of Reserve, and CCIP. "Inspired by" credits the idea; none of these teams' code is used. Every movement is bounded by the vault itself: the reserve and CCIP destination are fixed at deploy, payees are registered by the owner with a per-payment cap and minimum interval, so the worst a misbehaving agent or workflow can do is move funds to the owner's reserve.
+
 ## What actually works
 
 Two complete 13-cue takes each made **31 real MCP calls**. They discovered live timestamped Coinbase ETH/USD data and a deployed local vault, composed and revised the rule, recovered from an ambiguous reference, executed a false condition without a transaction, then delivered a pause report on the local EVM. The app required all three proofs before confirmation: a successful mined receipt, the matching receiver event, and a fresh `paused()` contract read. Later already-paused runs were no-ops. Additional real-agent probes verified source pinning, undo, old-receipt selection, and execution metadata, bringing the total to **86 actual MCP calls**. A rejected direct run reference in one probe was fixed and successfully retested with the real agent; the original failure remains in the saved evidence.
@@ -64,6 +80,7 @@ The CRE implementation is a fixed, allowlisted graph evaluator. The composed gra
 - **One CRE decision paused treasuries on Ethereum and Solana.** The same policy run paused the Sepolia vault ([tx](https://sepolia.etherscan.io/tx/0xcea844416b0ae01a6f96c491cc63c905931454be92c4091bc373b2e544def6ca)) and the [`sotto_vault`](https://explorer.solana.com/address/8g87GMMGr4JrzJpfh8v9oxyy8mwDRGawBRFJR8c1hqYD?cluster=devnet) program's [vault on Solana devnet](https://explorer.solana.com/address/7593tF3wMY5bT9hLv6hGgMXanRkgG7p48jsA6JcpXWtE?cluster=devnet) ([tx](https://explorer.solana.com/tx/39R7rvrjVS4etn7wmMXsMge6jpc4JRwnekpVsUmK6kMjQTVovoXeAY2i4Df3NJnmbZ8iWxGxNNmK4VaqPF3PiUHM?cluster=devnet)), and both events carry the same run, revision and policy hash. A Solana grant was [paid while active](https://explorer.solana.com/tx/cAMvEBAzY1nWaApTbe1Fyo6zvhVHzvGrDJf2TfdoN9CN5MrzzECSPwgmBMgun5vCvSTHLTLmEETjVMaRYWju3mp?cluster=devnet) and refused onchain (`SpendingIsPaused`) after the pause. Evidence: [`demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json`](demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json); re-check with `bun run verify:evidence demo/sepolia-evidence-2026-10-07T09-04-16-874Z.json`. CRE runs off-chain in the CLI simulator and writes to both chains through Chainlink's simulation forwarders; it is not deployed on a DON or on Solana.
 - **CRE simulation with a real Sepolia broadcast is proven.** A composed policy (Coinbase ETH trade AND Chainlink mainnet BTC feed) was evaluated inside the CRE workflow and paused the Sepolia vault in [`0x82e480e1…`](https://sepolia.etherscan.io/tx/0x82e480e1f08ce78253d4100ecd17795dd50c2b7714feda24192d01f77a29b4ec) (block 11861492). The receiver event carries the same policy hash as the frozen graph. The same run also recorded a false condition with no write, a duplicate with no second pause, and a simulated sell refused before any read or write. Evidence: [`demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json`](demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json); re-check it with `bun run verify:evidence demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json`. This is the CRE CLI simulator broadcasting through Chainlink's MockForwarder, **not** a deployed DON workflow.
 - Report v2 is also verified on real local Anvil by `tests/anvil-integration.test.ts`. The older takes above used report v1 (ETH-only threshold).
+- **Treasury actions (report v3) are proven locally, not yet on Sepolia.** Sweep, pay and CCIP evacuate run as real transactions on Anvil (with a stand-in CCIP router there, not CCIP), in the CRE workflow under the SDK's capability mocks, and on a local Solana validator, including an in-place upgrade of the program deployed on devnet. The Sepolia proof needs `bun run deploy:sepolia` and `bun run prove:actions` with the owner's key; the Proof of Reserve, Aave and Compound addresses need one `bun run verify:registry` against mainnet. Until then, say "proven locally" for these.
 - **Built-in desktop voice remains untested.** Preplanned voice prompts use the real Codex/MCP agent. Browser microphone capture supplies only the requested amplitude display; speech recognition and native Codex voice are separate integrations.
 - The draft revision in the observed take arrived after the fast local run finished. Snapshot immutability was verified; audio interruption during an in-flight transaction was not.
 - Measured CLI agent turn duration was 17.1–35.3 seconds, median 20.6 seconds. These are not voice latency figures. First-render acknowledgement handling was corrected after that take; its original render numbers are not claimed as reliable performance.
@@ -95,10 +112,12 @@ UI and voice work can build against `fixtures/states/*.json`: full canvas states
 - `scripts/mcp.ts` — official MCP SDK stdio server
 - `scripts/agent.ts` — real Codex CLI bridge, traces and timed cues
 - `demo/script.json` — filming transcript and minimum cue offsets
-- `cre/graph.ts` — policy graph, source registry, policy hash, shared evaluator, report v2
+- `cre/graph.ts` — policy graph, source registries, units, policy hash, shared evaluator, reports v2/v3
+- `cre/onchain-reads.ts` — how Proof of Reserve, supply and lending-rate contracts are read (shared by backend and CRE)
+- `server/recipes.ts` — winner-inspired recipes; `server/onchain.ts` — contract readings for the canvas
 - `cre/runner.ts` — fixture / local EVM / CRE execution paths and chain verification
 - `cre/workflow/handler.ts` — the CRE workflow
-- `contracts/src/GrantVault.sol` — receiver-enabled grant vault (report v2)
+- `contracts/src/GrantVault.sol` — receiver-enabled grant vault (report v3: pause, sweep, pay, CCIP evacuate)
 - `scripts/deploy-sepolia.ts`, `scripts/prove-sepolia.ts`, `scripts/verify-evidence.ts` — Sepolia deploy, proof and independent verification
 - `fixtures/states/` — reference UI/API states; `docs/execution-contract.md` — the shared contract
 - `.codex/config.toml` — project-scoped Sotto MCP connection

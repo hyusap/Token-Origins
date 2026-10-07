@@ -8,14 +8,20 @@ import { parseVaultEvents, SOLANA_DEVNET_RPC } from "../cre/solana-vault";
 
 const abi = parseAbi([
   "event SpendingPaused(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,uint256 decidedAt)",
+  "event ReserveSwept(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,address reserve,uint256 amount)",
+  "event GrantStreamed(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,bytes32 payeeId,address payee,uint256 amount)",
+  "event TreasuryEvacuated(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,bytes32 messageId,uint64 destinationChainSelector,address token,uint256 amount,uint256 fee)",
   "function paused() view returns (bool)",
   "function processedRuns(bytes32) view returns (bool)",
+  "function reserve() view returns (address)",
+  "function payees(bytes32) view returns (address)",
 ]);
 const defaultRpc = (chainId: number) =>
   chainId === 11155111 ? process.env.ORIGINS_SEPOLIA_RPC || "https://ethereum-sepolia-rpc.publicnode.com" : "http://127.0.0.1:8545";
 
 export async function verifyEvidenceFile(path: string, rpcUrl?: string) {
   const proof = await Bun.file(path).json();
+  if (proof.kind === "treasury-actions") return verifyActionsFile(proof, rpcUrl);
   const chainId: number = proof.chainId;
   const vault = proof.vault as Address;
   const client = createPublicClient({ transport: http(rpcUrl || proof.rpcUrl || defaultRpc(chainId)) });
@@ -84,4 +90,61 @@ if (import.meta.main) {
   const result = await verifyEvidenceFile(path, process.argv[3]);
   console.log(JSON.stringify(result, null, 2));
   if (!result.verified) process.exitCode = 1;
+}
+
+/**
+ * Re-checks a treasury-actions proof: every frozen graph still hashes to what
+ * ran, and each receipt holds this vault's own event for that run, revision and
+ * policy hash, moving what the evidence says to where the vault's config says.
+ */
+async function verifyActionsFile(proof: any, rpcUrl?: string) {
+  const vault = proof.vault as Address;
+  const client = createPublicClient({ transport: http(rpcUrl || proof.rpcUrl || defaultRpc(proof.chainId)) });
+  if ((await client.getChainId()) !== proof.chainId) throw new Error(`RPC is not chain ${proof.chainId}`);
+  const checks: Record<string, boolean | string> = {};
+  const reserve = (await client.readContract({ address: vault, abi, functionName: "reserve" })).toLowerCase();
+  for (const [name, entry] of Object.entries<any>(proof.cases)) {
+    const spec = specificationSchema.parse(entry.spec);
+    checks[`${name}.policyHashRecomputed`] = policyHash(spec.graph, spec.maxAgeSeconds) === spec.policyHash && spec.policyHash === entry.evidence.policyHash;
+    const receipt = await client.getTransactionReceipt({ hash: entry.evidence.transaction.hash as Hex });
+    checks[`${name}.receiptSuccess`] = receipt.status === "success";
+    const events = receipt.logs
+      .filter((log) => log.address.toLowerCase() === vault.toLowerCase())
+      .map((log) => { try { return decodeEventLog({ abi, data: log.data, topics: log.topics }) as any; } catch { return null; } })
+      .filter((event) => event && event.args.runId === runIdHash(spec.runId) && event.args.revision === BigInt(spec.revision) && String(event.args.policyHash).toLowerCase() === spec.policyHash.toLowerCase());
+    checks[`${name}.processedOnChain`] = await client.readContract({ address: vault, abi, functionName: "processedRuns", args: [runIdHash(spec.runId)] });
+    const effects = entry.evidence.transaction.effects ?? {};
+    const action = spec.graph.action;
+    if (action.type === "sweep") {
+      const swept = events.find((event) => event.eventName === "ReserveSwept");
+      checks[`${name}.reserveSwept`] = Boolean(swept) && swept.args.amount.toString() === effects.sweptWei && String(swept.args.reserve).toLowerCase() === reserve;
+    }
+    if (action.type === "pay") {
+      const paid = events.find((event) => event.eventName === "GrantStreamed");
+      const payee = paid ? (await client.readContract({ address: vault, abi, functionName: "payees", args: [paid.args.payeeId] })).toLowerCase() : "";
+      checks[`${name}.paidRegisteredPayee`] = Boolean(paid) && paid.args.amount.toString() === effects.paidWei && String(paid.args.payee).toLowerCase() === payee;
+      // CRE proofs record which trigger ran; local rehearsals have no cron trigger to claim.
+      if (proof.chainId === 11155111) checks[`${name}.ranThroughCronTrigger`] = entry.evidence.trigger === "cron";
+    }
+    if (action.type === "evacuate") {
+      const sent = events.find((event) => event.eventName === "TreasuryEvacuated");
+      checks[`${name}.ccipMessageSent`] = Boolean(sent) && sent.args.messageId === effects.ccipMessageId && sent.args.destinationChainSelector.toString() === effects.destinationChainSelector;
+      checks[`${name}.pausedInSameReport`] = events.some((event) => event.eventName === "SpendingPaused") || effects.paused === true;
+    }
+    const leg = entry.evidence.solana;
+    if (leg?.signature) {
+      const connection = new Connection(SOLANA_DEVNET_RPC, "confirmed");
+      const tx = await connection.getTransaction(leg.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+      const solanaEvents = parseVaultEvents(tx?.meta?.logMessages ?? []);
+      checks[`${name}.solanaSucceeded`] = Boolean(tx && !tx.meta?.err);
+      checks[`${name}.solanaSamePolicyHash`] = solanaEvents.some((event) => "runId" in event && event.runId === runIdHash(spec.runId) && event.policyHash.toLowerCase() === spec.policyHash.toLowerCase());
+    }
+  }
+  const failed = Object.entries(checks).filter(([, value]) => value !== true);
+  return {
+    verified: failed.length === 0,
+    chainId: proof.chainId, vault,
+    actions: Object.fromEntries(Object.entries<any>(proof.cases).map(([name, entry]) => [name, { policy: describeGraph(specificationSchema.parse(entry.spec).graph), transaction: entry.evidence.transaction.hash, ...(entry.evidence.transaction.effects?.ccipExplorerUrl ? { ccip: entry.evidence.transaction.effects.ccipExplorerUrl } : {}) }])),
+    checks,
+  };
 }

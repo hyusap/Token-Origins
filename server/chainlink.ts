@@ -232,6 +232,7 @@ export function feedObservation(object: GraphObject, source: FeedSource): Observ
   const usd = Number(object.data.price);
   return {
     ...identity,
+    value: usd,
     usd,
     raw: String(object.data.answer ?? Math.round(usd * 10 ** FEED_DECIMALS)),
     ...(object.data.roundId ? { roundId: String(object.data.roundId) } : {}),

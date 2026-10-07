@@ -1,5 +1,6 @@
-import type { PolicyGraph, Observation, ResultRole } from "../cre/graph";
-export type { PolicyGraph, Observation, ResultRole };
+import type { PolicyGraph, PolicyAction, Observation, ResultRole } from "../cre/graph";
+import type { ReceiverEffects, FixtureEffects, SimulatedRebalance } from "../cre/runner";
+export type { PolicyGraph, PolicyAction, Observation, ResultRole, ReceiverEffects, FixtureEffects, SimulatedRebalance };
 export type Mode = "explore" | "compose" | "run";
 export interface Provenance {
   source: string;
@@ -17,7 +18,8 @@ export interface PricePoint {
 }
 export interface GraphObject {
   id: string;
-  kind: "price" | "vault" | "condition" | "action" | "source" | "feed";
+  /** reading: a contract-backed input that is not a price (Proof of Reserve, supply, lending rate). */
+  kind: "price" | "vault" | "condition" | "action" | "source" | "feed" | "reading";
   label: string;
   data: Record<string, any>;
   provenance: Provenance;
@@ -83,7 +85,11 @@ export interface ExecutionRun {
   /** Hash of the frozen graph this run evaluated. */
   policyHash?: string;
   /** The action the frozen graph names. */
-  action?: "pause-vault" | "sell";
+  action?: PolicyAction["type"];
+  /** manual: run_workflow; watch: a standing policy's scheduled check. */
+  trigger?: "manual" | "watch";
+  /** Which check of the standing policy this run was. */
+  watchCheck?: number;
   inputs?: { price: GraphObject; vault: GraphObject };
   /** Every source reading the decision used, with provider, network, address and timestamps. */
   observations?: Observation[];
@@ -107,7 +113,17 @@ export interface ExecutionRun {
     /** Fixture rehearsal: in-memory state only. */
     fixture?: boolean;
     /** The same decision on the Solana vault (sotto_vault program, devnet), verified from chain data. */
-    solana?: { network: string; programId: string; vault: string; signature: string | null; verified: boolean; slot?: number; explorerUrl?: string };
+    solana?: { network: string; programId: string; vault: string; signature: string | null; verified: boolean; slot?: number; explorerUrl?: string; action?: "pause" | "sweep"; reserve?: string; sweptLamports?: number };
+    /** Why an acting decision left the Solana vault unchanged. */
+    solanaSkipped?: string;
+    /** What the receiver did, decoded from its events for this run: pause, sweep, payment, CCIP message. */
+    effects?: ReceiverEffects;
+    /** CCIP explorer link for an evacuation's cross-chain message. */
+    ccipExplorerUrl?: string;
+    /** Fixture rehearsal: what changed in the in-memory vault. */
+    fixtureEffects?: FixtureEffects;
+    /** Present only for a mock rebalance. Never a real order or asset movement. */
+    simulatedRebalance?: SimulatedRebalance;
     verification?: string;
     /** Present only for a mock sell. Never a real order or asset movement. */
     simulatedOrder?: {
@@ -124,6 +140,25 @@ export interface ExecutionRun {
     };
   };
   error?: string;
+}
+/** A standing policy: one frozen revision re-checked on a schedule until it acts, is stopped, or runs out of checks. */
+export interface WatchState {
+  id: string;
+  revision: number;
+  /** The frozen revision every check evaluates, whatever the draft becomes. */
+  snapshot: WorkflowRevision;
+  policyHash?: string;
+  everySeconds: number;
+  maxChecks: number;
+  checks: number;
+  stopOnAction: boolean;
+  status: "watching" | "stopped";
+  startedAt: string;
+  nextCheckAt?: string;
+  lastRunId?: string;
+  lastOutcome?: string;
+  stopReason?: string;
+  consecutiveFailures: number;
 }
 export interface ConversationEntry {
   id: string;
@@ -177,6 +212,8 @@ export interface CanvasState {
     mcp: string;
   };
   clarification?: { question: string; candidates: string[] };
+  /** The standing policy, if one was started this session. */
+  watch?: WatchState;
 }
 export interface ToolResult {
   ok: boolean;
