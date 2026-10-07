@@ -136,9 +136,9 @@ test('J7: a network the CRE project has no RPC for is refused before simulation'
   await expect(assertCreSupports(sell,['ethereum-testnet-sepolia'])).rejects.toThrow(/Simulated sells/);
 });
 
-test('the project configures RPCs for both feed networks',async()=>{
+test('the project configures RPCs for both feed networks and the Solana vault',async()=>{
   const {configuredCreChains}=await import('./runner');
-  expect((await configuredCreChains()).sort()).toEqual(['ethereum-mainnet','ethereum-testnet-sepolia']);
+  expect((await configuredCreChains()).sort()).toEqual(['ethereum-mainnet','ethereum-testnet-sepolia','solana-devnet']);
 });
 
 test('evidence leaves the workflow in log lines under the 1 KB CRE limit and reassembles exactly',()=>{
@@ -160,4 +160,47 @@ test('a missing or inconsistent evidence chunk is an error, never partial eviden
   expect(chunks.length).toBeGreaterThan(3);
   expect(()=>joinEvidenceChunks(chunks.filter((_,i)=>i!==1).join('\n'))).toThrow(/chunk 2\/\d+ is missing/);
   expect(()=>joinEvidenceChunks('no evidence here')).toThrow(/no structured execution evidence/);
+});
+
+// ---- Solana leg: the same decision paused on a second treasury ----
+import {SolanaMock} from '@chainlink/cre-sdk/test';
+import {getNetwork} from '@chainlink/cre-sdk';
+import {encodeSolanaPauseReport} from './solana-report';
+const solanaConfig={chainSelectorName:'solana-devnet' as const,receiverProgramId:'8g87GMMGr4JrzJpfh8v9oxyy8mwDRGawBRFJR8c1hqYD',forwarderProgramId:'7kuEAA3mSC1Tz8gQjnvH7bKFda9xSPRRin9SZbH49cNK',forwarderState:'5Tipz3yhTBdVsDbaBxZkrp7Gjf3brGq5SKkxReefPMP7',vault:'9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin'};
+const solanaSelector=getNetwork({chainFamily:'solana',chainSelectorName:'solana-devnet',isTestnet:true})!.chainSelector.selector;
+function setupWithSolana(price:number,opts:{paused?:boolean;solanaStatus?:string}={}) {
+  const t=setup(price,{paused:opts.paused});
+  const runtime=newTestRuntime(null,{timeProvider:()=>now},{...config,solana:solanaConfig});
+  const solana=SolanaMock.testInstance(solanaSelector);
+  const solanaWrites:any[]=[];
+  solana.writeReport=(request)=>{solanaWrites.push(request);return {txStatus:opts.solanaStatus??'TX_STATUS_SUCCESS',txSignature:Buffer.alloc(64,9).toString('base64')} as any;};
+  return {...t,runtime,solanaWrites};
+}
+
+test('an acting decision pauses the Solana vault too, with the same run and policy hash',()=>{
+  const t=setupWithSolana(2700);
+  const spec=specFor(legacyGraph(3000));
+  const result=JSON.parse(onHttp(t.runtime,payload(spec)));
+  expect(t.writes()).toBe(1);
+  expect(t.solanaWrites.length).toBe(1);
+  const request=t.solanaWrites[0];
+  // Account order is part of the forwarder's hash: state, authority PDA, vault.
+  const keys=request.remainingAccounts.map((a:any)=>Buffer.from(a.publicKey).toString('hex'));
+  expect(keys).toHaveLength(3);
+  expect(keys[2]).toBe(Buffer.from(new (require('@solana/web3.js').PublicKey)(solanaConfig.vault).toBytes()).toString('hex'));
+  const expected=encodeSolanaPauseReport({vault:new (require('@solana/web3.js').PublicKey)(solanaConfig.vault).toBytes(),runId:spec.runId,revision:spec.revision,policyHash:spec.policyHash as any,decidedAt:now/1000});
+  const raw=Buffer.from(request.report.rawReport);
+  expect(raw.subarray(raw.length-expected.length).equals(Buffer.from(expected))).toBe(true);
+  expect(result.solana).toMatchObject({status:'success',vault:solanaConfig.vault,programId:solanaConfig.receiverProgramId});
+  expect(result.solana.signature).toMatch(/^[1-9A-HJ-NP-Za-km-z]{60,90}$/);
+});
+
+test('no Solana write when the policy does not act, and a Solana failure is recorded without losing EVM evidence',()=>{
+  const quiet=setupWithSolana(3500);
+  expect(JSON.parse(onHttp(quiet.runtime,payload(specFor(legacyGraph(3000))))).decision).toBe('noop');
+  expect(quiet.solanaWrites.length).toBe(0);
+  const failing=setupWithSolana(2700,{solanaStatus:'TX_STATUS_FATAL'});
+  const result=JSON.parse(onHttp(failing.runtime,payload(specFor(legacyGraph(3000)))));
+  expect(result.transaction.receiverConfirmed).toBe(true);
+  expect(result.solana.status).toBe('failed');
 });

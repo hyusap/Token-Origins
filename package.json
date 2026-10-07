@@ -17,7 +17,10 @@
     "prove:sepolia": "bun run scripts/prove-sepolia.ts",
     "verify:local": "bun run scripts/verify-local.ts",
     "verify:evidence": "bun run scripts/verify-evidence.ts",
-    "fixtures": "bun run scripts/generate-fixtures.ts"
+    "fixtures": "bun run scripts/generate-fixtures.ts",
+    "deploy:solana": "bun run scripts/deploy-solana.ts",
+    "prove:multichain": "bun run scripts/prove-sepolia.ts",
+    "solana:wallet": "bun run scripts/solana-wallet.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

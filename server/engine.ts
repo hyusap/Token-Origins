@@ -1211,7 +1211,7 @@ export class Engine {
       return `${v}: simulated sell of ${run.evidence.simulatedOrder.amount} ${run.evidence.simulatedOrder.symbol}; no transaction, no asset moved.`;
     if (run.evidence?.fixture) return `${v}: fixture vault paused in memory; no transaction.`;
     if (run.evidence?.transactionHash)
-      return `${v}: vault paused at block ${run.evidence.blockNumber}, verified by receipt, receiver event and a fresh read.`;
+      return `${v}: vault paused at block ${run.evidence.blockNumber}, verified by receipt, receiver event and a fresh read.${run.evidence.solana?.verified ? " The Solana vault was paused by the same decision." : ""}`;
     return `${v}: ${run.executionMode}`;
   }
   /** Maps runner evidence onto the run record and the canvas. Throws if a claimed action is not verified. */
@@ -1292,6 +1292,13 @@ export class Engine {
           ? { explorerUrl: `${NETWORKS["ethereum-sepolia"].explorer}/tx/${tx.hash}` }
           : {}),
       };
+      if (result.solana)
+        run.evidence.solana = {
+          network: result.solana.network, programId: result.solana.programId, vault: result.solana.vault,
+          signature: result.solana.signature, verified: Boolean(result.solana.verified),
+          ...(result.solana.slot !== undefined ? { slot: result.solana.slot } : {}),
+          ...(result.solana.explorerUrl ? { explorerUrl: result.solana.explorerUrl } : {}),
+        };
       if (!tx.receiverConfirmed || !tx.pausedAfter || !["success", "confirmed", 1, "0x1"].includes(tx.status as any))
         throw new Error("Report transaction did not verify receiver execution and paused state");
       run.status = "confirmed";

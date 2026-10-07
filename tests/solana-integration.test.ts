@@ -74,7 +74,9 @@ test("the Solana report is exactly the 114-byte Borsh layout the program decodes
 
 test.skipIf(!enabled)("the Solana vault holds SOL and pays grants while active", async () => {
   const before = await connection.getBalance(recipient);
-  await send([payGrantIx(vault.publicKey, payer.publicKey, recipient, BigInt(LAMPORTS_PER_SOL / 10))], [payer]);
+  const paid = await send([payGrantIx(vault.publicKey, payer.publicKey, recipient, BigInt(LAMPORTS_PER_SOL / 10))], [payer]);
+  const logs = (await connection.getTransaction(paid, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }))!.meta!.logMessages!;
+  expect(parseVaultEvents(logs)).toContainEqual({ name: "GrantPaid", vault: vault.publicKey.toBase58(), recipient: recipient.toBase58(), amount: LAMPORTS_PER_SOL / 10 });
   expect((await connection.getBalance(recipient)) - before).toBe(LAMPORTS_PER_SOL / 10);
   expect((await readSolanaVault(connection, vault.publicKey)).paused).toBe(false);
 }, 60_000);

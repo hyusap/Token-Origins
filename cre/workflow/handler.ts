@@ -1,4 +1,6 @@
-import { EVMClient, protoBigIntToBigint, HTTPClient, decodeJson, encodeCallMsg, bytesToHex, hexToBase64, LATEST_BLOCK_NUMBER, TxStatus, ConsensusAggregationByFields, median, type HTTPSendRequester, type HTTPPayload, type Runtime } from '@chainlink/cre-sdk';
+import { EVMClient, protoBigIntToBigint, HTTPClient, decodeJson, encodeCallMsg, bytesToHex, hexToBase64, LATEST_BLOCK_NUMBER, TxStatus, ConsensusAggregationByFields, median, SolanaClient, SolanaTxStatus, getNetwork, solanaAccountMeta, solanaAccountMetasToJson, calculateAccountsHash, encodeForwarderReport, prepareSolanaReportRequest, type HTTPSendRequester, type HTTPPayload, type Runtime } from '@chainlink/cre-sdk';
+import { PublicKey } from '@solana/web3.js';
+import { encodeSolanaPauseReport } from '../solana-report';
 import { EVM_PB } from '@chainlink/cre-sdk/pb';
 import { encodeFunctionData, decodeFunctionResult, parseAbi, zeroAddress, type Address, type Hex } from 'viem';
 import { z } from 'zod';
@@ -10,10 +12,19 @@ import {
 } from '../graph';
 
 const VAULT_NETWORK = 'ethereum-sepolia' as const;
+const base58 = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 export const configSchema = z.object({
   vaultAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
   chainSelector: z.literal(NETWORKS[VAULT_NETWORK].chainSelector),
   gasLimit: z.string(),
+  /** Optional second treasury: the sotto_vault program on Solana, paused by the same decision. */
+  solana: z.object({
+    chainSelectorName: z.literal('solana-devnet'),
+    receiverProgramId: base58,
+    forwarderProgramId: base58,
+    forwarderState: base58,
+    vault: base58,
+  }).strict().optional(),
 });
 export type Config = z.infer<typeof configSchema>;
 const vaultAbi = parseAbi(['function paused() view returns (bool)', 'function reportVersion() view returns (uint256)']);
@@ -97,7 +108,51 @@ export function onHttp(runtime: Runtime<Config>, payload: HTTPPayload): string {
     evidence.transaction = { hash: tx.txHash ? bytesToHex(tx.txHash) : null, status: tx.txStatus === TxStatus.SUCCESS ? 'success' : 'failed', receiverConfirmed };
     if (tx.txStatus !== TxStatus.SUCCESS || !receiverConfirmed) throw new Error(`Report did not execute successfully: ${tx.errorMessage || tx.receiverContractExecutionStatus}`);
   }
+  // The same decision lands on Solana: one run, one policy hash, two treasuries.
+  if (result.decision === 'act' && spec.broadcast !== false && runtime.config.solana)
+    evidence.solana = writeSolanaPause(runtime, runtime.config.solana, spec.runId, spec.revision, spec.policyHash as Hex, Math.floor(nowMs / 1000));
   const json = JSON.stringify(evidence);
   for (const chunk of evidenceChunks(json)) runtime.log(chunk);
   return json;
+}
+
+const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+/** Base58 for transaction signatures (64 bytes), which PublicKey cannot encode. */
+function toBase58(bytes: Uint8Array): string {
+  let value = 0n;
+  for (const byte of bytes) value = value * 256n + BigInt(byte);
+  let out = '';
+  while (value > 0n) { out = BASE58[Number(value % 58n)] + out; value /= 58n; }
+  for (const byte of bytes) { if (byte !== 0) break; out = '1' + out; }
+  return out;
+}
+
+/**
+ * Writes the pause to the sotto_vault program through the keystone forwarder:
+ * accounts are [forwarder state, forwarder authority PDA, vault], hashed into
+ * the report so the forwarder delivers exactly these. Failures are recorded,
+ * not thrown, so the EVM evidence above is never lost; the runner refuses to
+ * confirm a run whose Solana write did not verify.
+ */
+function writeSolanaPause(runtime: Runtime<Config>, config: NonNullable<Config['solana']>, runId: string, revision: number, policyHash: Hex, decidedAt: number) {
+  const network = getNetwork({ chainFamily: 'solana', chainSelectorName: config.chainSelectorName, isTestnet: true });
+  if (!network) throw new Error(`Unknown Solana network ${config.chainSelectorName}`);
+  const program = new PublicKey(config.receiverProgramId);
+  const state = new PublicKey(config.forwarderState);
+  const [authority] = PublicKey.findProgramAddressSync([new TextEncoder().encode('forwarder'), state.toBytes(), program.toBytes()], new PublicKey(config.forwarderProgramId));
+  const accounts = [solanaAccountMeta(config.forwarderState, true), solanaAccountMeta(authority.toBase58()), solanaAccountMeta(config.vault, true)];
+  const payload = encodeSolanaPauseReport({ vault: new PublicKey(config.vault).toBytes(), runId, revision, policyHash, decidedAt });
+  runtime.log(`ORIGINS_SOLANA Writing pause for run ${runId} to vault ${config.vault} on ${config.chainSelectorName}`);
+  const report = runtime.report(prepareSolanaReportRequest(encodeForwarderReport({ accountHash: calculateAccountsHash(accounts), payload }))).result();
+  const reply = new SolanaClient(network.chainSelector.selector).writeReport(runtime, {
+    remainingAccounts: solanaAccountMetasToJson(accounts),
+    receiver: bytesToHex(program.toBytes()),
+    computeConfig: { computeLimit: 290_000 },
+    report,
+  }).result();
+  const signature = reply.txSignature && reply.txSignature.length ? toBase58(reply.txSignature) : null;
+  return {
+    network: config.chainSelectorName, programId: config.receiverProgramId, vault: config.vault, forwarderProgram: config.forwarderProgramId,
+    signature, status: reply.txStatus === SolanaTxStatus.SUCCESS ? 'success' : 'failed', ...(reply.errorMessage ? { error: reply.errorMessage } : {}),
+  };
 }

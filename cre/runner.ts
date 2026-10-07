@@ -32,6 +32,8 @@ export interface ExecutionEvidence {
   simulatedOrder?:SimulatedOrder;
   /** Fixture rehearsal changed only in-memory vault state. */
   fixturePaused?:boolean;
+  /** The same decision written to the sotto_vault program on Solana (CRE mode with ORIGINS_SOLANA_VAULT). */
+  solana?:{network:string;programId:string;vault:string;forwarderProgram:string;signature:string|null;status:string;error?:string;verified?:boolean;slot?:number;explorerUrl?:string};
   logs:string[];
 }
 
@@ -229,6 +231,16 @@ export async function assertCreSupports(spec:ExecutionSpecification,chains?:stri
     if(!available.includes(chain)) throw new Error(`${describeSource(source)} needs an RPC for ${chain} in cre/project.yaml; CRE will not substitute another network. Nothing was submitted.`);
   }
   if(!available.includes(NETWORKS['ethereum-sepolia'].creChainName)) throw new Error('cre/project.yaml has no Sepolia RPC for the vault');
+  if(process.env.ORIGINS_SOLANA_VAULT&&!available.includes('solana-devnet')) throw new Error('ORIGINS_SOLANA_VAULT is set but cre/project.yaml has no solana-devnet RPC');
+}
+/** The Solana treasury CRE should also pause, when configured. Uses CRE's simulation forwarder on devnet. */
+async function solanaTarget() {
+  const vault=process.env.ORIGINS_SOLANA_VAULT;
+  if(!vault) return undefined;
+  const {SOTTO_VAULT_PROGRAM_ID,SIMULATION_FORWARDER}=await import('./solana-vault');
+  if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(vault)) throw new Error('ORIGINS_SOLANA_VAULT must be a base58 Solana address');
+  if(!process.env.CRE_SOLANA_PRIVATE_KEY) throw new Error('Solana writes need CRE_SOLANA_PRIVATE_KEY (a funded devnet key) for the CRE CLI to submit the transaction');
+  return {chainSelectorName:'solana-devnet',receiverProgramId:SOTTO_VAULT_PROGRAM_ID.toBase58(),forwarderProgramId:SIMULATION_FORWARDER.program.toBase58(),forwarderState:SIMULATION_FORWARDER.state.toBase58(),vault};
 }
 const creBinary=async()=>{
   const local=resolve(import.meta.dir,'bin/cre');
@@ -247,7 +259,8 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
   // pricing; 350k ran the receiver out of gas (traced OutOfGas at ~198k inside onReport).
   const gasLimit=process.env.ORIGINS_CRE_GAS_LIMIT||'2000000';
   if(!/^\d+$/.test(gasLimit)||Number(gasLimit)>10_000_000) throw new Error('ORIGINS_CRE_GAS_LIMIT must be a whole number up to the CRE limit of 10,000,000');
-  await Bun.write(configPath,JSON.stringify({vaultAddress:vault,chainSelector:NETWORKS['ethereum-sepolia'].chainSelector,gasLimit}));
+  const solana=await solanaTarget();
+  await Bun.write(configPath,JSON.stringify({vaultAddress:vault,chainSelector:NETWORKS['ethereum-sepolia'].chainSelector,gasLimit,...(solana?{solana}:{})}));
   // The CLI authenticates itself from `cre login` or CRE_API_KEY; this process never reads those credentials.
   const args=[await creBinary(),'workflow','simulate','./workflow','--project-root',root,'--target','staging-settings','--non-interactive','--trigger-index','0','--http-payload',JSON.stringify(spec),'--config',configPath];
   if(spec.broadcast!==false) args.push('--broadcast');
@@ -256,12 +269,12 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
   const timeout=setTimeout(()=>proc.kill(),240000);
   const [stdout,stderr,code]=await Promise.all([new Response(proc.stdout).text(),new Response(proc.stderr).text(),proc.exited]);clearTimeout(timeout);
   // Error output may echo key material; drop every secret and every 32-byte hex string.
-  const redact=(text:string)=>{for(const secret of [process.env.CRE_API_KEY,process.env.CRE_ETH_PRIVATE_KEY]) if(secret) text=text.split(secret).join('[redacted]');return text.replace(/(0x)?[a-fA-F0-9]{64}/g,'[redacted]');};
+  const redact=(text:string)=>{for(const secret of [process.env.CRE_API_KEY,process.env.CRE_ETH_PRIVATE_KEY,process.env.CRE_SOLANA_PRIVATE_KEY]) if(secret) text=text.split(secret).join('[redacted]');return text.replace(/(0x)?[a-fA-F0-9]{64}/g,'[redacted]');};
   if(code!==0) throw new Error(`CRE execution failed (${code}): ${redact(stderr||stdout).slice(-1500)}`);
   const cleanOutput=stdout.replace(/\u001b\[[0-9;]*m/g,'');
   // Keep the last CLI transcript (secrets removed) for diagnosis.
   let transcript=cleanOutput;
-  for(const secret of [process.env.CRE_API_KEY,process.env.CRE_ETH_PRIVATE_KEY]) if(secret) transcript=transcript.split(secret).join('[redacted]');
+  for(const secret of [process.env.CRE_API_KEY,process.env.CRE_ETH_PRIVATE_KEY,process.env.CRE_SOLANA_PRIVATE_KEY]) if(secret) transcript=transcript.split(secret).join('[redacted]');
   await Bun.write(resolve(root,'../.data/cre-last-run.log'),transcript).catch(()=>{});
   let evidence:ExecutionEvidence;
   try {evidence=JSON.parse(joinEvidenceChunks(cleanOutput)) as ExecutionEvidence;}
@@ -282,7 +295,22 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
       throw new Error(`CRE report did not verify (${failed.join('; ')}).\n  ${notes.join('\n  ')}\n  ${NETWORKS['ethereum-sepolia'].explorer}/tx/${receipt.transactionHash}`);
     }
   }
+  if(solana&&evidence.decision==='act'&&spec.broadcast!==false) await verifySolanaLeg(evidence,spec);
   return evidence;
+}
+
+/** Confirms the Solana write from chain data: success, matching SpendingPaused event, paused vault recording this run. */
+async function verifySolanaLeg(evidence:ExecutionEvidence,spec:ExecutionSpecification) {
+  const {verifySolanaPause,solanaExplorer,SOLANA_DEVNET_RPC}=await import('./solana-vault');
+  const {Connection,PublicKey}=await import('@solana/web3.js');
+  const leg=evidence.solana;
+  if(!leg) throw new Error('The policy acted but CRE returned no Solana write evidence');
+  if(leg.status!=='success'||!leg.signature) throw new Error(`Solana write failed: ${leg.error??leg.status}. The EVM pause is verified; the Solana vault was not paused.`);
+  const check=await verifySolanaPause(new Connection(SOLANA_DEVNET_RPC,'confirmed'),leg.signature,new PublicKey(leg.vault),spec.runId,spec.revision,spec.policyHash);
+  leg.verified=check.succeeded&&check.event&&check.pausedAfter&&check.lastRunMatches;
+  leg.slot=check.slot;
+  leg.explorerUrl=solanaExplorer(leg.signature);
+  if(!leg.verified) throw new Error(`Solana pause did not verify (${[!check.succeeded&&`transaction failed ${check.error??''}`,!check.event&&'no matching SpendingPaused event',!check.pausedAfter&&'vault not paused',!check.lastRunMatches&&'vault did not record this run'].filter(Boolean).join('; ')}).\n  ${check.logs.slice(-12).join('\n  ')}\n  ${leg.explorerUrl}`);
 }
 
 /** paused() as of a given block, retrying while a load-balanced RPC catches up to it. */

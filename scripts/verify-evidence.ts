@@ -3,6 +3,8 @@
 import { createPublicClient, http, parseAbi, decodeEventLog, type Address, type Hex } from "viem";
 import { policyHash, runIdHash, describeGraph } from "../cre/graph";
 import { specificationSchema } from "../cre/spec";
+import { Connection } from "@solana/web3.js";
+import { parseVaultEvents, SOLANA_DEVNET_RPC } from "../cre/solana-vault";
 
 const abi = parseAbi([
   "event SpendingPaused(bytes32 indexed runId,uint256 indexed revision,bytes32 indexed policyHash,uint256 decidedAt)",
@@ -50,6 +52,22 @@ export async function verifyEvidenceFile(path: string, rpcUrl?: string) {
   checks["duplicate.noSecondTransaction"] = !proof.cases.duplicate.newRunOnPausedVault.evidence.transaction;
   const sell = proof.cases.unsupportedAction;
   checks["unsupportedAction.noTransaction"] = !sell.evidence?.transaction;
+  // Solana half: the same decision, run and policy hash on the Solana vault, plus the grant beats.
+  const leg = proof.cases.trueCondition.evidence.solana;
+  if (proof.solana || leg) {
+    const connection = new Connection(SOLANA_DEVNET_RPC, "confirmed");
+    const tx = leg?.signature ? await connection.getTransaction(leg.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }) : null;
+    checks["solana.transactionSucceeded"] = Boolean(tx && !tx.meta?.err);
+    const event = parseVaultEvents(tx?.meta?.logMessages ?? []).find((e) => e.name === "SpendingPaused");
+    checks["solana.eventVault"] = event?.name === "SpendingPaused" && event.vault === leg?.vault;
+    checks["solana.eventRunId"] = event?.name === "SpendingPaused" && event.runId === runIdHash(pause.runId);
+    checks["solana.eventRevision"] = event?.name === "SpendingPaused" && event.revision === pause.revision;
+    checks["solana.eventPolicyHashMatchesEthereum"] = event?.name === "SpendingPaused" && event.policyHash.toLowerCase() === String(pause.policyHash).toLowerCase();
+    const paid = proof.extras?.beforePause?.solanaGrantPaid?.signature;
+    const paidTx = paid ? await connection.getTransaction(paid, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }) : null;
+    checks["solana.grantPaidWhileActive"] = Boolean(paidTx && !paidTx.meta?.err && parseVaultEvents(paidTx.meta?.logMessages ?? []).some((e) => e.name === "GrantPaid"));
+    checks["solana.grantRefusedWhilePaused"] = proof.extras?.afterPause?.solanaGrantRefused?.error === "SpendingIsPaused";
+  }
   const failed = Object.entries(checks).filter(([, value]) => value !== true && !(typeof value === "string" && value.startsWith("unavailable")));
   return {
     verified: failed.length === 0,

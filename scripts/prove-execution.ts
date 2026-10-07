@@ -30,6 +30,10 @@ export interface ProofOptions {
   isPaused: () => Promise<boolean>;
   resume: () => Promise<string>;
   log?: (message: string) => void;
+  /** Runs before the true case, e.g. a grant payout that must succeed while spending is active. */
+  beforeTrue?: () => Promise<Record<string, unknown>>;
+  /** Runs after the verified pause, e.g. a grant payout that must now be refused onchain. */
+  afterTrue?: (evidence: ExecutionEvidence) => Promise<Record<string, unknown>>;
 }
 const check = (condition: unknown, message: string) => { if (!condition) throw new Error(`Proof failed: ${message}`); };
 const summarize = (spec: ExecutionSpecification, evidence: ExecutionEvidence) => ({
@@ -57,11 +61,13 @@ export async function proveSequence(options: ProofOptions) {
   const threshold = Math.ceil(eth!.usd * 1.1);
   log(`2/4 True condition: ETH below $${threshold} (10% above the trade just read) and BTC feed live`);
   const trueSpec = specOf(composedPause(threshold, options.feedNetwork), `prove-true-${suffix}`, 2);
+  const before = options.beforeTrue ? await options.beforeTrue() : undefined;
   const trueResult = await options.execute(trueSpec);
   const tx = trueResult.transaction;
   check(tx?.status === "success" && tx.receiverConfirmed && tx.pausedAfter, "true condition must produce receipt + matching event + paused read");
   check(trueResult.policyHash === trueSpec.policyHash, "evidence must carry the frozen policy hash");
 
+  const after = options.afterTrue ? await options.afterTrue(trueResult) : undefined;
   log("3/4 Duplicate: same run replayed, then a new run of the same policy");
   const replay = await options.execute(trueSpec);
   check(replay.transaction?.hash === tx!.hash, "replaying a run must return its original evidence");
@@ -83,6 +89,7 @@ export async function proveSequence(options: ProofOptions) {
   const resumeHash = await options.resume();
   log(`Vault resumed for the next demo (${resumeHash})`);
   return {
+    ...(before || after ? { extras: { beforePause: before, afterPause: after } } : {}),
     label: options.label,
     startedAt,
     completedAt: new Date().toISOString(),

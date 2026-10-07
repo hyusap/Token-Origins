@@ -67,6 +67,13 @@ are included in this planning update.
 - [x] **S4:** publish portable receipt/event/post-state evidence that Ayush can inspect in the canvas. *(`demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json` + `contracts/deployment.sepolia.json`; anyone can re-check with `bun run verify:evidence demo/sepolia-evidence-2026-10-07T07-28-49-635Z.json`.)*
 - [ ] **Separate deployed-DON milestone:** obtain deployment access, configure authenticated triggers and production receiver binding, deploy/activate, and record actual deployed execution.
 
+## Shivam — Solana treasury (Best use of Solana)
+
+- [x] **SOL1:** `sotto_vault` Anchor program: holds SOL, `pay_grant` refused while paused, forwarder-only `on_report` bound to vault/version/action/age, policy-hash event. *(Local validator: `tests/solana-integration.test.ts`.)*
+- [x] **SOL2:** CRE workflow writes the same decision to Solana via `SolanaClient.writeReport`; runner verifies tx, event and vault state. *(`cre/workflow.test.ts`, `tests/execution-contract.test.ts`.)*
+- [ ] **SOL3:** deploy to devnet and record the multichain proof: `bun run deploy:solana`, then `bun run prove:multichain`.
+- [ ] **Ayush:** render `run.evidence.solana` (signature, explorer link, vault) and a Solana vault card.
+
 ## Joint integration gate — before adding features
 
 - [ ] **Both:** pass J1–J11 from the detailed plan; keep mocked and live evidence distinct.

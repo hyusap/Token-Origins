@@ -61,6 +61,22 @@ bun run scripts/verify-local.ts                      # live prices, real local t
 
 The development wallet is Anvil's public account, accepted only on localhost chain 31337.
 
+## Solana: the same decision on a second treasury
+
+`contracts/solana/programs/sotto_vault` is an Anchor program holding devnet SOL. `pay_grant` moves SOL and is refused while paused, and `on_report` accepts a pause only through the keystone forwarder recorded at `initialize`. It verifies the forwarder-authority PDA the forwarder signs with (Chainlink's receiver pattern), binds the report to this vault account, version, action and age, records the run, revision and policy hash, and emits `SpendingPaused`. The owner resumes.
+
+When `ORIGINS_SOLANA_VAULT` is set, the CRE workflow evaluates the policy once. If it acts, the workflow writes the EVM report to Sepolia and then a 114-byte Borsh report (same run hash, revision and policy hash) to Solana devnet through `SolanaClient.writeReport` and CRE's simulation forwarder (`7kuEAA3m…cNK`, state `5Tipz3yh…MP7`). The runner confirms the Solana transaction, the matching `SpendingPaused` event and a fresh vault read before it calls the run confirmed. CRE runs off-chain (simulator or DON); it is not deployed on Solana. It writes to Solana.
+
+```sh
+sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"   # Solana CLI
+bun run solana:wallet        # devnet key saved to .env; fund ~5 SOL at faucet.solana.com
+bun run deploy:solana        # deploys contracts/solana/build/sotto_vault.so, creates a 0.5 SOL vault
+echo 'ORIGINS_SOLANA_VAULT=…' >> .env
+bun run prove:multichain     # one decision pauses Sepolia + Solana; grant paid before, refused after
+```
+
+The built program and its devnet program keypair are committed, so no Rust or Anchor install is needed. To rebuild: `cargo-build-sbf --tools-version v1.43` in `contracts/solana`. `tests/solana-integration.test.ts` runs both programs on `solana-test-validator` with a forwarder stand-in (`mock_forwarder`, test-only).
+
 ## Deployed DON (separate milestone)
 
 Not done. It requires CRE deploy access (`cre account`), HTTP-trigger `authorizedKeys` (the simulation trigger uses `{}`, which deployed workflows reject), a production forwarder, and receiver binding to the deployed workflow identity. Simulation evidence must not be described as DON execution.

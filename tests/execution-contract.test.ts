@@ -255,3 +255,12 @@ test("orphan nodes, unregistered feeds and oversized graphs are refused at compo
   expect(sepoliaSol.error).toContain("Ethereum Sepolia");
   expect(engine.state.workflow.revision).toBe(0);
 });
+
+test("a multichain run carries the verified Solana leg into run evidence and the caption", async () => {
+  const solana = { network: "solana-devnet", programId: "8g87GMMGr4JrzJpfh8v9oxyy8mwDRGawBRFJR8c1hqYD", vault: "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", forwarderProgram: "7kuEAA3mSC1Tz8gQjnvH7bKFda9xSPRRin9SZbH49cNK", signature: "5sig", status: "success", verified: true, slot: 42, explorerUrl: "https://explorer.solana.com/tx/5sig?cluster=devnet" };
+  const engine = deployedEngine(new StateStore(":memory:"), { executeRun: async (spec: any) => ({ ...verifiedPause(spec), mode: "cre-local-simulation", solana }) });
+  const run = await composeAndRun(engine, orGraph("eth-first"));
+  expect(run.status).toBe("confirmed");
+  expect(run.evidence?.solana).toMatchObject({ verified: true, signature: "5sig", vault: solana.vault, slot: 42 });
+  expect(engine.state.activity.summary).toContain("The Solana vault was paused by the same decision.");
+});

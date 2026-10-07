@@ -104,6 +104,8 @@ export interface ExecutionRun {
     policyHash?: string;
     /** Fixture rehearsal: in-memory state only. */
     fixture?: boolean;
+    /** The same decision on the Solana vault (sotto_vault program, devnet), verified from chain data. */
+    solana?: { network: string; programId: string; vault: string; signature: string | null; verified: boolean; slot?: number; explorerUrl?: string };
     verification?: string;
     /** Present only for a mock sell. Never a real order or asset movement. */
     simulatedOrder?: {

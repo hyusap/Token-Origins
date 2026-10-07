@@ -9,6 +9,7 @@ import { executeCreRun } from "../cre/runner";
 import { NETWORK_IDS, type Network } from "../cre/graph";
 import { proveSequence } from "./prove-execution";
 import { verifyEvidenceFile } from "./verify-evidence";
+import { solanaLeg } from "./solana-proof";
 
 const flag = process.argv.indexOf("--feed-network");
 const feedNetwork = (flag > 0 ? process.argv[flag + 1] : "ethereum-mainnet") as Network;
@@ -25,21 +26,34 @@ const abi = parseAbi(["function paused() view returns (bool)", "function resume(
 if ((await client.readContract({ address: vault, abi, functionName: "owner" })).toLowerCase() !== wallet.account.address.toLowerCase())
   throw new Error("CRE_ETH_PRIVATE_KEY is not the vault owner, so the proof could not resume the vault afterwards");
 
+// With ORIGINS_SOLANA_VAULT set, the same CRE decision also pauses the Solana vault,
+// and a grant payout is shown succeeding before the pause and refused onchain after it.
+const solana = await solanaLeg();
+const evmPaused = () => client.readContract({ address: vault, abi, functionName: "paused" });
+const evmResume = async () => {
+  const hash = await wallet.writeContract({ address: vault, abi, functionName: "resume" });
+  await client.waitForTransactionReceipt({ hash, timeout: 180_000 });
+  return hash;
+};
 const proof = await proveSequence({
-  label: "cre-simulation-sepolia-broadcast",
+  label: solana ? "cre-simulation-sepolia-and-solana-devnet-broadcast" : "cre-simulation-sepolia-broadcast",
   feedNetwork,
   execute: (spec) => executeCreRun(spec, (message) => console.log(`  ${message}`)),
-  isPaused: () => client.readContract({ address: vault, abi, functionName: "paused" }),
+  isPaused: async () => (await evmPaused()) || Boolean(solana && (await solana.isPaused())),
   resume: async () => {
-    const hash = await wallet.writeContract({ address: vault, abi, functionName: "resume" });
-    await client.waitForTransactionReceipt({ hash, timeout: 180_000 });
-    return hash;
+    const hashes = [];
+    if (await evmPaused()) hashes.push(await evmResume());
+    if (solana && (await solana.isPaused())) hashes.push(await solana.resume());
+    return hashes.join(",");
   },
+  ...(solana ? { beforeTrue: solana.grantMustSucceed, afterTrue: solana.grantMustBeRefused } : {}),
 });
 const file = `demo/sepolia-evidence-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
 await Bun.write(file, JSON.stringify({
-  claim: "CRE local simulation with real Sepolia broadcast through the CRE MockForwarder. Not deployed-DON execution.",
-  chainId: 11155111, vault, rpcUrl, ...proof,
+  claim: solana
+    ? "CRE local simulation with real broadcasts to Ethereum Sepolia (CRE MockForwarder) and Solana devnet (CRE simulation forwarder) from one decision. Not deployed-DON execution."
+    : "CRE local simulation with real Sepolia broadcast through the CRE MockForwarder. Not deployed-DON execution.",
+  chainId: 11155111, vault, rpcUrl, ...(solana ? { solana: solana.deployment } : {}), ...proof,
 }, null, 2));
 console.log(`\nEvidence written to ${file}. Verifying independently from chain data…`);
 console.log(JSON.stringify(await verifyEvidenceFile(file), null, 2));
