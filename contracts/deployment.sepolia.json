@@ -1,14 +1,49 @@
 {
-  "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+  "address": "0x8ae74ceb8e467dd79aa5b1eaa7f48c569c46877c",
   "forwarder": "0x15fC6ae953E024d975e77382eEeC56A9101f9F88",
   "owner": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8",
   "chainId": 11155111,
   "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
   "mode": "cre-sepolia",
-  "reportVersion": 2,
+  "reportVersion": 3,
   "maxReportAgeSeconds": 300,
-  "deploymentHash": "0x82314604845eb925da9ae9e313e33eda075c00f0ecfe39212c0e5fd4c510cd59",
-  "blockNumber": 11861375,
-  "explorer": "https://sepolia.etherscan.io/address/0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
-  "createdAt": "2026-10-07T07:05:16.858Z"
+  "reserve": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8",
+  "payees": {
+    "grantee": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8",
+    "insured": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8"
+  },
+  "maxSweepBps": 10000,
+  "maxPaymentWei": "2000000000000000",
+  "minPaymentIntervalSeconds": 60,
+  "ccip": {
+    "router": "0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59",
+    "token": "0xFd57b4ddBf88a4e07fF4e34C487b99af2Fe82a05",
+    "destination": "base-sepolia",
+    "destinationChainSelector": "10344971235874465080",
+    "receiver": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8",
+    "maxFeeWei": "5000000000000000",
+    "minEvacuationIntervalSeconds": 300,
+    "tokenBalance": "2000000000000000000"
+  },
+  "fundedWei": "10000000000000000",
+  "deploymentHash": "0x56d0d64c36b24e588bbf905aad59551211863385edada78e84eb4c955bbb1f6b",
+  "blockNumber": 11862881,
+  "explorer": "https://sepolia.etherscan.io/address/0x8ae74ceb8e467dd79aa5b1eaa7f48c569c46877c",
+  "createdAt": "2026-10-07T12:08:01.725Z",
+  "previousDeployments": [
+    {
+      "address": "0x7f0d5e4c98ec1f2c7781e2ae60b0272e6d9a5aa1",
+      "reportVersion": 2,
+      "deploymentHash": "0x82314604845eb925da9ae9e313e33eda075c00f0ecfe39212c0e5fd4c510cd59",
+      "blockNumber": 11861375,
+      "createdAt": "2026-10-07T07:05:16.858Z"
+    },
+    {
+      "address": "0x32aa29f6195f13c01d16e877dd797ceeff34f53f",
+      "reportVersion": 3,
+      "deploymentHash": "0x7b6267acbb0c0cc419020cbe5766186427b3a2e0bcb592587f7f801779436dcf",
+      "blockNumber": 11862873,
+      "createdAt": "2026-10-07T12:06:27.212Z"
+    }
+  ]
 }

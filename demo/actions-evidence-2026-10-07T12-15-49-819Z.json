@@ -1,0 +1,509 @@
+{
+  "kind": "treasury-actions",
+  "claim": "CRE local simulation with real Sepolia broadcasts through the CRE MockForwarder: a reserve sweep, a payment through the cron trigger, and a CCIP evacuation to Base Sepolia, with the Solana vault steered by the same decisions. Not deployed-DON execution.",
+  "chainId": 11155111,
+  "vault": "0x32aa29f6195f13c01d16e877dd797ceeff34f53f",
+  "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+  "startedAt": "2026-10-07T12:14:55.188Z",
+  "completedAt": "2026-10-07T12:15:49.819Z",
+  "solana": {
+    "network": "solana-devnet",
+    "programId": "8g87GMMGr4JrzJpfh8v9oxyy8mwDRGawBRFJR8c1hqYD",
+    "vault": "7593tF3wMY5bT9hLv6hGgMXanRkgG7p48jsA6JcpXWtE",
+    "owner": "8fpTkkssEBAczMJvWEWEu3pZ1qvhv2nimYqNiWFzu18R",
+    "forwarderProgram": "7kuEAA3mSC1Tz8gQjnvH7bKFda9xSPRRin9SZbH49cNK",
+    "forwarderState": "5Tipz3yhTBdVsDbaBxZkrp7Gjf3brGq5SKkxReefPMP7",
+    "maxReportAgeSeconds": 300,
+    "depositSol": 0.5,
+    "initSignature": "5pQMQubP93E1ShwAWLaafWrERXMT6ebicoxthNWJDG3fAub64izZJWEVrSccov7Wmc2sBc5FEe2ozH173HmCWfXq",
+    "explorer": "https://explorer.solana.com/tx/5pQMQubP93E1ShwAWLaafWrERXMT6ebicoxthNWJDG3fAub64izZJWEVrSccov7Wmc2sBc5FEe2ozH173HmCWfXq?cluster=devnet",
+    "createdAt": "2026-10-07T09:03:01.470Z"
+  },
+  "cases": {
+    "sweep": {
+      "policy": "Sweep 25% of the vault to the reserve when Chainlink ETH/USD (mainnet) > $1.",
+      "spec": {
+        "version": 2,
+        "runId": "prove-sweep-muy2lk2c",
+        "revision": 1,
+        "graph": {
+          "nodes": [
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "chainlink-feed",
+                "symbol": "ETH",
+                "network": "ethereum-mainnet"
+              }
+            },
+            {
+              "id": "live",
+              "kind": "compare",
+              "input": "eth",
+              "op": ">",
+              "value": 1
+            }
+          ],
+          "root": "live",
+          "action": {
+            "type": "sweep",
+            "fraction": 0.25,
+            "pause": false
+          }
+        },
+        "policyHash": "0x16dac550f3e0bb9115d457b1d5105e70db75ab0bd30a3138ef846adb060b1542",
+        "maxAgeSeconds": 60,
+        "broadcast": true
+      },
+      "evidence": {
+        "runId": "prove-sweep-muy2lk2c",
+        "revision": 1,
+        "policyHash": "0x16dac550f3e0bb9115d457b1d5105e70db75ab0bd30a3138ef846adb060b1542",
+        "mode": "cre-local-simulation",
+        "trigger": "http",
+        "observations": [
+          {
+            "key": "chainlink-feed:ethereum-mainnet:ETH",
+            "label": "Chainlink ETH/USD (mainnet)",
+            "provider": "chainlink",
+            "unit": "USD",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+            "decimals": 8,
+            "value": 2578.66,
+            "usd": 2578.66,
+            "raw": "257866000000",
+            "roundId": "129127208515966895704",
+            "observedAt": "2026-10-07T12:09:35.000Z",
+            "fetchedAt": "2026-10-07T12:15:04.386Z"
+          }
+        ],
+        "vault": {
+          "address": "0x32aa29f6195f13c01d16e877dd797ceeff34f53f",
+          "chainId": 11155111,
+          "paused": false,
+          "balanceWei": "60000000000000000",
+          "reportVersion": 3
+        },
+        "conditions": [
+          {
+            "nodeId": "live",
+            "kind": "threshold",
+            "role": "node",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) $2578.66 > $1"
+          },
+          {
+            "nodeId": "guard:root",
+            "kind": "composed-policy",
+            "role": "root",
+            "passed": true,
+            "detail": "Policy condition evaluated true"
+          },
+          {
+            "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:ETH",
+            "kind": "source-freshness",
+            "role": "guard",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) observed 329.6s ago; limit 93600s"
+          },
+          {
+            "nodeId": "guard:vault-funds",
+            "kind": "vault-funds",
+            "role": "guard",
+            "passed": true,
+            "detail": "Vault holds 0.06 ETH; sweeping 25% (0.015 ETH) to the reserve"
+          }
+        ],
+        "root": true,
+        "decision": "act",
+        "action": "sweep",
+        "decidedAt": "2026-10-07T12:15:04.576Z",
+        "logs": [
+          "ORIGINS_SOURCE Reading Chainlink ETH/USD (mainnet) at 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+        ],
+        "report": {
+          "version": 3,
+          "action": 2,
+          "flags": 0,
+          "payeeId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "amount": "2500",
+          "destinationChainSelector": "0"
+        },
+        "transaction": {
+          "hash": "0x0c8579f63258551c2f9023f3e94872131e45dea8494ff084f24ceac5b6a5e2f3",
+          "blockNumber": 11862921,
+          "status": "success",
+          "receiverConfirmed": true,
+          "pausedAfter": false,
+          "effects": {
+            "sweptWei": "15000000000000000",
+            "reserve": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8"
+          }
+        },
+        "solanaSkipped": "The Solana vault has no reserve configured (program v3 configure_reserve), so it was not swept",
+        "workflow": {
+          "workflowId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "workflowName": "0x33333564303438353139",
+          "workflowOwner": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    "pay": {
+      "policy": "Pay 0.001 ETH to the grantee when Chainlink ETH/USD (mainnet) > $1.",
+      "spec": {
+        "version": 2,
+        "runId": "prove-pay-muy2lk2c",
+        "revision": 2,
+        "graph": {
+          "nodes": [
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "chainlink-feed",
+                "symbol": "ETH",
+                "network": "ethereum-mainnet"
+              }
+            },
+            {
+              "id": "live",
+              "kind": "compare",
+              "input": "eth",
+              "op": ">",
+              "value": 1
+            }
+          ],
+          "root": "live",
+          "action": {
+            "type": "pay",
+            "payee": "grantee",
+            "amountEth": 0.001
+          }
+        },
+        "policyHash": "0xc2adf5cb90862cf1a1fe75fdf066a6a746a04316e049f3fa88c30e45cf84bb76",
+        "maxAgeSeconds": 60,
+        "broadcast": true
+      },
+      "evidence": {
+        "runId": "prove-pay-muy2lk2c",
+        "revision": 2,
+        "policyHash": "0xc2adf5cb90862cf1a1fe75fdf066a6a746a04316e049f3fa88c30e45cf84bb76",
+        "mode": "cre-local-simulation",
+        "trigger": "cron",
+        "observations": [
+          {
+            "key": "chainlink-feed:ethereum-mainnet:ETH",
+            "label": "Chainlink ETH/USD (mainnet)",
+            "provider": "chainlink",
+            "unit": "USD",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+            "decimals": 8,
+            "value": 2578.66,
+            "usd": 2578.66,
+            "raw": "257866000000",
+            "roundId": "129127208515966895704",
+            "observedAt": "2026-10-07T12:09:35.000Z",
+            "fetchedAt": "2026-10-07T12:15:22.437Z"
+          }
+        ],
+        "vault": {
+          "address": "0x32aa29f6195f13c01d16e877dd797ceeff34f53f",
+          "chainId": 11155111,
+          "paused": false,
+          "balanceWei": "45000000000000000",
+          "reportVersion": 3,
+          "terms": {
+            "payee": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8",
+            "maxPaymentWei": "2000000000000000",
+            "nextPaymentAt": 0,
+            "ccipConfigured": true,
+            "tokenBalance": "2000000000000000000",
+            "maxCcipFeeWei": "5000000000000000",
+            "nextEvacuationAt": 0
+          },
+          "tokenBalance": "2000000000000000000"
+        },
+        "conditions": [
+          {
+            "nodeId": "live",
+            "kind": "threshold",
+            "role": "node",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) $2578.66 > $1"
+          },
+          {
+            "nodeId": "guard:root",
+            "kind": "composed-policy",
+            "role": "root",
+            "passed": true,
+            "detail": "Policy condition evaluated true"
+          },
+          {
+            "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:ETH",
+            "kind": "source-freshness",
+            "role": "guard",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) observed 347.6s ago; limit 93600s"
+          },
+          {
+            "nodeId": "guard:vault-active",
+            "kind": "vault-state",
+            "role": "guard",
+            "passed": true,
+            "detail": "Vault spending active"
+          },
+          {
+            "nodeId": "guard:payee",
+            "kind": "vault-terms",
+            "role": "guard",
+            "passed": true,
+            "detail": "Payee \"grantee\" is registered at 0x74F2D13C58c4A769F651cd283D835E9537F48BC8"
+          },
+          {
+            "nodeId": "guard:payment-cap",
+            "kind": "vault-terms",
+            "role": "guard",
+            "passed": true,
+            "detail": "0.001 ETH is within the vault's 0.002 ETH payment cap"
+          },
+          {
+            "nodeId": "guard:payment-interval",
+            "kind": "vault-terms",
+            "role": "guard",
+            "passed": true,
+            "detail": "No payment interval pending"
+          },
+          {
+            "nodeId": "guard:vault-funds",
+            "kind": "vault-funds",
+            "role": "guard",
+            "passed": true,
+            "detail": "Vault holds 0.045 ETH for a 0.001 ETH payment"
+          }
+        ],
+        "root": true,
+        "decision": "act",
+        "action": "pay",
+        "decidedAt": "2026-10-07T12:15:22.624Z",
+        "logs": [
+          "ORIGINS_SOURCE Reading Chainlink ETH/USD (mainnet) at 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+        ],
+        "report": {
+          "version": 3,
+          "action": 3,
+          "flags": 0,
+          "payeeId": "0x1ac0fe5b52dd07065e1c1618bce4bc12656ceb51e7c548a62b2bd81fb1a8a066",
+          "amount": "1000000000000000",
+          "destinationChainSelector": "0"
+        },
+        "transaction": {
+          "hash": "0xf39ae9293874951ba94110f21270ff3c705af0478224171d55ef058f544a998f",
+          "blockNumber": 11862922,
+          "status": "success",
+          "receiverConfirmed": true,
+          "pausedAfter": false,
+          "effects": {
+            "paidWei": "1000000000000000",
+            "payee": "0x74F2D13C58c4A769F651cd283D835E9537F48BC8",
+            "payeeId": "0x1ac0fe5b52dd07065e1c1618bce4bc12656ceb51e7c548a62b2bd81fb1a8a066"
+          }
+        },
+        "solanaSkipped": "Payments settle on Ethereum only; the Solana vault is unchanged",
+        "workflow": {
+          "workflowId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "workflowName": "0x33333564303438353139",
+          "workflowOwner": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    "evacuate": {
+      "policy": "Bridge 100% of the vault's CCIP-BnM to the reserve on Base Sepolia via CCIP and pause spending when Chainlink ETH/USD (mainnet) > $1.",
+      "spec": {
+        "version": 2,
+        "runId": "prove-evacuate-muy2lk2c",
+        "revision": 3,
+        "graph": {
+          "nodes": [
+            {
+              "id": "eth",
+              "kind": "price",
+              "source": {
+                "type": "chainlink-feed",
+                "symbol": "ETH",
+                "network": "ethereum-mainnet"
+              }
+            },
+            {
+              "id": "live",
+              "kind": "compare",
+              "input": "eth",
+              "op": ">",
+              "value": 1
+            }
+          ],
+          "root": "live",
+          "action": {
+            "type": "evacuate",
+            "destination": "base-sepolia",
+            "fraction": 1,
+            "pause": true
+          }
+        },
+        "policyHash": "0x589a5972e5daab2fa06ee230394cbf1500a540e118ef051dc16893cc2cd5a887",
+        "maxAgeSeconds": 60,
+        "broadcast": true
+      },
+      "evidence": {
+        "runId": "prove-evacuate-muy2lk2c",
+        "revision": 3,
+        "policyHash": "0x589a5972e5daab2fa06ee230394cbf1500a540e118ef051dc16893cc2cd5a887",
+        "mode": "cre-local-simulation",
+        "trigger": "http",
+        "observations": [
+          {
+            "key": "chainlink-feed:ethereum-mainnet:ETH",
+            "label": "Chainlink ETH/USD (mainnet)",
+            "provider": "chainlink",
+            "unit": "USD",
+            "network": "ethereum-mainnet",
+            "chainId": 1,
+            "address": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+            "decimals": 8,
+            "value": 2578.66,
+            "usd": 2578.66,
+            "raw": "257866000000",
+            "roundId": "129127208515966895704",
+            "observedAt": "2026-10-07T12:09:35.000Z",
+            "fetchedAt": "2026-10-07T12:15:33.059Z"
+          }
+        ],
+        "vault": {
+          "address": "0x32aa29f6195f13c01d16e877dd797ceeff34f53f",
+          "chainId": 11155111,
+          "paused": false,
+          "balanceWei": "44000000000000000",
+          "reportVersion": 3,
+          "terms": {
+            "payee": "0x0000000000000000000000000000000000000000",
+            "maxPaymentWei": "2000000000000000",
+            "nextPaymentAt": 1791375384,
+            "ccipConfigured": true,
+            "tokenBalance": "2000000000000000000",
+            "maxCcipFeeWei": "5000000000000000",
+            "nextEvacuationAt": 0
+          },
+          "tokenBalance": "2000000000000000000"
+        },
+        "conditions": [
+          {
+            "nodeId": "live",
+            "kind": "threshold",
+            "role": "node",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) $2578.66 > $1"
+          },
+          {
+            "nodeId": "guard:root",
+            "kind": "composed-policy",
+            "role": "root",
+            "passed": true,
+            "detail": "Policy condition evaluated true"
+          },
+          {
+            "nodeId": "guard:source:chainlink-feed:ethereum-mainnet:ETH",
+            "kind": "source-freshness",
+            "role": "guard",
+            "passed": true,
+            "detail": "Chainlink ETH/USD (mainnet) observed 358.3s ago; limit 93600s"
+          },
+          {
+            "nodeId": "guard:ccip",
+            "kind": "vault-terms",
+            "role": "guard",
+            "passed": true,
+            "detail": "CCIP route to Base Sepolia configured"
+          },
+          {
+            "nodeId": "guard:vault-tokens",
+            "kind": "vault-funds",
+            "role": "guard",
+            "passed": true,
+            "detail": "Vault holds 2 CCIP-BnM; bridging 100% (2 CCIP-BnM) via CCIP"
+          },
+          {
+            "nodeId": "guard:evacuation-interval",
+            "kind": "vault-terms",
+            "role": "guard",
+            "passed": true,
+            "detail": "No evacuation interval pending"
+          },
+          {
+            "nodeId": "guard:ccip-fee",
+            "kind": "vault-funds",
+            "role": "guard",
+            "passed": true,
+            "detail": "Vault holds 0.044 ETH for the CCIP fee (at most 0.005 ETH)"
+          }
+        ],
+        "root": true,
+        "decision": "act",
+        "action": "evacuate",
+        "decidedAt": "2026-10-07T12:15:33.270Z",
+        "logs": [
+          "ORIGINS_SOURCE Reading Chainlink ETH/USD (mainnet) at 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+          "ORIGINS_SOLANA Writing pause for run prove-evacuate-muy2lk2c to vault 7593tF3wMY5bT9hLv6hGgMXanRkgG7p48jsA6JcpXWtE on solana-devnet"
+        ],
+        "report": {
+          "version": 3,
+          "action": 4,
+          "flags": 1,
+          "payeeId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "amount": "10000",
+          "destinationChainSelector": "10344971235874465080"
+        },
+        "transaction": {
+          "hash": "0x2250c6e994f8691df8582e3e95423341d447468da8b0393c6c3dbe60dd85e60f",
+          "blockNumber": 11862923,
+          "status": "success",
+          "receiverConfirmed": true,
+          "pausedAfter": true,
+          "effects": {
+            "paused": true,
+            "ccipMessageId": "0xa1610d1de747df04d0fa3cb599d5300b5f1317909bb598d346688492c46d0022",
+            "ccipAmount": "2000000000000000000",
+            "ccipFee": "187848763328931",
+            "destinationChainSelector": "10344971235874465080",
+            "ccipExplorerUrl": "https://ccip.chain.link/msg/0xa1610d1de747df04d0fa3cb599d5300b5f1317909bb598d346688492c46d0022"
+          }
+        },
+        "solana": {
+          "network": "solana-devnet",
+          "programId": "8g87GMMGr4JrzJpfh8v9oxyy8mwDRGawBRFJR8c1hqYD",
+          "vault": "7593tF3wMY5bT9hLv6hGgMXanRkgG7p48jsA6JcpXWtE",
+          "forwarderProgram": "7kuEAA3mSC1Tz8gQjnvH7bKFda9xSPRRin9SZbH49cNK",
+          "action": "pause",
+          "pauses": true,
+          "signature": "2AFf5UuStEtMTsew2xxnFhXx6CL1yfQMxZcPmpto1JQUBXYpdzpy1jQbMAg6kE4xTVTRgjbF8f9U7T2Nmfoyu2mB",
+          "status": "success",
+          "verified": true,
+          "slot": 508451454,
+          "explorerUrl": "https://explorer.solana.com/tx/2AFf5UuStEtMTsew2xxnFhXx6CL1yfQMxZcPmpto1JQUBXYpdzpy1jQbMAg6kE4xTVTRgjbF8f9U7T2Nmfoyu2mB?cluster=devnet"
+        },
+        "workflow": {
+          "workflowId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "workflowName": "0x33333564303438353139",
+          "workflowOwner": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    }
+  },
+  "resumeTransactionHashes": [
+    "0x54398a0fbd1b8baaf52e17366969f3b6e0d4945e9a2d805f269df5f7fe9ad9e4",
+    "Sg2w1SUkey9GGCqoKeNWkECrFxcNsCJpUtVxjntMBEQ2oacRs3xgK9C4y6PBg2ozos7dC4jN3ezVZGhBdU83u1Q"
+  ]
+}
