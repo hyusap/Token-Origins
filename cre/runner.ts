@@ -243,7 +243,11 @@ async function executeThroughCre(spec:ExecutionSpecification,progress?:(message:
   if(!vault||!/^0x[0-9a-fA-F]{40}$/.test(vault)) throw new Error('CRE mode requires ORIGINS_SEPOLIA_VAULT (run scripts/deploy-sepolia.ts)');
   const root=resolve(import.meta.dir);
   const configPath=resolve(root,'workflow/config.runtime.json');
-  await Bun.write(configPath,JSON.stringify({vaultAddress:vault,chainSelector:NETWORKS['ethereum-sepolia'].chainSelector,gasLimit:'350000'}));
+  // Covers the forwarder's bookkeeping plus the vault's storage writes under current Sepolia gas
+  // pricing; 350k ran the receiver out of gas (traced OutOfGas at ~198k inside onReport).
+  const gasLimit=process.env.ORIGINS_CRE_GAS_LIMIT||'2000000';
+  if(!/^\d+$/.test(gasLimit)||Number(gasLimit)>10_000_000) throw new Error('ORIGINS_CRE_GAS_LIMIT must be a whole number up to the CRE limit of 10,000,000');
+  await Bun.write(configPath,JSON.stringify({vaultAddress:vault,chainSelector:NETWORKS['ethereum-sepolia'].chainSelector,gasLimit}));
   // The CLI authenticates itself from `cre login` or CRE_API_KEY; this process never reads those credentials.
   const args=[await creBinary(),'workflow','simulate','./workflow','--project-root',root,'--target','staging-settings','--non-interactive','--trigger-index','0','--http-payload',JSON.stringify(spec),'--config',configPath];
   if(spec.broadcast!==false) args.push('--broadcast');
