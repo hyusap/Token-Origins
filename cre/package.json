@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@chainlink/cre-sdk": "1.23.0",
+    "@solana/web3.js": "1.98.4",
     "viem": "^2.38.0",
     "zod": "^3.25.0"
   },

@@ -1,0 +1,6 @@
+[workspace]
+members = ["programs/sotto_vault", "programs/mock_forwarder"]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
